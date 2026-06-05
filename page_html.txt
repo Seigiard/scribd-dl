@@ -1,0 +1,355 @@
+
+  
+    
+      <div class="outer_page only_ie6_border " id="outer_page_1" style="width: 1000px; height: 1413px;">
+        
+          <div class="newpage" id="page1" style="width: 902px; height: 1274px; transform: scale(1.10865); transform-origin: left top;">
+<div class="text_layer" style="z-index:2"><div class="ie_fix">
+&nbsp;
+<div class="ff11" style="font-size:191px">
+<span class="a" style="left:1546px;top:1211px;color:#1f1a17">&nbsp;Nationa<span class="w6"></span>l <span class="w" style="width:15px"></span>Science <span class="w" style="width:19px"></span>Olympi<span class="w6"></span>ad</span></div>
+<div class="ff8" style="font-size:95px">
+<span class="a" style="left:3915px;top:1256px;color:#1f1a17">&nbsp;</span></div>
+<div class="ff1" style="font-size:86px">
+<span class="a" style="left:676px;top:1559px;word-spacing:-6px;letter-spacing:2px">The actual t<span class="l6">est paper has 50 questi<span class="l6">ons.Time allowed :<span class="w" style="width:14px"></span>60 minutes.There are 2 sections:<span class="w6"></span>15 questions </span></span></span><span class="a" style="left:676px;top:1668px;word-spacing:-2px;letter-spacing:2px">in section I and 35 in section II. </span></div>
+<div class="ff5" style="font-size:114px">
+<span class="a" style="left:2033px;top:1924px;letter-spacing:7px">SYLLABUS </span></div>
+<div class="ff5" style="font-size:85px">
+<span class="a" style="left:676px;top:2196px;letter-spacing:2px">Section </span></div>
+<div class="ff17" style="font-size:84px">
+<span class="a" style="left:967px;top:2197px">&nbsp;–</span></div>
+<div class="ff5" style="font-size:87px">
+<span class="a" style="left:1042px;top:2195px">&nbsp;</span></div>
+<div class="ff5" style="font-size:85px">
+<span class="a" style="left:1076px;top:2196px;word-spacing:8px;letter-spacing:2px">I (Mental ability) :</span></div>
+<div class="ff1" style="font-size:86px">
+<span class="a" style="left:1794px;top:2195px;word-spacing:6px;letter-spacing:2px">&nbsp;Roman numerals, Number sense, HCF and LCM, Addition and </span><span class="a" style="left:676px;top:2304px;word-spacing:-9px;letter-spacing:2px">subtraction, Multiplication an<span class="w7"></span>d division, Fractional number<span class="w6"></span>s<span class="l6">, Decimal fractions, Geometrical shapes, </span></span><span class="a" style="left:676px;top:2413px;word-spacing:-10px;letter-spacing:2px">Angles, <span class="l8">Arithmetical ab<span class="w6"></span>ility<span class="l6">, Measureme<span class="w6"></span>nts, <span class="l8">Area and <span class="w10"></span>perimeter <span class="w8"></span>of re<span class="w6"></span>ctangle, square, circle, triangle, </span></span></span></span><span class="a" style="left:676px;top:2521px;word-spacing:-10px">Volume<span class="l7">, Pictorial representation <span class="w7"></span>of data, In<span class="w6"></span>tegers, F<span class="l8">actors and <span class="w9"></span>multiples<span class="l6">, Ratio and <span class="w9"></span>proportion, Percentage, </span></span></span></span><span class="a" style="left:676px;top:2630px;word-spacing:-4px;letter-spacing:1px">Problems based on figu<span class="w6"></span>res, <span class="l8">Find odd nume<span class="w6"></span>ral out, <span class="l6">Series completion<span class="w6"></span>, C<span class="l6">oding-de<span class="w6"></span>coding, Mathematical </span></span></span></span><span class="a" style="left:676px;top:2739px;word-spacing:-5px;letter-spacing:1px">reasoning<span class="w6"></span>, Mirror images, Embedded figu<span class="w6"></span>res, <span class="l6">Patterns, Di<span class="l7">rection s<span class="w6"></span>ense, <span class="l6">Number <span class="w6"></span>ranking, <span class="l6">Alphabetic<span class="w6"></span>al </span></span></span></span></span><span class="a" style="left:676px;top:2846px;letter-spacing:1px">test. </span></div>
+<div class="ff5" style="font-size:85px">
+<span class="a" style="left:676px;top:3107px;letter-spacing:2px">Section </span></div>
+<div class="ff17" style="font-size:84px">
+<span class="a" style="left:958px;top:3108px">&nbsp;–</span></div>
+<div class="ff5" style="font-size:87px">
+<span class="a" style="left:1032px;top:3106px">&nbsp;</span></div>
+<div class="ff5" style="font-size:85px">
+<span class="a" style="left:1056px;top:3107px;letter-spacing:2px">II (Science) :</span></div>
+<div class="ff1" style="font-size:86px">
+<span class="a" style="left:1525px;top:3106px;word-spacing:-3px;letter-spacing:2px">&nbsp;Motion a<span class="w6"></span>nd Measuremen<span class="w6"></span>t of Distances, <span class="l6">Light, Shadows and R<span class="w6"></span>eflections, </span></span><span class="a" style="left:676px;top:3215px;word-spacing:-2px;letter-spacing:2px">Electricity &amp; Circuits, Fun with <span class="w8"></span>Magnets, <span class="l10">Air &amp; Water<span class="l7">, Sorting Mat<span class="w6"></span>erials into G<span class="w6"></span>roups, Separation of </span></span></span><span class="a" style="left:676px;top:3323px;word-spacing:-2px;letter-spacing:2px">Substances, Changes <span class="l7">Around Us, Liv<span class="l6">ing Org<span class="w6"></span>anisms &amp; T<span class="l7">heir Surround<span class="w7"></span>ings, <span class="w" style="width:15px"></span>Food, Health &amp; Hygiene, </span></span></span></span><span class="a" style="left:676px;top:3432px;word-spacing:-7px;letter-spacing:2px">Fibres to <span class="w9"></span>Fabrics<span class="l8">. </span></span></div>
+<div class="ff2" style="font-size:268px">
+<span class="a" style="left:776px;top:694px;color:#ffffff">6 </span></div>
+<div class="ff15" style="font-size:98px">
+<span class="a" style="left:1714px;top:799px;word-spacing:15px;letter-spacing:-1px">SAMPLE PAPER </span></div>
+<div class="ff17" style="font-size:64px">
+<span class="a" style="left:745px;top:554px;color:#ffffff">CLASS</span></div>
+</div>
+</div>
+<div class="image_layer" style="z-index: 1">
+<div class="ie_fix">
+<img class="absimg" style="left:-1px;top:-1px;width:904px;height:1277px;clip:rect(1px 903px 1276px 1px)" src="https://html.scribdassets.com/3ofrnk6sjk8861fv/images/1-7bf4e5dc51.jpg" alt="">
+</div>
+</div>
+</div>
+
+
+        
+        <div class="b_tl"></div>
+        <div class="b_tr"></div>
+        <div class="b_br"></div>
+        <div class="b_bl"></div>
+        <div class="b_t"></div>
+        <div class="b_r"></div>
+        <div class="b_b"></div>
+        <div class="b_l"></div>
+      </div>
+      
+        <script type="text/javascript">
+        
+        docManager.addPage({
+          pageNum:  1 ,
+          fonts: [11,8,1,5,17,2,15],
+          origWidth:  902 ,
+          origHeight:  1274 ,
+          containerElem: document.getElementById("outer_page_1"),
+          blur:  false ,
+          innerPageElem: document.getElementById("page1")
+        });
+        </script>
+      
+    
+  
+    
+      <div class="outer_page only_ie6_border " id="outer_page_2" style="width: 1000px; height: 1413px;">
+        
+          <div class="newpage" id="page2" style="width: 902px; height: 1274px; transform: scale(1.10865); transform-origin: left top;">
+<div class="text_layer" style="z-index:2"><div class="ie_fix">
+&nbsp;
+<div class="ff4" style="font-size:64px">
+<span class="a" style="left:2214px;top:5908px">2 </span></div>
+<div class="ff4" style="font-size:50px">
+<span class="a" style="left:2144px;top:5999px;word-spacing:1px;letter-spacing:1px">Class 6</span></div>
+<div class="ff10" style="font-size:53px">
+<span class="a" style="left:2324px;top:5984px">&nbsp;</span></div>
+<div class="ff11" style="font-size:182px">
+<span class="a" style="left:1503px;top:603px;color:#1f1a17">&nbsp;National <span class="w" style="width:17px"></span>Science <span class="w" style="width:19px"></span>Olympiad</span></div>
+<div class="ff14" style="font-size:199px">
+<span class="a" style="left:3757px;top:542px;color:#1f1a17">&nbsp;</span></div>
+<div class="ff7" style="font-size:32px">
+<span class="a" style="left:1289px;top:645px;letter-spacing:-1px;color:#1f1a17">SOF </span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:1880px;top:896px;word-spacing:17px;color:#ffffff">MENTAL ABILITY </span><span class="a" style="left:461px;top:1024px">1.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:525px;top:1024px;word-spacing:17px;letter-spacing:2px">&nbsp;<span class="w" style="width:51px"></span>Find <span class="l" style="margin-left:-14px">L.C.M. <span class="l" style="margin-left:-13px">of <span class="l9">following <span class="l10">numbers. </span></span></span></span></span><span class="a" style="left:1933px;top:1129px;word-spacing:12px;letter-spacing:1px">12, 24, 48, 108 </span><span class="a" style="left:609px;top:1262px;word-spacing:224px;letter-spacing:1px">(A) <span class="l" style="margin-left:-195px">504 <span class="w" style="width:263px"></span>(B) <span class="l" style="margin-left:-195px">432 <span class="w" style="width:265px"></span>(C) <span class="l" style="margin-left:-199px">405 <span class="w" style="width:264px"></span>(D) <span class="l" style="margin-left:-199px">440.</span></span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:3244px;top:1262px">&nbsp;</span><span class="a" style="left:461px;top:1438px">2.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:525px;top:1438px;word-spacing:8px;letter-spacing:1px">&nbsp;<span class="w" style="width:61px"></span>Gita <span class="l8">has 558 flags to <span class="l7">pack into box<span class="l8">es. Each <span class="l6">box <span class="l6">will hold 62 <span class="l7">flags. How many box<span class="l6">es w<span class="l7">ill Gita <span class="l6">need </span></span></span></span></span></span></span></span></span></span><span class="a" style="left:609px;top:1549px;word-spacing:6px;letter-spacing:2px">to hold all the flags ? </span><span class="a" style="left:609px;top:1687px;word-spacing:224px;letter-spacing:1px">(A) <span class="l" style="margin-left:-195px">34,596 <span class="w" style="width:155px"></span>(B) <span class="l" style="margin-left:-195px">0.9 <span class="w" style="width:286px"></span>(C) <span class="l" style="margin-left:-199px">9 <span class="w" style="width:350px"></span>(D) <span class="l" style="margin-left:-199px">620.</span></span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:3244px;top:1687px">&nbsp;</span><span class="a" style="left:461px;top:1884px">3.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:525px;top:1884px;word-spacing:16px;letter-spacing:1px">&nbsp;<span class="w" style="width:53px"></span>Y<span class="l9">ou w<span class="l6">ould need to <span class="l8">know the <span class="l9">perim<span class="w6"></span>eter of <span class="l6">someth<span class="w6"></span>ing <span class="l6">if <span class="l6">you w<span class="l6">ere </span></span></span></span></span></span></span></span></span><span class="a" style="left:609px;top:1997px;word-spacing:14px;letter-spacing:1px">(A) <span class="w" style="width:15px"></span>Buying a <span class="l7">box <span class="l7">big enough to hold a clock </span></span></span><span class="a" style="left:609px;top:2107px;word-spacing:14px;letter-spacing:1px">(B) <span class="w" style="width:15px"></span>Buying enough tiles t<span class="l6">o cover <span class="l7">the floor of a room </span></span></span><span class="a" style="left:609px;top:2218px;word-spacing:8px;letter-spacing:2px">(C) <span class="w12"></span>Buyi<span class="l7">ng enough wood to make a fram<span class="w6"></span>e for a picture </span></span><span class="a" style="left:609px;top:2331px;word-spacing:13px;letter-spacing:1px">(D) <span class="w11"></span>Buying a <span class="l7">tableclo<span class="w6"></span>th big enough to <span class="l6">cover a table </span></span></span><span class="a" style="left:461px;top:2442px">.</span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:481px;top:2442px">&nbsp;</span><span class="a" style="left:461px;top:2709px">4.</span></div>
+<div class="ff10" style="font-size:75px">
+<span class="a" style="left:525px;top:2689px">&nbsp;</span></div>
+<div class="ff11" style="font-size:53px">
+<span class="a" style="left:1322px;top:2793px;word-spacing:806px;letter-spacing:1px;color:#1f1a17">18 36 </span><span class="a" style="left:2604px;top:2615px;color:#1f1a17">X </span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:609px;top:2902px;word-spacing:12px;letter-spacing:1px">Which best describes the location of point X ? </span><span class="a" style="left:609px;top:3024px;word-spacing:242px;letter-spacing:1px">(A) <span class="l" style="margin-left:-213px">58 <span class="w" style="width:288px"></span>(B) <span class="l" style="margin-left:-213px">40 <span class="w" style="width:290px"></span>(C) <span class="l" style="margin-left:-217px">44 <span class="w" style="width:289px"></span>(D) <span class="l" style="margin-left:-217px">54.</span></span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:3200px;top:3024px">&nbsp;</span><span class="a" style="left:461px;top:3193px">5.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:525px;top:3193px;word-spacing:11px;letter-spacing:2px">&nbsp;<span class="w" style="width:57px"></span>What is <span class="l6">the area of <span class="l6">a rectangle t<span class="l6">hat measures 5 <span class="l7">meters wi<span class="l6">de and 6 meters <span class="l6">long <span class="l9">? </span></span></span></span></span></span></span></span><span class="a" style="left:609px;top:3315px;word-spacing:20px">(A) <span class="w" style="width:13px"></span>11 <span class="l" style="margin-left:-13px">m </span></span></div>
+<div class="ff4" style="font-size:47px">
+<span class="a" style="left:929px;top:3308px">2 </span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:1387px;top:3315px;word-spacing:18px;letter-spacing:1px">(B) 22 m </span></div>
+<div class="ff4" style="font-size:47px">
+<span class="a" style="left:1713px;top:3308px">2 </span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:2167px;top:3315px;word-spacing:16px;letter-spacing:1px">(C) 30 m </span></div>
+<div class="ff4" style="font-size:47px">
+<span class="a" style="left:2493px;top:3308px">2 </span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:2947px;top:3315px;word-spacing:16px;letter-spacing:1px">(D) 16 m </span></div>
+<div class="ff4" style="font-size:47px">
+<span class="a" style="left:3273px;top:3308px">2 </span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:3302px;top:3315px">.</span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:3322px;top:3315px">&nbsp;</span><span class="a" style="left:461px;top:3486px">6.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:525px;top:3486px">&nbsp;<span class="w" style="width:70px"></span>If&nbsp;</span></div>
+<div class="ff9" style="font-size:54px">
+<span class="a" style="left:649px;top:3487px">&nbsp;<span class="w" style="width:18px"></span>n</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:720px;top:3486px;word-spacing:8px;letter-spacing:2px">&nbsp;represents a number, which of these means the same as the expression</span></div>
+<div class="ff9" style="font-size:54px">
+<span class="a" style="left:3306px;top:3487px">&nbsp;<span class="w" style="width:16px"></span>n</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:3375px;top:3486px;word-spacing:11px">&nbsp;+ 6 ? </span><span class="a" style="left:609px;top:3613px;word-spacing:63px;letter-spacing:1px">(A) <span class="l" style="margin-left:-34px">Six <span class="l" style="margin-left:-59px">mor<span class="w6"></span>e <span class="l" style="margin-left:-52px">than <span class="l" style="margin-left:-48px">a <span class="l" style="margin-left:-51px">number <span class="w" style="width:485px"></span>(B) <span class="l" style="margin-left:-33px">Six <span class="l" style="margin-left:-57px">divided <span class="l" style="margin-left:-53px">by <span class="l" style="margin-left:-52px">a <span class="l" style="margin-left:-49px">numb<span class="w6"></span>er </span></span></span></span></span></span></span></span></span></span></span><span class="a" style="left:609px;top:3724px;word-spacing:71px;letter-spacing:1px">(C) <span class="l" style="margin-left:-47px">Six <span class="l" style="margin-left:-65px">less <span class="l" style="margin-left:-59px">than <span class="l" style="margin-left:-56px">a <span class="l" style="margin-left:-58px">numb<span class="w6"></span>er <span class="w" style="width:510px"></span>(D) <span class="l" style="margin-left:-46px">Six <span class="l" style="margin-left:-65px">times <span class="l" style="margin-left:-58px">a <span class="l" style="margin-left:-58px">num<span class="w7"></span>ber.</span></span></span></span></span></span></span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:3016px;top:3724px">&nbsp;</span><span class="a" style="left:461px;top:3895px">7.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:525px;top:3895px;word-spacing:19px;letter-spacing:1px">&nbsp;<span class="w" style="width:50px"></span>Which can <span class="l8">be <span class="l7">solved <span class="l7">by <span class="l8">using <span class="l9">the <span class="l6">open sentence</span></span></span></span></span></span></span></div>
+<div class="ff9" style="font-size:54px">
+<span class="a" style="left:2349px;top:3896px">&nbsp;<span class="w" style="width:16px"></span>K&nbsp;</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:2425px;top:3895px;word-spacing:17px;letter-spacing:1px">&nbsp;+ <span class="l9">10 = <span class="w11"></span>? </span></span><span class="a" style="left:609px;top:4006px;word-spacing:6px;letter-spacing:1px">(A) <span class="w" style="width:23px"></span>Mohan did <span class="l6">10 times as <span class="l6">many push-ups as Kiran. I<span class="l7">f&nbsp;</span></span></span></span></div>
+<div class="ff9" style="font-size:54px">
+<span class="a" style="left:2455px;top:4007px">&nbsp;<span class="w10"></span>K&nbsp;</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:2542px;top:4006px;word-spacing:4px;letter-spacing:1px">is the number of push-ups Kiran did, how </span><span class="a" style="left:756px;top:4117px;word-spacing:10px;letter-spacing:1px">many push-ups did Mohan do ? </span><span class="a" style="left:609px;top:4230px;word-spacing:9px;letter-spacing:1px">(B) <span class="w" style="width:20px"></span>Sharon did 10 more sit-ups than Kev<span class="l7">in. I<span class="l6">f&nbsp;</span></span></span></div>
+<div class="ff9" style="font-size:54px">
+<span class="a" style="left:2165px;top:4231px">&nbsp;<span class="w" style="width:15px"></span>K&nbsp;</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:2240px;top:4230px;word-spacing:7px;letter-spacing:1px">&nbsp;is the number of sit-ups Kevin did, how many sit- </span><span class="a" style="left:756px;top:4341px;word-spacing:10px;letter-spacing:1px">ups did Sharon do ? </span><span class="a" style="left:609px;top:4452px;word-spacing:6px;letter-spacing:1px">(C) <span class="w" style="width:18px"></span>John ran 10 <span class="l7">fewer meters than Ki<span class="l6">ran. If&nbsp;</span></span></span></div>
+<div class="ff9" style="font-size:54px">
+<span class="a" style="left:2074px;top:4452px">&nbsp;<span class="w9"></span>K&nbsp;</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:2160px;top:4452px;word-spacing:3px;letter-spacing:1px">is the number of meters Kiran ran, how many meters </span><span class="a" style="left:756px;top:4564px;word-spacing:10px;letter-spacing:1px">did John run ? </span><span class="a" style="left:609px;top:4675px;word-spacing:13px;letter-spacing:1px">(D) <span class="w11"></span>Kavit<span class="l6">a takes 10 minutes to run each lap around the gym<span class="w6"></span>nasium. If&nbsp;</span></span></div>
+<div class="ff9" style="font-size:54px">
+<span class="a" style="left:3082px;top:4676px">&nbsp;<span class="w" style="width:18px"></span>K&nbsp;</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:3160px;top:4675px;word-spacing:9px;letter-spacing:2px">&nbsp;is the number of laps </span><span class="a" style="left:756px;top:4786px;word-spacing:11px;letter-spacing:1px">Kavita ran, how long did she run ?</span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:1962px;top:4786px">&nbsp;</span><span class="a" style="left:2029px;top:4937px;letter-spacing:1px;color:#ffffff">SCIENCE </span><span class="a" style="left:461px;top:5072px">8.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:525px;top:5072px;word-spacing:16px;letter-spacing:1px">&nbsp;<span class="w" style="width:53px"></span>If y<span class="l7">our diet i<span class="l7">s deficient i<span class="l6">n v<span class="l8">itamin <span class="l6">A <span class="l7">then you <span class="l8">are supposed to s<span class="l6">uffer from </span></span></span></span></span></span></span></span></span><span class="a" style="left:609px;top:5184px;word-spacing:303px;letter-spacing:1px">(A) <span class="l" style="margin-left:-274px">Rickets <span class="w" style="width:837px"></span>(B) <span class="l" style="margin-left:-273px">Beri <span class="l" style="margin-left:-289px">Beri </span></span></span></span><span class="a" style="left:609px;top:5295px;word-spacing:305px;letter-spacing:1px">(C) <span class="l" style="margin-left:-281px">Scurvy <span class="w" style="width:854px"></span>(D) <span class="l" style="margin-left:-280px">Night <span class="l" style="margin-left:-295px">blindness.</span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2875px;top:5295px">&nbsp;</span><span class="a" style="left:461px;top:5454px">9.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:525px;top:5454px;word-spacing:18px;letter-spacing:1px">&nbsp;<span class="w" style="width:51px"></span>The t<span class="l6">ail of <span class="l9">a <span class="l6">comet always <span class="l10">points <span class="l6">towards <span class="l7">the Sun. </span></span></span></span></span></span></span><span class="a" style="left:609px;top:5564px;word-spacing:420px;letter-spacing:1px">(A) <span class="l" style="margin-left:-391px">False <span class="w" style="width:786px"></span>(B) <span class="l" style="margin-left:-390px">True </span></span></span><span class="a" style="left:609px;top:5677px;word-spacing:151px;letter-spacing:2px">(C) <span class="l" style="margin-left:-131px">Cannot <span class="l" style="margin-left:-145px">say <span class="w" style="width:842px"></span>(D) <span class="l" style="margin-left:-130px">Sometimes <span class="l" style="margin-left:-145px">true, <span class="l" style="margin-left:-145px">sometimes <span class="l" style="margin-left:-145px">false</span></span></span></span></span></span></span></div>
+</div>
+</div>
+<div class="image_layer" style="z-index: 1">
+<div class="ie_fix">
+<img class="absimg" style="left: -1px; top: -1px; width: 904px; height: 1277px; clip: rect(1px, 903px, 1276px, 1px); display: block;" orig="http://html.scribd.com/3ofrnk6sjk8861fv/images/2-11af1507a5.jpg" alt="">
+</div>
+</div>
+</div>
+
+
+        
+        <div class="b_tl"></div>
+        <div class="b_tr"></div>
+        <div class="b_br"></div>
+        <div class="b_bl"></div>
+        <div class="b_t"></div>
+        <div class="b_r"></div>
+        <div class="b_b"></div>
+        <div class="b_l"></div>
+      </div>
+      
+        <script type="text/javascript">
+        
+        docManager.addPage({
+          pageNum:  2 ,
+          fonts: [4,10,11,14,7,17,9],
+          origWidth:  902 ,
+          origHeight:  1274 ,
+          containerElem: document.getElementById("outer_page_2"),
+          blur:  false ,
+          innerPageElem: document.getElementById("page2")
+        });
+        </script>
+      
+    
+  
+    
+      <div class="outer_page only_ie6_border  not_visible" id="outer_page_3" style="width: 1000px; height: 1413px;">
+        
+          <div class="newpage" id="page3" style="width: 902px; height: 1274px; transform: scale(1.10865); transform-origin: left top;">
+<div class="text_layer" style="z-index:2"><div class="ie_fix">
+&nbsp;
+<div class="ff4" style="font-size:64px">
+<span class="a" style="left:2253px;top:5914px">3 </span></div>
+<div class="ff4" style="font-size:50px">
+<span class="a" style="left:2182px;top:6004px;word-spacing:1px;letter-spacing:1px">Class 6</span></div>
+<div class="ff17" style="font-size:50px">
+<span class="a" style="left:2362px;top:6004px">&nbsp;</span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:571px;top:500px">10.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:500px;word-spacing:8px;letter-spacing:2px">&nbsp;<span class="w" style="width:18px"></span>Which of the following is necess<span class="l6">ary for burning (combustion) <span class="l9">? </span></span></span><span class="a" style="left:718px;top:627px;word-spacing:395px;letter-spacing:1px">(A) <span class="l" style="margin-left:-366px">Oxygen <span class="w" style="width:734px"></span>(B) <span class="l" style="margin-left:-365px">Petrol </span></span></span><span class="a" style="left:718px;top:754px;word-spacing:406px;letter-spacing:1px">(C) <span class="l" style="margin-left:-382px">Carbon <span class="w" style="width:736px"></span>(D) <span class="l" style="margin-left:-358px">Nitrogen.</span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2766px;top:754px">&nbsp;</span><span class="a" style="left:571px;top:945px">11.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:672px;top:945px;word-spacing:13px;letter-spacing:1px">&nbsp;<span class="w" style="width:18px"></span>The body system that gives <span class="l8">you support and allows mo<span class="w6"></span>vement is the </span></span><span class="a" style="left:718px;top:1075px;word-spacing:185px;letter-spacing:1px">(A) <span class="l" style="margin-left:-156px">Skeletal <span class="l" style="margin-left:-171px">system <span class="w" style="width:659px"></span>(B) <span class="l" style="margin-left:-155px">Circulato<span class="w6"></span>ry <span class="l" style="margin-left:-177px">system </span></span></span></span></span><span class="a" style="left:718px;top:1202px;word-spacing:135px;letter-spacing:1px">(C) <span class="l" style="margin-left:-111px">Respiratory <span class="l" style="margin-left:-122px">system <span class="w" style="width:589px"></span>(D) <span class="l" style="margin-left:-110px">Excretory <span class="l" style="margin-left:-120px">system <span class="l" style="margin-left:-122px">.</span></span></span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:3076px;top:1202px">&nbsp;</span><span class="a" style="left:571px;top:1389px">12.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:1389px;word-spacing:13px;letter-spacing:1px">&nbsp;<span class="w" style="width:14px"></span>Which food gro<span class="w6"></span>up BEST provides the necessary nutrients for healthy teeth and bones <span class="l11">? </span></span><span class="a" style="left:718px;top:1520px;word-spacing:87px;letter-spacing:1px">(A) <span class="l" style="margin-left:-45px">Milk <span class="l" style="margin-left:-77px">and <span class="l" style="margin-left:-71px">dairy <span class="l" style="margin-left:-79px">produ<span class="w6"></span>cts <span class="w" style="width:476px"></span>(B) <span class="l" style="margin-left:-57px">Fruits <span class="l" style="margin-left:-77px">and <span class="l" style="margin-left:-75px">vegetables </span></span></span></span></span></span></span></span><span class="a" style="left:718px;top:1647px;word-spacing:173px;letter-spacing:1px">(C) <span class="l" style="margin-left:-149px">Bread <span class="l" style="margin-left:-163px">and <span class="l" style="margin-left:-162px">cereal <span class="w" style="width:625px"></span>(D) <span class="l" style="margin-left:-148px">Meat.</span></span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2616px;top:1647px">&nbsp;</span><span class="a" style="left:571px;top:1838px">13.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:1838px;word-spacing:16px;letter-spacing:1px">&nbsp;<span class="w11"></span>The Sun is <span class="l9">a </span></span><span class="a" style="left:718px;top:1966px;word-spacing:407px;letter-spacing:1px">(A) <span class="l" style="margin-left:-378px">Comet <span class="w" style="width:761px"></span>(B) <span class="l" style="margin-left:-377px">St<span class="l6">ar </span></span></span></span><span class="a" style="left:718px;top:2093px;word-spacing:258px;letter-spacing:1px">(C) <span class="l" style="margin-left:-234px">Huge <span class="l" style="margin-left:-252px">plane<span class="w6"></span>t <span class="w" style="width:714px"></span>(D) <span class="l" style="margin-left:-233px">Satellite.</span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2724px;top:2093px">&nbsp;</span><span class="a" style="left:571px;top:2284px">14.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:2284px;letter-spacing:2px">&nbsp;<span class="w" style="width:26px"></span>The Earth is surrounded by an insu<span class="l6">lating blanket of gases whi<span class="l6">ch protects it from the light and heat </span></span></span><span class="a" style="left:718px;top:2395px;word-spacing:12px;letter-spacing:1px">of the Sun. This insulating layer is called the </span><span class="a" style="left:718px;top:2524px;word-spacing:336px;letter-spacing:1px">(A) <span class="l" style="margin-left:-307px">Hydrosphere <span class="w" style="width:616px"></span>(B) <span class="l" style="margin-left:-306px">Lithosphere </span></span></span><span class="a" style="left:718px;top:2651px;word-spacing:343px;letter-spacing:1px">(C) <span class="l" style="margin-left:-319px">Atmosphere <span class="w" style="width:636px"></span>(D) <span class="l" style="margin-left:-318px">Biosphere.</span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2795px;top:2651px">&nbsp;</span><span class="a" style="left:571px;top:2842px">15.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:2842px;word-spacing:2px;letter-spacing:1px">&nbsp;<span class="w" style="width:25px"></span>Which part of the body <span class="l6">receives messages t<span class="l6">ransmitted by nerve <span class="l6">cells located throughout the body ? </span></span></span></span><span class="a" style="left:718px;top:2969px;word-spacing:421px;letter-spacing:1px">(A) <span class="l" style="margin-left:-392px">Heart <span class="w" style="width:785px"></span>(B) <span class="l" style="margin-left:-391px">Lungs </span></span></span><span class="a" style="left:718px;top:3097px;word-spacing:420px;letter-spacing:1px">(C) <span class="l" style="margin-left:-396px">Brain <span class="w" style="width:795px"></span>(D) <span class="l" style="margin-left:-395px">Liver.</span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2609px;top:3097px">&nbsp;</span><span class="a" style="left:571px;top:3279px">16.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:3279px;word-spacing:8px;letter-spacing:2px">&nbsp;<span class="w" style="width:18px"></span>Which of the foll<span class="w7"></span>owin<span class="l6">g has an organic origin <span class="l9">? </span></span></span><span class="a" style="left:718px;top:3406px;word-spacing:424px;letter-spacing:1px">(A) <span class="l" style="margin-left:-395px">Sand <span class="w" style="width:792px"></span>(B) <span class="l" style="margin-left:-394px">Bakelite </span></span></span><span class="a" style="left:718px;top:3533px;word-spacing:415px;letter-spacing:1px">(C) <span class="l" style="margin-left:-391px">Nylon <span class="w" style="width:782px"></span>(D) <span class="l" style="margin-left:-390px">Coal.</span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2604px;top:3533px">&nbsp;</span><span class="a" style="left:571px;top:3715px">17.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:3715px;word-spacing:13px;letter-spacing:1px">&nbsp;<span class="w" style="width:14px"></span>Which is usually NOT a reason why foods are processed <span class="l6">? </span></span><span class="a" style="left:718px;top:3842px;word-spacing:161px;letter-spacing:1px">(A) <span class="l" style="margin-left:-132px">More <span class="l" style="margin-left:-146px">nutritious <span class="w" style="width:712px"></span>(B) <span class="l" style="margin-left:-131px">Easier <span class="l" style="margin-left:-151px">to <span class="l" style="margin-left:-148px">package </span></span></span></span></span></span><span class="a" style="left:718px;top:3970px;word-spacing:60px;letter-spacing:1px">(C) <span class="l" style="margin-left:-36px">Last <span class="l" style="margin-left:-51px">long<span class="w6"></span>er <span class="l" style="margin-left:-50px">on <span class="l" style="margin-left:-48px">the <span class="l" style="margin-left:-48px">shelf <span class="w" style="width:505px"></span>(D) <span class="l" style="margin-left:-35px">Easier <span class="l" style="margin-left:-48px">to <span class="l" style="margin-left:-47px">transport <span class="l" style="margin-left:-44px">to <span class="l" style="margin-left:-49px">the <span class="l" style="margin-left:-45px">store </span></span></span></span></span></span></span></span></span></span></span></span><span class="a" style="left:571px;top:4148px">.</span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:592px;top:4148px">18<span class="w6"></span>.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:702px;top:4148px;word-spacing:6px;letter-spacing:2px">&nbsp;What force pulls things toward the centre of Earth ? </span><span class="a" style="left:718px;top:4277px;word-spacing:399px;letter-spacing:1px">(A) <span class="l" style="margin-left:-370px">Friction <span class="w" style="width:741px"></span>(B) <span class="l" style="margin-left:-369px">Gravity </span></span></span><span class="a" style="left:718px;top:4404px;word-spacing:354px;letter-spacing:1px">(C) <span class="l" style="margin-left:-330px">Magnetism <span class="w" style="width:663px"></span>(D) <span class="l" style="margin-left:-329px">Electr<span class="w6"></span>icity<span class="l10">.</span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2775px;top:4404px">&nbsp;</span><span class="a" style="left:571px;top:4584px">19.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:4584px;word-spacing:14px;letter-spacing:1px">&nbsp;<span class="w" style="width:13px"></span>Who discovered the circulation of blood <span class="l8">? </span></span><span class="a" style="left:718px;top:4712px;word-spacing:191px;letter-spacing:1px">(A) <span class="l" style="margin-left:-162px">Edward <span class="l" style="margin-left:-182px">Jenner <span class="w" style="width:682px"></span>(B) <span class="l" style="margin-left:-161px">William <span class="l" style="margin-left:-174px">Harvey </span></span></span></span></span><span class="a" style="left:718px;top:4841px;word-spacing:158px;letter-spacing:1px">(C) <span class="l" style="margin-left:-134px">Hargobind <span class="l" style="margin-left:-149px">Khorana <span class="w" style="width:564px"></span>(D) <span class="l" style="margin-left:-133px">Louis <span class="l" style="margin-left:-148px">Pasteur.</span></span></span></span></span></div>
+<div class="ff17" style="font-size:70px">
+<span class="a" style="left:2922px;top:4841px">&nbsp;</span><span class="a" style="left:571px;top:5021px">20.</span></div>
+<div class="ff4" style="font-size:71px">
+<span class="a" style="left:676px;top:5021px;word-spacing:11px;letter-spacing:1px">&nbsp;<span class="w" style="width:16px"></span>If y<span class="l6">ou dissolved a lot of salt in some water in a larg<span class="w6"></span>e flat dish and put the dish in bright sunlight </span></span><span class="a" style="left:718px;top:5134px;word-spacing:11px;letter-spacing:1px">on a hot day, what would be left in the dish after a long time ? </span><span class="a" style="left:718px;top:5261px;word-spacing:176px;letter-spacing:1px">(A) <span class="l" style="margin-left:-147px">Dry <span class="l" style="margin-left:-166px">salt <span class="w" style="width:952px"></span>(B) <span class="l" style="margin-left:-146px">Water <span class="l" style="margin-left:-163px">with <span class="l" style="margin-left:-164px">no <span class="l" style="margin-left:-163px">salt </span></span></span></span></span></span></span><span class="a" style="left:718px;top:5388px;word-spacing:49px;letter-spacing:1px">(C) <span class="l" style="margin-left:-25px">The <span class="l" style="margin-left:-35px">same <span class="l" style="margin-left:-35px">salty <span class="l" style="margin-left:-37px">water <span class="l" style="margin-left:-40px">as <span class="l" style="margin-left:-39px">befo<span class="w6"></span>re <span class="w" style="width:232px"></span>(D) <span class="l" style="margin-left:-24px">Nothing.</span></span></span></span></span></span></span></span></div>
+</div>
+</div>
+<div class="image_layer" style="z-index: 1">
+<div class="ie_fix">
+<img class="absimg" style="left: -1px; top: -1px; width: 904px; height: 1277px; clip: rect(1px, 903px, 1276px, 1px); display: block;" orig="http://html.scribd.com/3ofrnk6sjk8861fv/images/3-aa6cfec705.jpg" alt="">
+</div>
+</div>
+</div>
+
+
+        
+        <div class="b_tl"></div>
+        <div class="b_tr"></div>
+        <div class="b_br"></div>
+        <div class="b_bl"></div>
+        <div class="b_t"></div>
+        <div class="b_r"></div>
+        <div class="b_b"></div>
+        <div class="b_l"></div>
+      </div>
+      
+        <script type="text/javascript">
+        
+        docManager.addPage({
+          pageNum:  3 ,
+          fonts: [4,17],
+          origWidth:  902 ,
+          origHeight:  1274 ,
+          containerElem: document.getElementById("outer_page_3"),
+          blur:  false ,
+          innerPageElem: document.getElementById("page3")
+        });
+        </script>
+      
+    
+  
+    
+      <div class="outer_page only_ie6_border  not_visible" id="outer_page_4" style="width: 1000px; height: 1413px;">
+        
+        <div class="b_tl"></div>
+        <div class="b_tr"></div>
+        <div class="b_br"></div>
+        <div class="b_bl"></div>
+        <div class="b_t"></div>
+        <div class="b_r"></div>
+        <div class="b_b"></div>
+        <div class="b_l"></div>
+      <div class="newpage" id="page4" style="width: 902px; height: 1274px; transform: scale(1.10865); transform-origin: left top;">
+<div class="image_layer" style="z-index: 1">
+<div class="ie_fix">
+<img class="absimg" style="left: -1px; top: -1px; width: 904px; height: 1278px; clip: rect(1px, 903px, 1277px, 1px); display: block;" orig="http://html.scribd.com/3ofrnk6sjk8861fv/images/4-5844f26595.jpg">
+</div>
+</div>
+</div></div>
+      
+    
+  
+
+  <script type="text/javascript">
+    
+      
+    
+      
+    
+      
+    
+      
+        docManager.addPage({
+          pageNum:  4 ,
+          fonts: [],
+          origWidth:  902 ,
+          origHeight:  1274 ,
+          containerElem: document.getElementById("outer_page_4"),
+          blur:  false ,
+          contentUrl: "https://html.scribdassets.com/3ofrnk6sjk8861fv/pages/4-5844f26595.jsonp"
+        });
+      
+    
+
+    if (window.docManagerIEAdded != true) {
+      docManager.allPagesAdded();
+    }
+  </script>

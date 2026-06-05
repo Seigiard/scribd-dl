@@ -76,6 +76,19 @@ class ScribdDownloader {
             ["div.customOptInDialog", "div[aria-label='Cookie Consent Banner']"].forEach(sel => {
                 window.__helpers__.removeSelectorAll(sel);
             });
+
+            // Inject CSS to fix faded text issue
+            const style = document.createElement('style');
+            style.innerHTML = `
+                .text_layer, .text_layer span, .text_layer div, .text_layer p {
+                    opacity: 1 !important;
+                    text-shadow: none !important;
+                    color: #000000 !important;
+                    -webkit-font-smoothing: antialiased !important;
+                }
+            `;
+            document.head.appendChild(style);
+
             await window.__helpers__.lazyLoad('div.document_scroller', rendertime);
 
             window.__helpers__.removeMarginSelectorAll("div.outer_page_container div[id^='outer_page_']");

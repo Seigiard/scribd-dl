@@ -43,6 +43,7 @@ class PuppeteerSg {
     await page.goto(url, {
       waitUntil: "load",
     })
+    await page.emulateMediaType('screen')
     await this.injectHelperFunctions(page)
     await new Promise(resolve => setTimeout(resolve, this.buffer))
     return page
