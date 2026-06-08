@@ -19,14 +19,15 @@ class PuppeteerSg {
    * Launch a browser
    */
   async launch() {
-    const isCI = process.env.CI === 'true'; // Detect if running in CI
+    const useNoSandbox = process.env.CI === 'true' || process.env.PUPPETEER_NO_SANDBOX === 'true';
     const args = [];
-    if (isCI) {
+    if (useNoSandbox) {
       args.push('--no-sandbox', '--disable-setuid-sandbox');
     }
     this.browser = await puppeteer.launch({
       headless: "new",
       defaultViewport: null,
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined,
       args,
       timeout: 0,
     });

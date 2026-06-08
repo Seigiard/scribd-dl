@@ -1,0 +1,11 @@
+.git
+node_modules
+output
+coverage
+*.log
+.DS_Store
+page_html.txt
+test_scribd.js
+test
+README.md
+LICENSE

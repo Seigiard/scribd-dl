@@ -4,6 +4,8 @@ import { everandDownloader } from "./service/EverandDownloader.js"
 import * as scribdRegex from "./const/ScribdRegex.js"
 import * as slideshareRegex from "./const/SlideshareRegex.js"
 import * as everandRegex from "./const/EverandRegex.js"
+import { configLoader } from "./utils/io/ConfigLoader.js"
+import { directoryIo } from "./utils/io/DirectoryIo.js"
 
 class App {
     constructor() {
@@ -14,6 +16,8 @@ class App {
     }
 
     async execute(url) {
+        await directoryIo.create(configLoader.load("DIRECTORY", "output"))
+
         if (url.match(scribdRegex.DOMAIN)) {
             await scribdDownloader.execute(url)
         } else if (url.match(slideshareRegex.DOMAIN)) {
