@@ -8,7 +8,6 @@ import { directoryIo } from "../utils/io/DirectoryIo.js";
 import * as slideshareRegex from "../const/SlideshareRegex.js";
 import { Image } from "../object/Image.js";
 import sharp from "sharp";
-import axios from "axios";
 import fs from "fs";
 import sanitize from "sanitize-filename";
 
@@ -54,8 +53,13 @@ class SlideshareDownloader {
         const imagePath = `${tempDir}/${(i + 1).toString().padStart(5, "0")}.png`;
 
         // convert the webp (even it shows jpg) to png
-        const resp = await axios.get(srcs[i], { responseType: "arraybuffer" });
-        const imageBuffer = await sharp(resp.data).toFormat("png").toBuffer();
+        const resp = await fetch(srcs[i]);
+        if (!resp.ok) {
+          throw new Error(`Failed to download slide image: ${srcs[i]}`);
+        }
+        const imageBuffer = await sharp(await resp.arrayBuffer())
+          .toFormat("png")
+          .toBuffer();
         fs.writeFileSync(imagePath, Buffer.from(imageBuffer, "binary"));
 
         const metadata = await sharp(imagePath).metadata();

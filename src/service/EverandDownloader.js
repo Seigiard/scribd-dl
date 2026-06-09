@@ -5,8 +5,9 @@ import { puppeteerSg } from "../utils/request/PuppeteerSg.js";
 import { configLoader } from "../utils/io/ConfigLoader.js";
 import { directoryIo } from "../utils/io/DirectoryIo.js";
 import * as everandRegex from "../const/EverandRegex.js";
-import axios from "axios";
-import fs from "fs";
+import { createWriteStream } from "fs";
+import { Readable } from "stream";
+import { pipeline } from "stream/promises";
 
 const output = configLoader.load("DIRECTORY", "output");
 
@@ -59,8 +60,11 @@ class EverandDownloader {
       bar.start(1, 0);
     }
     let path = `${dir}/${episodeId}_${title}.mp3`;
-    const resp = await axios.get(audioUrl, { responseType: "stream" });
-    resp.data.pipe(fs.createWriteStream(path));
+    const resp = await fetch(audioUrl);
+    if (!resp.ok || !resp.body) {
+      throw new Error(`Failed to download audio: ${audioUrl}`);
+    }
+    await pipeline(Readable.fromWeb(resp.body), createWriteStream(path));
     if (isEpisode) {
       bar.update(1);
       bar.stop();
