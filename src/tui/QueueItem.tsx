@@ -34,18 +34,24 @@ export const QueueItem = ({ job, action, focused }: QueueItemProps) => {
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box>
-        <Box flexGrow={1}>
-          <Text>{job.displayTitle}</Text>
+        <Box flexGrow={1} marginRight={1}>
+          <Text wrap="truncate-end">{job.displayTitle}</Text>
         </Box>
         <Text color={color}>{job.status}</Text>
       </Box>
       <Box>
-        <Box flexGrow={1}>
-          <Text dimColor>{job.url}</Text>
+        <Box flexGrow={1} marginRight={1}>
+          <Text dimColor wrap="truncate-end">
+            {job.url}
+          </Text>
         </Box>
         {label ? <Text inverse={focused === true}>{label}</Text> : null}
       </Box>
-      {job.status === "Failed" && job.failure ? <Text color="red">Reason: {job.failure.reason}</Text> : null}
+      {job.status === "Failed" && job.failure ? (
+        <Text color="red" wrap="truncate-end">
+          Reason: {job.failure.reason}
+        </Text>
+      ) : null}
     </Box>
   );
 };

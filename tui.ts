@@ -28,7 +28,16 @@ const program = (config: ConfigData) =>
       const dir = yield* DirectoryIo;
       yield* dir.create(cfg.directory.output);
 
-      const instance = yield* Effect.sync(() => render(React.createElement(App, { engine, folder: cfg.directory.output })));
+      const instance = yield* Effect.acquireRelease(
+        Effect.sync(() => {
+          process.stdout.write("\x1b[?1049h\x1b[H");
+          return render(React.createElement(App, { engine, folder: cfg.directory.output }));
+        }),
+        () =>
+          Effect.sync(() => {
+            process.stdout.write("\x1b[?1049l");
+          }),
+      );
       yield* Effect.promise(() => instance.waitUntilExit());
     }),
   ).pipe(Effect.provide(buildLayer(config)));

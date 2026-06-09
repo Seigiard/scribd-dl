@@ -1,4 +1,4 @@
-import { Box, useApp, useInput } from "ink";
+import { Box, useApp, useInput, useStdout } from "ink";
 import { useEffect, useMemo, useState } from "react";
 import { Effect } from "effect";
 import type { DownloadEngineService, EngineSnapshot } from "../service/DownloadEngine";
@@ -37,6 +37,8 @@ export const App = ({ engine, folder, onExit }: AppProps) => {
   const snapshot = useEngineState(engine);
   const app = useApp();
   const exit = onExit ?? (() => app.exit());
+  const { stdout } = useStdout();
+  const rows = stdout?.rows ?? 24;
 
   const [focusIndex, setFocusIndex] = useState(0);
   const [transient, setTransient] = useState<string | null>(null);
@@ -80,7 +82,7 @@ export const App = ({ engine, folder, onExit }: AppProps) => {
       return;
     }
 
-    if (key.escape || input === "q") {
+    if (key.escape || input === "q" || input === "й") {
       if (hasActiveJobs(snapshot)) {
         setPopupFocus(0);
         setPopupOpen(true);
@@ -120,14 +122,12 @@ export const App = ({ engine, folder, onExit }: AppProps) => {
   });
 
   return (
-    <Box flexDirection="column">
+    <Box flexDirection="column" height={rows}>
       <Header folder={folder} />
-      <Box marginTop={1} flexDirection="column">
+      <Box marginTop={1} flexDirection="column" flexGrow={1}>
         <Queue snapshot={snapshot} actionable={actionable} focusIndex={focusIndex} />
       </Box>
-      <Box marginTop={1}>
-        <StatusBar transientMessage={transient ?? undefined} />
-      </Box>
+      <StatusBar transientMessage={transient ?? undefined} />
       {popupOpen ? <ExitConfirm focus={popupFocus} /> : null}
     </Box>
   );
