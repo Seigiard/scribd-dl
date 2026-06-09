@@ -83,11 +83,13 @@ const buildLayer = () => {
   );
 };
 
-const runExecute = (url: string) =>
+const noopOnEvent = () => Effect.void;
+
+const runExecute = (url: string, folder = "/tmp/out") =>
   Effect.runPromiseExit(
     Effect.gen(function* () {
       const svc = yield* ScribdDownloader;
-      yield* svc.execute(url);
+      yield* svc.execute(url, folder, noopOnEvent);
     }).pipe(Effect.provide(buildLayer())),
   );
 
@@ -162,7 +164,7 @@ describe("ScribdDownloader", () => {
       height: 600,
     });
     expect(state.merge).not.toHaveBeenCalled();
-    expect(state.dirCreate).not.toHaveBeenCalled();
+    expect(state.dirCreate.mock.calls.some((c) => String(c[0]).includes("_temp"))).toBe(false);
   });
 
   test("multi-dimension path: create temp dir, multi generatePDF, merge, remove temp dir", async () => {
@@ -241,6 +243,90 @@ describe("ScribdDownloader", () => {
     expect(state.page.close).toHaveBeenCalledTimes(1);
   });
 
+  test("emits TitleResolved + ScrapeProgress + RenderProgress for single-dim run", async () => {
+    // #given
+    state.processPageResult = {
+      title: "doc",
+      pages: [
+        { id: "p1", width: 800, height: 600 },
+        { id: "p2", width: 800, height: 600 },
+      ],
+    };
+    const captured: Array<{ _tag: string }> = [];
+    const onEvent = (e: { _tag: string }) => Effect.sync(() => void captured.push(e));
+
+    // #when
+    const exit = await Effect.runPromiseExit(
+      Effect.gen(function* () {
+        const svc = yield* ScribdDownloader;
+        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", onEvent as Parameters<typeof svc.execute>[2]);
+      }).pipe(Effect.provide(buildLayer())),
+    );
+
+    // #then
+    expect(Exit.isSuccess(exit)).toBe(true);
+    expect(captured.map((e) => e._tag)).toEqual(["TitleResolved", "ScrapeProgress", "RenderProgress"]);
+  });
+
+  test("emits RenderProgress N times for N groups (multi-dim)", async () => {
+    // #given
+    state.processPageResult = {
+      title: "doc",
+      pages: [
+        { id: "p1", width: 800, height: 600 },
+        { id: "p2", width: 1000, height: 700 },
+        { id: "p3", width: 1200, height: 800 },
+      ],
+    };
+    const captured: Array<{ _tag: string }> = [];
+    const onEvent = (e: { _tag: string }) => Effect.sync(() => void captured.push(e));
+
+    // #when
+    await Effect.runPromise(
+      Effect.gen(function* () {
+        const svc = yield* ScribdDownloader;
+        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", onEvent as Parameters<typeof svc.execute>[2]);
+      }).pipe(Effect.provide(buildLayer())),
+    );
+
+    // #then — 1 Title + 1 Scrape + 3 Render
+    const renderCount = captured.filter((e) => e._tag === "RenderProgress").length;
+    expect(renderCount).toBe(3);
+  });
+
+  test("does not write to stdout during execute", async () => {
+    // #given
+    state.processPageResult = {
+      title: "doc",
+      pages: [
+        { id: "p1", width: 800, height: 600 },
+        { id: "p2", width: 1000, height: 700 },
+      ],
+    };
+    const originalWrite = process.stdout.write.bind(process.stdout);
+    const writes: string[] = [];
+    // @ts-expect-error overriding for test
+    process.stdout.write = (chunk: string | Uint8Array) => {
+      writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+      return true;
+    };
+
+    // #when
+    try {
+      await Effect.runPromise(
+        Effect.gen(function* () {
+          const svc = yield* ScribdDownloader;
+          yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", noopOnEvent);
+        }).pipe(Effect.provide(buildLayer())),
+      );
+    } finally {
+      process.stdout.write = originalWrite;
+    }
+
+    // #then
+    expect(writes).toHaveLength(0);
+  });
+
   test("happy single-dim path runs to completion via runPromise", async () => {
     // #given
     state.processPageResult = { title: "doc", pages: [{ id: "p1", width: 800, height: 600 }] };
@@ -249,7 +335,7 @@ describe("ScribdDownloader", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const svc = yield* ScribdDownloader;
-        yield* svc.execute("https://www.scribd.com/embeds/123/content");
+        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", noopOnEvent);
       }).pipe(Effect.provide(buildLayer())),
     );
 

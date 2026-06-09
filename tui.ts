@@ -16,7 +16,7 @@ const buildLayer = (config: ConfigData) => {
   const ConfigLayer = makeConfigLoader(config);
   const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
-  const EngineLayer = Layer.provide(DownloadEngineLive, ScribdLayer);
+  const EngineLayer = Layer.provide(DownloadEngineLive, Layer.mergeAll(ScribdLayer, ConfigLayer));
   return Layer.mergeAll(EngineLayer, ConfigLayer, DirectoryIoLive);
 };
 

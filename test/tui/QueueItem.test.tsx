@@ -47,6 +47,22 @@ describe("QueueItem", () => {
     ui.unmount();
   });
 
+  test("Downloading with progress: renders bar and ratio", () => {
+    const job: Job = { ...downloadingJob, progress: { done: 4, total: 10, stage: "render" } };
+    const ui = render(<QueueItem job={job} />);
+    const frame = ui.lastFrame() ?? "";
+    expect(frame).toContain("4/10");
+    expect(frame).toMatch(/█+░+/);
+    ui.unmount();
+  });
+
+  test("Downloading without progress: no bar rendered", () => {
+    const ui = render(<QueueItem job={downloadingJob} />);
+    const frame = ui.lastFrame() ?? "";
+    expect(frame).not.toMatch(/\d+\/\d+/);
+    ui.unmount();
+  });
+
   test("Downloaded: shows status text", () => {
     const ui = render(<QueueItem job={downloadedJob} />);
     expect(ui.lastFrame() ?? "").toContain("Downloaded");

@@ -5,13 +5,19 @@ import { Text } from "ink";
 import { Effect, Layer } from "effect";
 import { DownloadEngine, DownloadEngineLive, type DownloadEngineService } from "../../src/service/DownloadEngine";
 import { ScribdDownloader, type ScribdDownloaderService } from "../../src/service/ScribdDownloader";
+import { ConfigLoader, type ConfigData } from "../../src/utils/io/ConfigLoader";
 import { useEngineState } from "../../src/tui/useEngineState";
+
+const testConfig: ConfigData = { scribd: { rendertime: 100 }, directory: { output: "/tmp/test-out", filename: "title" } };
 
 const buildLayer = () => {
   const scribdSvc: ScribdDownloaderService = {
     execute: () => Effect.never as ReturnType<ScribdDownloaderService["execute"]>,
   };
-  return Layer.provide(DownloadEngineLive, Layer.succeed(ScribdDownloader, scribdSvc));
+  return Layer.provide(
+    DownloadEngineLive,
+    Layer.mergeAll(Layer.succeed(ScribdDownloader, scribdSvc), Layer.succeed(ConfigLoader, testConfig)),
+  );
 };
 
 const Probe = ({ engine }: { engine: DownloadEngineService }) => {
