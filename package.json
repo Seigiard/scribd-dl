@@ -12,14 +12,14 @@
   "main": "run.js",
   "types": "module",
   "scripts": {
-    "start": "bun run.js",
+    "start": "bun run.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:cov": "bun test --coverage",
-    "lint": "oxlint run.js src test",
-    "lint:fix": "oxlint --fix run.js src test",
-    "format": "oxfmt --write package.json run.js src test",
-    "format:check": "oxfmt --check package.json run.js src test"
+    "lint": "oxlint run.js run.ts src test",
+    "lint:fix": "oxlint --fix run.js run.ts src test",
+    "format": "oxfmt --write package.json run.js run.ts src test",
+    "format:check": "oxfmt --check package.json run.js run.ts src test"
   },
   "dependencies": {
     "@effect/cli": "^0.75.2",
