@@ -104,6 +104,12 @@ SCRIBD_DL_OUTPUT=/path/to/output ./docker-download.sh "https://www.scribd.com/do
 ```
 
 
+## Conventions ##
+
+- Source files are TypeScript (`.ts`, strict mode). The Scribd vertical (`run.ts`, `App.ts`, `ScribdDownloader.ts`, all `utils/io/*` and `utils/request/*`) runs on [Effect.ts](https://effect.website/): Layer-based dependency injection, Scope-based resource lifecycle, tagged errors.
+- Legacy `.js` files remain for `SlideshareDownloader` and `EverandDownloader` pending a separate migration phase.
+- ESM imports use `.js` extensions project-wide; sibling-collision pairs (where a `.ts` shares a name with a still-needed legacy `.js`) import the `.ts` until full migration completes.
+
 ## Support URL Format ##
 - https://www.scribd.com/doc/**
 - https://www.scribd.com/document/**
