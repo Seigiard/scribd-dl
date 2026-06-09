@@ -2,12 +2,10 @@ import { Context, Effect, Either, Layer } from "effect";
 import { ConfigLoader } from "./utils/io/ConfigLoader.ts";
 import { DirectoryIo } from "./utils/io/DirectoryIo.ts";
 import { ScribdDownloader, type ScribdError } from "./service/ScribdDownloader.ts";
-import { LegacyDownloaderFailed, UnsupportedUrl } from "./errors/DomainErrors.js";
+import { UnsupportedUrl } from "./errors/DomainErrors.js";
 import * as scribdRegex from "./const/ScribdRegex.js";
-import * as slideshareRegex from "./const/SlideshareRegex.js";
-import * as everandRegex from "./const/EverandRegex.js";
 
-export type AppError = ScribdError | LegacyDownloaderFailed | UnsupportedUrl;
+export type AppError = ScribdError | UnsupportedUrl;
 
 export interface BatchResult {
   readonly url: string;
@@ -29,41 +27,12 @@ export interface AppService {
 
 export class App extends Context.Tag("App")<App, AppService>() {}
 
-type LegacyDomain = "slideshare" | "everand";
-
-interface LegacySingleton {
-  readonly execute: (url: string) => Promise<void>;
-}
-
-const loadLegacySingleton = async (domain: LegacyDomain): Promise<LegacySingleton> => {
-  if (domain === "slideshare") {
-    const mod = (await import("./service/SlideshareDownloader.js")) as {
-      slideshareDownloader: LegacySingleton;
-    };
-    return mod.slideshareDownloader;
-  }
-  const mod = (await import("./service/EverandDownloader.js")) as {
-    everandDownloader: LegacySingleton;
-  };
-  return mod.everandDownloader;
-};
-
-const legacyInvoke = (domain: LegacyDomain, url: string): Effect.Effect<void, LegacyDownloaderFailed, never> =>
-  Effect.tryPromise({
-    try: async () => {
-      const singleton = await loadLegacySingleton(domain);
-      await singleton.execute(url);
-    },
-    catch: (cause) => new LegacyDownloaderFailed({ domain, url, cause }),
-  });
-
 const errorMessage = (err: AppError): string => {
-  const anyErr = err as unknown as { message?: unknown; url?: unknown; path?: unknown; domain?: unknown };
+  const anyErr = err as unknown as { message?: unknown; url?: unknown; path?: unknown };
   if (typeof anyErr.message === "string" && anyErr.message.length > 0) {
     return `${err._tag}: ${anyErr.message}`;
   }
   const parts: string[] = [err._tag];
-  if (typeof anyErr.domain === "string") parts.push(`domain=${anyErr.domain}`);
   if (typeof anyErr.url === "string") parts.push(`url=${anyErr.url}`);
   if (typeof anyErr.path === "string") parts.push(`path=${anyErr.path}`);
   if (parts.length > 1) return parts.join(" ");
@@ -86,14 +55,6 @@ export const AppLive: Layer.Layer<App, never, ScribdDownloader | DirectoryIo | C
         yield* directoryIo.create(config.directory.output);
         if (scribdRegex.DOMAIN.test(url)) {
           yield* scribd.execute(url);
-          return;
-        }
-        if (slideshareRegex.DOMAIN.test(url)) {
-          yield* legacyInvoke("slideshare", url);
-          return;
-        }
-        if (everandRegex.DOMAIN.test(url)) {
-          yield* legacyInvoke("everand", url);
           return;
         }
         yield* Effect.fail(new UnsupportedUrl({ url }));

@@ -8,9 +8,6 @@ import { ConfigLoader, ConfigLoaderLive } from "../src/utils/io/ConfigLoader.ts"
 const VALID_INI = `[SCRIBD]
 rendertime=100
 
-[SLIDESHARE]
-rendertime=200
-
 [DIRECTORY]
 output=output
 filename=title
@@ -65,7 +62,6 @@ describe("ConfigLoader", () => {
     if (Exit.isSuccess(exit)) {
       expect(exit.value).toEqual({
         scribd: { rendertime: 100 },
-        slideshare: { rendertime: 200 },
         directory: { output: "output", filename: "title" },
       });
     }
@@ -87,9 +83,6 @@ describe("ConfigLoader", () => {
     // #given
     const missing = `[SCRIBD]
 rendertime=100
-
-[SLIDESHARE]
-rendertime=200
 
 [DIRECTORY]
 filename=title

@@ -35,7 +35,6 @@ const state: MockState = {
   dirRemove: mock(),
   config: {
     scribd: { rendertime: 100 },
-    slideshare: { rendertime: 100 },
     directory: { output: "/tmp/out", filename: "title" },
   },
 };
@@ -57,7 +56,6 @@ const resetState = () => {
   state.dirRemove = mock(() => Effect.void);
   state.config = {
     scribd: { rendertime: 100 },
-    slideshare: { rendertime: 100 },
     directory: { output: "/tmp/out", filename: "title" },
   };
 };
