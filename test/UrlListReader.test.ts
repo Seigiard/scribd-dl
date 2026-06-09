@@ -3,7 +3,7 @@ import { Effect, Exit } from "effect";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { UrlListReader, UrlListReaderLive } from "../src/utils/io/UrlListReader.ts";
+import { UrlListReader, UrlListReaderLive } from "../src/utils/io/UrlListReader";
 
 let workDir: string;
 

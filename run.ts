@@ -2,13 +2,13 @@ import { existsSync } from "node:fs";
 import { Args, Command } from "@effect/cli";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
-import { App, AppLive } from "./src/App.ts";
-import { ConfigLoaderLive } from "./src/utils/io/ConfigLoader.ts";
-import { DirectoryIoLive } from "./src/utils/io/DirectoryIo.ts";
-import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator.ts";
-import { UrlListReader, UrlListReaderLive } from "./src/utils/io/UrlListReader.ts";
-import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg.ts";
-import { ScribdDownloaderLive } from "./src/service/ScribdDownloader.ts";
+import { App, AppLive } from "./src/App";
+import { ConfigLoaderLive } from "./src/utils/io/ConfigLoader";
+import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
+import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
+import { UrlListReader, UrlListReaderLive } from "./src/utils/io/UrlListReader";
+import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
+import { ScribdDownloaderLive } from "./src/service/ScribdDownloader";
 
 const urlOrFileArg = Args.text({ name: "url-or-file" }).pipe(
   Args.withDescription("Scribd document URL, or path to a file with URLs (one per line, # for comments)."),

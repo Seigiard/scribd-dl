@@ -1,4 +1,4 @@
-import type { PageDimensions } from "./PageDimensions.js";
+import type { PageDimensions } from "./PageDimensions";
 
 export interface DocumentMeta {
   readonly title: string | null;

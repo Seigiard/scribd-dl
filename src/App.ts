@@ -1,9 +1,9 @@
 import { Context, Effect, Either, Layer } from "effect";
-import { ConfigLoader } from "./utils/io/ConfigLoader.ts";
-import { DirectoryIo } from "./utils/io/DirectoryIo.ts";
-import { ScribdDownloader, type ScribdError } from "./service/ScribdDownloader.ts";
-import { UnsupportedUrl } from "./errors/DomainErrors.js";
-import * as scribdRegex from "./const/ScribdRegex.js";
+import { ConfigLoader } from "./utils/io/ConfigLoader";
+import { DirectoryIo } from "./utils/io/DirectoryIo";
+import { ScribdDownloader, type ScribdError } from "./service/ScribdDownloader";
+import { UnsupportedUrl } from "./errors/DomainErrors";
+import * as scribdRegex from "./const/ScribdRegex";
 
 export type AppError = ScribdError | UnsupportedUrl;
 

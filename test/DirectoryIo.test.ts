@@ -3,7 +3,7 @@ import { Effect, Exit } from "effect";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { DirectoryIo, DirectoryIoLive } from "../src/utils/io/DirectoryIo.ts";
+import { DirectoryIo, DirectoryIoLive } from "../src/utils/io/DirectoryIo";
 
 const runCreate = (target: string) =>
   Effect.runPromiseExit(

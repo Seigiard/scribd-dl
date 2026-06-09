@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect";
 import * as fs from "node:fs/promises";
 import { PDFDocument } from "pdf-lib";
-import { PdfMergeFailed } from "../../errors/DomainErrors.js";
+import { PdfMergeFailed } from "../../errors/DomainErrors";
 
 export interface PdfGeneratorService {
   readonly merge: (inputPdfPaths: ReadonlyArray<string>, outputPath: string) => Effect.Effect<void, PdfMergeFailed, never>;

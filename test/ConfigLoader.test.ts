@@ -3,7 +3,7 @@ import { Effect, Exit } from "effect";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { ConfigLoader, ConfigLoaderLive } from "../src/utils/io/ConfigLoader.ts";
+import { ConfigLoader, ConfigLoaderLive } from "../src/utils/io/ConfigLoader";
 
 const VALID_INI = `[SCRIBD]
 rendertime=100

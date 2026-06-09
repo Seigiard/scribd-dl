@@ -4,13 +4,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Runtime and commands
 
-Runtime is **Bun 1.3.14** (ESM-only, `"type": "module"`). Do not introduce Node-specific build steps or a different package manager.
+Runtime is **Bun 1.3.14** (ESM-only, `"type": "module"`). Source is TypeScript; Bun runs `.ts` natively — no separate build step. Do not introduce Node-specific build steps or a different package manager.
 
 ```bash
 bun install               # install deps (uses bun.lock)
 bun start <url-or-file>   # run CLI: single URL, or path to a file with URLs
 bun test                  # run all tests (bun:test)
-bun test path/to.test.js  # run a single test file
+bun test path/to.test.ts  # run a single test file
 bun test --watch          # watch mode
 bun test --coverage       # coverage
 bun run lint              # oxlint
@@ -28,24 +28,36 @@ When the argument is an existing file on the host, the script mounts it read-onl
 
 ## Architecture
 
-The entry point `run.js` decides single-URL vs batch by `existsSync(arg)`. Existing file → `urlListReader.read()` → `app.executeBatch()` with per-URL try/catch and an end-of-run summary (exit 1 on any failure). Non-file → `app.execute()` (legacy single-URL path, unchanged behavior).
+Scribd-only product. Slideshare and Everand support was removed.
 
-`App.execute(url)` is a router that picks one of three service singletons by regex domain match: `scribdDownloader` (`src/service/ScribdDownloader.js`), `slideshareDownloader`, `everandDownloader`. Each one drives Puppeteer via the **single shared `puppeteerSg` instance** (`src/utils/request/PuppeteerSg.js`) — lazy browser launch on first `getPage`, and each downloader calls `puppeteerSg.close()` when done. In batch mode this means the browser is relaunched per URL via the lazy-launch path; this is intentional (no downloader changes were needed for batch support).
+Entry point `run.ts` uses `@effect/cli` for argv parsing and `BunRuntime.runMain` to drive a single `mainEffect`. It branches on `existsSync(arg)`: existing file → `UrlListReader.read` → `App.executeBatch`; otherwise → `App.execute(url)`.
 
-All `src/utils/io/*` and `src/utils/request/*` modules follow the same **singleton constructor pattern**: `if (!Class.instance) Class.instance = this; return Class.instance`, exported as a lowercase instance (`configLoader`, `directoryIo`, `puppeteerSg`, `urlListReader`, …). Match this pattern when adding new utilities.
+The downloader runs on [Effect.ts](https://effect.website/) with **Layer-based dependency injection** instead of singleton instances. Each component is a `Context.Tag` with a `*Live` Layer:
 
-Scribd/Slideshare downloaders render pages with Puppeteer, screenshot each page, then assemble a PDF via `pdf-lib` (`src/utils/io/PdfGenerator.js`). `cli-progress` shows a single progress bar per document. Everand handles podcast audio differently — see `EverandDownloader.js`.
+- `App` (`src/App.ts`) — router. Scribd URL → `ScribdDownloader.execute`. Anything else → `UnsupportedUrl` tagged error.
+- `ScribdDownloader` (`src/service/ScribdDownloader.ts`) — Effect-based scraping + PDF generation, consumes the four utility layers via DI.
+- `PuppeteerSg` (`src/utils/request/PuppeteerSg.ts`) — `Layer.scoped` over `Effect.acquireRelease(puppeteer.launch, browser.close)`. **Scope guarantees browser cleanup** on success, error, and interrupt — no `process.on("exit")` best-effort logic.
+- `PdfGenerator` (`src/utils/io/PdfGenerator.ts`) — Effect wrapper over `pdf-lib` (`merge` only; image-flow `generate` was removed with Slideshare).
+- `ConfigLoader` (`src/utils/io/ConfigLoader.ts`) — `Layer.effect` reading `config.ini` lazily via `Bun.file`, validated through Effect's built-in `Schema`. Memoized — the file is read once per root Layer.
+- `DirectoryIo` (`src/utils/io/DirectoryIo.ts`) — `fs.promises.mkdir/rm` wrapped in tagged errors (`DirectoryIoFailed`).
+- `UrlListReader` (`src/utils/io/UrlListReader.ts`) — tolerant per-line URL extraction (see below).
 
-Configuration lives in `config.ini` (parsed by `ini`) and is read through `configLoader.load(section, key)`. `[DIRECTORY] filename=title` selects document title as output filename; any other value falls back to the document ID. Output goes to `[DIRECTORY] output` (default `output/`), sanitized via `sanitize-filename`.
+Domain errors live in `src/errors/DomainErrors.ts` as `Data.TaggedError` classes. Each `*Live` Layer fails into one of them; consumers see typed error channels.
+
+`run.ts` composes all Layers and provides them to the handler effect — `PuppeteerSgLive` is intentionally kept out of the top-level CLI layer so `@effect/cli --help` does not spawn a browser.
+
+Configuration: `config.ini` is parsed once by `ConfigLoaderLive`. `[DIRECTORY] filename=title` uses document title as the output filename; any other value falls back to the document ID. Output goes to `[DIRECTORY] output` (default `output/`), sanitized via `sanitize-filename`.
 
 ## URL parsing for batch input
 
-`urlListReader.read(filePath)` is intentionally tolerant: per line, trim → skip empty and `#`-prefixed → take the first `https?://\S+` match. Markdown bullets (`- `, `* `), bare URLs, and inline text before the URL all work. This was a deliberate choice to handle the existing `links.md` (markdown list) without a full markdown parser — keep it that way unless the input format requirement actually changes.
+`UrlListReader.read(filePath)` is intentionally tolerant: per line, trim → skip empty and `#`-prefixed → take the first `https?://\S+` match. Markdown bullets (`- `, `* `), bare URLs, and inline text before the URL all work. This was a deliberate choice to handle the existing `links.md` (markdown list) without a full markdown parser — keep it that way unless the input format requirement actually changes.
 
 ## Conventions
 
-- ESM imports must include the `.js` extension (`from "./service/ScribdDownloader.js"`) — Bun follows Node ESM resolution here.
-- Tests use `bun:test` (`import { describe, expect, test } from "bun:test"`); spies use `spyOn`. See `test/App.test.js` for the singleton-mocking pattern (`spyOn(app, "execute").mockImplementation(...)`).
+- **TypeScript everywhere.** All source and tests are `.ts`. Bun runs them natively; `tsconfig.json` has `noEmit: true` and `moduleResolution: "bundler"`.
+- **Extensionless ESM imports.** Relative imports omit the extension: `from "./service/ScribdDownloader"`, not `.js` and not `.ts`. Bun + `moduleResolution: "bundler"` resolves to the `.ts` file. The `.js` convention from the pre-TS era is gone.
+- **No singleton pattern in new code.** Add new services as `Context.Tag` + `Layer.*` (effect/succeed/scoped). Do not reintroduce `if (!Class.instance)` / lowercase-instance exports.
+- **Tests use `bun:test` + `Layer.succeed`/`Layer.test` mocks.** Mock services at the Layer boundary (`Layer.succeed(PuppeteerSg, { ... })`); do not `spyOn` singletons (there are none).
 - Lint and format are oxlint + oxfmt. Run `bun run format` before committing — oxfmt has opinions about line length and will reflow array literals.
 - The `output/` directory and `page_html.txt` are working artifacts, not committed source.
 

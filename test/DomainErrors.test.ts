@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { Effect, Exit } from "effect";
-import { BrowserLaunchFailed, UnsupportedUrl } from "../src/errors/DomainErrors.ts";
+import { BrowserLaunchFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
 
 describe("DomainErrors", () => {
   test("BrowserLaunchFailed carries _tag and cause payload", () => {
