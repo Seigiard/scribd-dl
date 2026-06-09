@@ -1,6 +1,8 @@
+import { homedir } from "node:os";
 import { Cause, Context, Effect, Exit, Layer, Option, PubSub, Queue, Ref, Stream } from "effect";
 import { JobNotFound, NotRemovable, NotRetryable } from "../errors/DomainErrors";
-import { ScribdDownloader } from "./ScribdDownloader";
+import { ConfigLoader } from "../utils/io/ConfigLoader";
+import { ScribdDownloader, type OnEvent } from "./ScribdDownloader";
 import * as scribdRegex from "../const/ScribdRegex";
 
 export type JobId = string & { readonly _brand: "JobId" };
@@ -14,6 +16,12 @@ export interface JobFailure {
   readonly retryable: boolean;
 }
 
+export interface JobProgress {
+  readonly done: number;
+  readonly total: number;
+  readonly stage: "scrape" | "render";
+}
+
 export interface Job {
   readonly id: JobId;
   readonly url: string;
@@ -21,6 +29,7 @@ export interface Job {
   readonly displayTitle: string;
   readonly status: JobStatus;
   readonly failure?: JobFailure;
+  readonly progress?: JobProgress;
 }
 
 export interface EngineSnapshot {
@@ -33,7 +42,10 @@ export type JobEvent =
   | { readonly _tag: "JobCompleted"; readonly id: JobId }
   | { readonly _tag: "JobFailed"; readonly id: JobId; readonly reason: string; readonly retryable: boolean }
   | { readonly _tag: "JobRemoved"; readonly id: JobId }
-  | { readonly _tag: "JobRequeued"; readonly id: JobId };
+  | { readonly _tag: "JobRequeued"; readonly id: JobId }
+  | { readonly _tag: "JobTitleUpdated"; readonly id: JobId; readonly title: string }
+  | { readonly _tag: "JobProgress"; readonly id: JobId; readonly done: number; readonly total: number; readonly stage: "scrape" | "render" }
+  | { readonly _tag: "OutputFolderChanged"; readonly path: string };
 
 export interface DownloadEngineService {
   readonly enqueue: (text: string) => Effect.Effect<ReadonlyArray<Job>, never, never>;
@@ -41,6 +53,8 @@ export interface DownloadEngineService {
   readonly retry: (id: JobId) => Effect.Effect<void, JobNotFound | NotRetryable, never>;
   readonly snapshot: Effect.Effect<EngineSnapshot, never, never>;
   readonly events: Stream.Stream<JobEvent, never, never>;
+  readonly outputFolder: Effect.Effect<string, never, never>;
+  readonly setOutputFolder: (path: string) => Effect.Effect<void, never, never>;
 }
 
 export class DownloadEngine extends Context.Tag("DownloadEngine")<DownloadEngine, DownloadEngineService>() {}
@@ -104,11 +118,15 @@ const formatCause = (cause: Cause.Cause<unknown>): string => {
 
 const newId = (): JobId => crypto.randomUUID() as JobId;
 
-export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownloader> = Layer.scoped(
+const expandHome = (path: string): string => (path.startsWith("~") ? `${homedir()}${path.slice(1)}` : path);
+
+export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownloader | ConfigLoader> = Layer.scoped(
   DownloadEngine,
   Effect.gen(function* () {
     const scribd = yield* ScribdDownloader;
+    const config = yield* ConfigLoader;
     const stateRef = yield* Ref.make(new Map<JobId, Job>());
+    const folderRef = yield* Ref.make(config.directory.output);
     const queue = yield* Queue.unbounded<JobId>();
     const pubsub = yield* PubSub.unbounded<JobEvent>();
 
@@ -124,8 +142,20 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
     const enqueue = (text: string): Effect.Effect<ReadonlyArray<Job>, never, never> =>
       Effect.gen(function* () {
         const urls = extractUrls(text);
+        const map = yield* Ref.get(stateRef);
+        const byUrl = new Map<string, Job>();
+        for (const job of map.values()) {
+          if (job.status !== "Failed") {
+            byUrl.set(job.url, job);
+          }
+        }
         const created: Job[] = [];
         for (const url of urls) {
+          const existing = byUrl.get(url);
+          if (existing) {
+            created.push(existing);
+            continue;
+          }
           const domain = classify(url);
           const id = newId();
           const displayTitle = deriveTitle(url, domain);
@@ -135,6 +165,7 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
             yield* publish({ _tag: "JobAdded", job });
             yield* Queue.offer(queue, id);
             created.push(job);
+            byUrl.set(url, job);
           } else {
             const failure: JobFailure = { reason: "Unsupported domain", retryable: false };
             const job: Job = { id, url, domain, displayTitle, status: "Failed", failure };
@@ -142,6 +173,7 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
             yield* publish({ _tag: "JobAdded", job });
             yield* publish({ _tag: "JobFailed", id, reason: failure.reason, retryable: failure.retryable });
             created.push(job);
+            byUrl.set(url, job);
           }
         }
         return created;
@@ -187,6 +219,30 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
 
     const events: Stream.Stream<JobEvent, never, never> = Stream.fromPubSub(pubsub);
 
+    const updateJob = (id: JobId, f: (j: Job) => Job): Effect.Effect<void, never, never> =>
+      Ref.update(stateRef, (m) => {
+        const j = m.get(id);
+        if (!j) return m;
+        const next = new Map(m);
+        next.set(id, f(j));
+        return next;
+      });
+
+    const makeOnEvent =
+      (id: JobId): OnEvent =>
+      (event) =>
+        Effect.gen(function* () {
+          if (event._tag === "TitleResolved") {
+            yield* updateJob(id, (j) => ({ ...j, displayTitle: event.title }));
+            yield* publish({ _tag: "JobTitleUpdated", id, title: event.title });
+          } else {
+            const stage = event._tag === "ScrapeProgress" ? "scrape" : "render";
+            const progress: JobProgress = { done: event.done, total: event.total, stage };
+            yield* updateJob(id, (j) => ({ ...j, progress }));
+            yield* publish({ _tag: "JobProgress", id, done: event.done, total: event.total, stage });
+          }
+        });
+
     const worker = Effect.forever(
       Effect.gen(function* () {
         const id = yield* Queue.take(queue);
@@ -198,14 +254,17 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
         const downloading: Job = { ...current, status: "Downloading" };
         yield* setJob(downloading);
         yield* publish({ _tag: "JobStarted", id });
-        const exit = yield* Effect.exit(scribd.execute(current.url));
+        const folder = yield* Ref.get(folderRef);
+        const exit = yield* Effect.exit(scribd.execute(current.url, folder, makeOnEvent(id)));
+        const latest = (yield* Ref.get(stateRef)).get(id) ?? downloading;
+        const { progress: _drop, ...withoutProgress } = latest;
         if (Exit.isSuccess(exit)) {
-          yield* setJob({ ...downloading, status: "Downloaded" });
+          yield* setJob({ ...withoutProgress, status: "Downloaded" });
           yield* publish({ _tag: "JobCompleted", id });
         } else {
           const reason = formatCause(exit.cause);
           const failure: JobFailure = { reason, retryable: true };
-          yield* setJob({ ...downloading, status: "Failed", failure });
+          yield* setJob({ ...withoutProgress, status: "Failed", failure });
           yield* publish({ _tag: "JobFailed", id, reason, retryable: true });
         }
       }),
@@ -213,6 +272,17 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
 
     yield* Effect.forkScoped(worker);
 
-    return DownloadEngine.of({ enqueue, remove, retry, snapshot, events });
+    const outputFolder: Effect.Effect<string, never, never> = Ref.get(folderRef);
+
+    const setOutputFolder = (path: string): Effect.Effect<void, never, never> =>
+      Effect.gen(function* () {
+        const trimmed = path.trim();
+        if (trimmed === "") return;
+        const expanded = expandHome(trimmed);
+        yield* Ref.set(folderRef, expanded);
+        yield* publish({ _tag: "OutputFolderChanged", path: expanded });
+      });
+
+    return DownloadEngine.of({ enqueue, remove, retry, snapshot, events, outputFolder, setOutputFolder });
   }),
 );

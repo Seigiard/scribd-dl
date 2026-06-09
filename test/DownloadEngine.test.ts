@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Cause, Chunk, Effect, Exit, Layer, Stream } from "effect";
 import { DownloadEngine, DownloadEngineLive, type EngineSnapshot, type Job, type JobEvent } from "../src/service/DownloadEngine";
 import { ScribdDownloader, type ScribdDownloaderService } from "../src/service/ScribdDownloader";
+import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
 import { PageLoadFailed } from "../src/errors/DomainErrors";
 
 interface MockState {
@@ -16,11 +17,16 @@ const resetState = () => {
   state.scribdExecute = mock(() => Effect.void);
 };
 
-const buildLayer = () => {
+const defaultConfig: ConfigData = {
+  scribd: { rendertime: 100 },
+  directory: { output: "/tmp/out", filename: "title" },
+};
+
+const buildLayer = (config: ConfigData = defaultConfig) => {
   const scribdSvc: ScribdDownloaderService = {
-    execute: (url) => state.scribdExecute(url) as ReturnType<ScribdDownloaderService["execute"]>,
+    execute: (url, folder, onEvent) => state.scribdExecute(url, folder, onEvent) as ReturnType<ScribdDownloaderService["execute"]>,
   };
-  return Layer.provide(DownloadEngineLive, Layer.succeed(ScribdDownloader, scribdSvc));
+  return Layer.provide(DownloadEngineLive, Layer.mergeAll(Layer.succeed(ScribdDownloader, scribdSvc), Layer.succeed(ConfigLoader, config)));
 };
 
 const runScoped = <A, E>(program: Effect.Effect<A, E, DownloadEngine>) =>
@@ -222,7 +228,7 @@ describe("DownloadEngine", () => {
       // #then
       expect(snap.jobs[0]!.status).toBe("Downloaded");
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
-      expect(state.scribdExecute).toHaveBeenCalledWith(url);
+      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function));
     });
 
     test("ScribdDownloader failure → Failed with retryable: true", async () => {
@@ -447,6 +453,325 @@ describe("DownloadEngine", () => {
 
       // #then
       expect(firstFailureTag(exit)).toBe("JobNotFound");
+    });
+  });
+
+  describe("enqueue: dedup", () => {
+    test("same URL twice in one paste → same Job referenced twice, snapshot has 1", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+      const url = "https://www.scribd.com/document/1/a";
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const created = yield* engine.enqueue(`${url}\n${url}`);
+          const snap = yield* engine.snapshot;
+          return { created, snap };
+        }),
+      );
+
+      // #then
+      expect(result.created).toHaveLength(2);
+      expect(result.created[0]!.id).toBe(result.created[1]!.id);
+      expect(result.snap.jobs).toHaveLength(1);
+    });
+
+    test("re-enqueue after Downloaded → same id reused, no second download triggered", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.void);
+      const url = "https://www.scribd.com/document/1/a";
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const [first] = yield* engine.enqueue(url);
+          yield* waitForQuiet(engine);
+          const second = yield* engine.enqueue(url);
+          yield* waitForQuiet(engine);
+          return { first, second, snap: yield* engine.snapshot };
+        }),
+      );
+
+      // #then
+      expect(result.second).toHaveLength(1);
+      expect(result.second[0]!.id).toBe(result.first!.id);
+      expect(result.snap.jobs).toHaveLength(1);
+      expect(state.scribdExecute).toHaveBeenCalledTimes(1);
+    });
+
+    test("re-enqueue after Failed → new Job (different id)", async () => {
+      // #given
+      state.scribdExecute = mock((u: string) => Effect.fail(new PageLoadFailed({ url: u, cause: "boom" })));
+      const url = "https://www.scribd.com/document/1/a";
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const [first] = yield* engine.enqueue(url);
+          yield* waitForQuiet(engine);
+          const [second] = yield* engine.enqueue(url);
+          yield* waitForQuiet(engine);
+          return { first, second };
+        }),
+      );
+
+      // #then
+      expect(result.second!.id).not.toBe(result.first!.id);
+    });
+
+    test("re-enqueue after Remove → new Job", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+      const url = "https://www.scribd.com/document/1/a";
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const [first] = yield* engine.enqueue(url);
+          yield* engine.remove(first!.id);
+          const [second] = yield* engine.enqueue(url);
+          return { first, second };
+        }),
+      );
+
+      // #then
+      expect(result.second!.id).not.toBe(result.first!.id);
+    });
+
+    test("enqueue while Queued → existing Job returned, no double download", async () => {
+      // #given — never-resolves keeps the worker on first job, second remains Queued
+      state.scribdExecute = mock(() => Effect.never);
+      const url1 = "https://www.scribd.com/document/1/a";
+      const url2 = "https://www.scribd.com/document/2/b";
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const first = yield* engine.enqueue(`${url1}\n${url2}`);
+          const second = yield* engine.enqueue(url2);
+          return { first, second };
+        }),
+      );
+
+      // #then
+      expect(result.second).toHaveLength(1);
+      expect(result.second[0]!.id).toBe(result.first[1]!.id);
+    });
+  });
+
+  describe("downloader events: title + progress", () => {
+    test("TitleResolved → JobTitleUpdated published + displayTitle updated", async () => {
+      // #given
+      state.scribdExecute = mock(
+        (_url: string, _folder: string, onEvent: (e: { _tag: string; title?: string }) => Effect.Effect<void, never, never>) =>
+          Effect.gen(function* () {
+            yield* onEvent({ _tag: "TitleResolved", title: "Into the Odd" });
+          }),
+      );
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const tagsFork = yield* engine.events.pipe(
+            Stream.filter((e) => e._tag === "JobTitleUpdated"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.fork,
+          );
+          yield* Effect.sleep("10 millis");
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          const chunk = yield* tagsFork;
+          const snap = yield* waitForQuiet(engine);
+          return { events: Chunk.toReadonlyArray(chunk), snap };
+        }),
+      );
+
+      // #then
+      expect(result.events).toHaveLength(1);
+      expect((result.events[0]! as { title: string }).title).toBe("Into the Odd");
+      expect(result.snap.jobs[0]!.displayTitle).toBe("Into the Odd");
+    });
+
+    test("ScrapeProgress + RenderProgress → JobProgress published; progress cleared on Downloaded", async () => {
+      // #given
+      state.scribdExecute = mock(
+        (
+          _url: string,
+          _folder: string,
+          onEvent: (e: { _tag: string; done?: number; total?: number }) => Effect.Effect<void, never, never>,
+        ) =>
+          Effect.gen(function* () {
+            yield* onEvent({ _tag: "ScrapeProgress", done: 10, total: 10 });
+            yield* onEvent({ _tag: "RenderProgress", done: 1, total: 3 });
+            yield* onEvent({ _tag: "RenderProgress", done: 3, total: 3 });
+          }),
+      );
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const progFork = yield* engine.events.pipe(
+            Stream.filter((e) => e._tag === "JobProgress"),
+            Stream.take(3),
+            Stream.runCollect,
+            Effect.fork,
+          );
+          yield* Effect.sleep("10 millis");
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          const chunk = yield* progFork;
+          const snap = yield* waitForQuiet(engine);
+          return { events: Chunk.toReadonlyArray(chunk), snap };
+        }),
+      );
+
+      // #then
+      expect(result.events).toHaveLength(3);
+      expect((result.events[0]! as { stage: string }).stage).toBe("scrape");
+      expect((result.events[2]! as { stage: string; done: number }).stage).toBe("render");
+      expect(result.snap.jobs[0]!.status).toBe("Downloaded");
+      expect(result.snap.jobs[0]!.progress).toBeUndefined();
+    });
+
+    test("progress cleared when job Fails", async () => {
+      // #given
+      state.scribdExecute = mock(
+        (
+          url: string,
+          _folder: string,
+          onEvent: (e: { _tag: string; done?: number; total?: number }) => Effect.Effect<void, never, never>,
+        ) =>
+          Effect.gen(function* () {
+            yield* onEvent({ _tag: "RenderProgress", done: 2, total: 5 });
+            return yield* Effect.fail(new PageLoadFailed({ url, cause: "boom" }));
+          }),
+      );
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          return yield* waitForQuiet(engine);
+        }),
+      );
+
+      // #then
+      expect(snap.jobs[0]!.status).toBe("Failed");
+      expect(snap.jobs[0]!.progress).toBeUndefined();
+    });
+  });
+
+  describe("output folder", () => {
+    test("default folder comes from ConfigLoader; setOutputFolder updates it + publishes event", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.void);
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const initial = yield* engine.outputFolder;
+          const evtFork = yield* engine.events.pipe(
+            Stream.filter((e) => e._tag === "OutputFolderChanged"),
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.fork,
+          );
+          yield* Effect.sleep("10 millis");
+          yield* engine.setOutputFolder("/tmp/new");
+          const chunk = yield* evtFork;
+          const after = yield* engine.outputFolder;
+          return { initial, after, events: Chunk.toReadonlyArray(chunk) };
+        }),
+      );
+
+      // #then
+      expect(result.initial).toBe("/tmp/out");
+      expect(result.after).toBe("/tmp/new");
+      expect((result.events[0]! as { path: string }).path).toBe("/tmp/new");
+    });
+
+    test("worker passes current folder to execute (read at take time)", async () => {
+      // #given
+      const folders: string[] = [];
+      state.scribdExecute = mock((_url: string, folder: string) =>
+        Effect.sync(() => {
+          folders.push(folder);
+        }),
+      );
+
+      // #when
+      await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.setOutputFolder("/tmp/new");
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          yield* waitForQuiet(engine);
+        }),
+      );
+
+      // #then
+      expect(folders).toEqual(["/tmp/new"]);
+    });
+
+    test("in-flight job keeps original folder; subsequent job uses new folder", async () => {
+      // #given
+      const folders: string[] = [];
+      let firstStarted = false;
+      const release: { resolve?: () => void } = {};
+      state.scribdExecute = mock((url: string, folder: string) =>
+        Effect.gen(function* () {
+          folders.push(folder);
+          if (url.includes("/1/")) {
+            firstStarted = true;
+            yield* Effect.async<void>((cb) => {
+              release.resolve = () => cb(Effect.void);
+            });
+          }
+        }),
+      );
+
+      // #when
+      await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
+          // wait until first job is in-flight
+          for (let i = 0; i < 100 && !firstStarted; i++) yield* Effect.sleep("5 millis");
+          yield* engine.setOutputFolder("/tmp/new");
+          yield* Effect.sync(() => release.resolve?.());
+          yield* waitForQuiet(engine);
+        }),
+      );
+
+      // #then
+      expect(folders[0]).toBe("/tmp/out");
+      expect(folders[1]).toBe("/tmp/new");
+    });
+
+    test("setOutputFolder ignores empty / whitespace input", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.void);
+
+      // #when
+      const after = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.setOutputFolder("   ");
+          return yield* engine.outputFolder;
+        }),
+      );
+
+      // #then
+      expect(after).toBe("/tmp/out");
     });
   });
 

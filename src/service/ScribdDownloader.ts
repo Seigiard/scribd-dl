@@ -1,6 +1,5 @@
 import { Context, Effect, Layer } from "effect";
 import type { Page } from "puppeteer";
-import cliProgress from "cli-progress";
 import sanitize from "sanitize-filename";
 import { ConfigLoader } from "../utils/io/ConfigLoader";
 import { DirectoryIo } from "../utils/io/DirectoryIo";
@@ -20,8 +19,15 @@ import * as scribdRegex from "../const/ScribdRegex";
 
 export type ScribdError = UnsupportedUrl | PageLoadFailed | PageProcessFailed | PdfGenerationFailed | PdfMergeFailed | DirectoryIoFailed;
 
+export type DownloaderEvent =
+  | { readonly _tag: "TitleResolved"; readonly title: string }
+  | { readonly _tag: "ScrapeProgress"; readonly done: number; readonly total: number }
+  | { readonly _tag: "RenderProgress"; readonly done: number; readonly total: number };
+
+export type OnEvent = (event: DownloaderEvent) => Effect.Effect<void, never, never>;
+
 export interface ScribdDownloaderService {
-  readonly execute: (url: string) => Effect.Effect<void, ScribdError, never>;
+  readonly execute: (url: string, folder: string, onEvent: OnEvent) => Effect.Effect<void, ScribdError, never>;
 }
 
 export class ScribdDownloader extends Context.Tag("ScribdDownloader")<ScribdDownloader, ScribdDownloaderService>() {}
@@ -120,14 +126,11 @@ const processPage = (
 
 const groupPagesByDimensions = (pages: ReadonlyArray<PageDimensions>): Effect.Effect<ReadonlyArray<PageGroup>, never, never> =>
   Effect.sync(() => {
-    console.log(`Grouping pages by dimensions...`);
     const groups: PageGroup[] = [];
     if (pages.length === 0) {
       return groups;
     }
-    const bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
     let ids: string[] = [pages[0]!.id];
-    bar.start(pages.length, 1);
     for (let i = 1; i < pages.length; i++) {
       const prev = pages[i - 1]!;
       const curr = pages[i]!;
@@ -137,10 +140,7 @@ const groupPagesByDimensions = (pages: ReadonlyArray<PageDimensions>): Effect.Ef
         groups.push({ ids, width: prev.width, height: prev.height });
         ids = [curr.id];
       }
-      bar.update(i + 1);
     }
-    bar.update(pages.length);
-    bar.stop();
     const last = pages[pages.length - 1]!;
     groups.push({ ids, width: last.width, height: last.height });
     return groups;
@@ -151,9 +151,9 @@ const generatePDFs = (
   groups: ReadonlyArray<PageGroup>,
   tempDir: string,
   puppeteerSg: Context.Tag.Service<PuppeteerSg>,
+  onEvent: OnEvent,
 ): Effect.Effect<ReadonlyArray<string>, PageProcessFailed | PdfGenerationFailed, never> =>
   Effect.gen(function* () {
-    console.log(`Generating PDFs for ${groups.length} groups of pages...`);
     const pdfPaths: string[] = [];
     yield* Effect.tryPromise({
       try: () =>
@@ -165,8 +165,6 @@ const generatePDFs = (
         }),
       catch: (cause) => new PageProcessFailed({ url: "", cause }),
     });
-    const bar = new cliProgress.SingleBar({}, cliProgress.Presets.shades_classic);
-    yield* Effect.sync(() => bar.start(groups.length, 0));
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i]!;
       const idsArr = [...group.ids];
@@ -193,12 +191,8 @@ const generatePDFs = (
           }, idsArr),
         catch: (cause) => new PageProcessFailed({ url: "", cause }),
       });
-      yield* Effect.sync(() => bar.update(i + 1));
+      yield* onEvent({ _tag: "RenderProgress", done: i + 1, total: groups.length });
     }
-    yield* Effect.sync(() => {
-      bar.update(groups.length);
-      bar.stop();
-    });
     return pdfPaths;
   });
 
@@ -217,7 +211,7 @@ export const ScribdDownloaderLive: Layer.Layer<ScribdDownloader, never, Puppetee
       const config = yield* ConfigLoader;
       const directoryIo = yield* DirectoryIo;
 
-      const execute = (url: string): Effect.Effect<void, ScribdError, never> =>
+      const execute = (url: string, folder: string, onEvent: OnEvent): Effect.Effect<void, ScribdError, never> =>
         Effect.scoped(
           Effect.gen(function* () {
             const embedUrl = yield* resolveEmbedUrl(url);
@@ -225,14 +219,17 @@ export const ScribdDownloaderLive: Layer.Layer<ScribdDownloader, never, Puppetee
 
             const page = yield* Effect.acquireRelease(puppeteerSg.getPage(embedUrl), (p) => Effect.promise(() => p.close()));
 
-            console.log(`Processing page...`);
             const meta: DocumentMeta = yield* processPage(page, embedUrl, config.scribd.rendertime).pipe(
               Effect.map(({ title, pages }) => ({ title, id, pages })),
             );
 
+            yield* onEvent({ _tag: "TitleResolved", title: meta.title ?? id });
+            yield* onEvent({ _tag: "ScrapeProgress", done: meta.pages.length, total: meta.pages.length });
+
             const rawName = config.directory.filename === "title" ? (meta.title ?? id) : id;
             const identifier = sanitize(rawName);
-            const pdfPath = `${config.directory.output}/${identifier}.pdf`;
+            yield* directoryIo.create(folder);
+            const pdfPath = `${folder}/${identifier}.pdf`;
 
             if (allSameDimensions(meta.pages)) {
               const dims = meta.pages[0];
@@ -241,16 +238,15 @@ export const ScribdDownloaderLive: Layer.Layer<ScribdDownloader, never, Puppetee
               } else {
                 yield* puppeteerSg.generatePDF(page, pdfPath);
               }
+              yield* onEvent({ _tag: "RenderProgress", done: 1, total: 1 });
             } else {
-              const tempDir = `${config.directory.output}/${identifier}_temp`;
+              const tempDir = `${folder}/${identifier}_temp`;
               yield* directoryIo.create(tempDir);
               const groups = yield* groupPagesByDimensions(meta.pages);
-              const pdfPaths = yield* generatePDFs(page, groups, tempDir, puppeteerSg);
+              const pdfPaths = yield* generatePDFs(page, groups, tempDir, puppeteerSg, onEvent);
               yield* pdfGenerator.merge(pdfPaths, pdfPath);
               yield* directoryIo.remove(tempDir);
             }
-
-            yield* Effect.sync(() => console.log(`Generated: ${pdfPath}`));
           }),
         );
 

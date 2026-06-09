@@ -79,13 +79,16 @@ beforeEach(() => {
 
 const buildLayer = () => {
   const scribdSvc: ScribdDownloaderService = {
-    execute: (url) => state.scribdExecute(url) as ReturnType<ScribdDownloaderService["execute"]>,
+    execute: (url, folder, onEvent) => state.scribdExecute(url, folder, onEvent) as ReturnType<ScribdDownloaderService["execute"]>,
   };
   const dirSvc: DirectoryIoService = {
     create: (p) => state.dirCreate(p) as ReturnType<DirectoryIoService["create"]>,
     remove: (p) => state.dirRemove(p) as ReturnType<DirectoryIoService["remove"]>,
   };
-  const EngineLayer = Layer.provide(DownloadEngineLive, Layer.succeed(ScribdDownloader, scribdSvc));
+  const EngineLayer = Layer.provide(
+    DownloadEngineLive,
+    Layer.mergeAll(Layer.succeed(ScribdDownloader, scribdSvc), Layer.succeed(ConfigLoader, state.config)),
+  );
   return Layer.mergeAll(EngineLayer, Layer.succeed(DirectoryIo, dirSvc), Layer.succeed(ConfigLoader, state.config));
 };
 
@@ -112,7 +115,7 @@ describe("runCli", () => {
       // #then
       expect(result.ok).toBe(true);
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
-      expect(state.scribdExecute).toHaveBeenCalledWith(url);
+      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function));
       expect(state.logs.some((l) => l.includes("Batch summary"))).toBe(false);
       expect(state.dirCreate).toHaveBeenCalledWith("/tmp/out");
     });

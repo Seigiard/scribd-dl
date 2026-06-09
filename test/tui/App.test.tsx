@@ -3,11 +3,17 @@ import { render } from "ink-testing-library";
 import { Effect, Layer } from "effect";
 import { DownloadEngine, DownloadEngineLive, type DownloadEngineService } from "../../src/service/DownloadEngine";
 import { ScribdDownloader, type ScribdDownloaderService } from "../../src/service/ScribdDownloader";
+import { ConfigLoader, type ConfigData } from "../../src/utils/io/ConfigLoader";
 import { App } from "../../src/tui/App";
+
+const testConfig: ConfigData = { scribd: { rendertime: 100 }, directory: { output: "/tmp/test-out", filename: "title" } };
 
 const buildLayer = (execute: ScribdDownloaderService["execute"] = () => Effect.never as ReturnType<ScribdDownloaderService["execute"]>) => {
   const scribdSvc: ScribdDownloaderService = { execute };
-  return Layer.provide(DownloadEngineLive, Layer.succeed(ScribdDownloader, scribdSvc));
+  return Layer.provide(
+    DownloadEngineLive,
+    Layer.mergeAll(Layer.succeed(ScribdDownloader, scribdSvc), Layer.succeed(ConfigLoader, testConfig)),
+  );
 };
 
 const flush = (ms = 60) => new Promise<void>((r) => setTimeout(r, ms));
@@ -88,11 +94,70 @@ describe("App: focus + actions", () => {
       await flush();
       const before = await Effect.runPromise(engine.snapshot);
       expect(before.jobs).toHaveLength(2);
+      // Tab past the [Change] button to focus the first Remove button
+      ui.stdin.write("\t");
+      await flush();
       ui.stdin.write("\r");
       await flush();
       const after = await Effect.runPromise(engine.snapshot);
       expect(after.jobs).toHaveLength(1);
       expect(after.jobs[0]!.status).toBe("Downloading");
+      ui.unmount();
+    });
+  });
+});
+
+describe("App: change folder", () => {
+  test("[Change] is focused initially; Header shows [Change]", async () => {
+    await withEngine(async (engine) => {
+      const ui = render(<App engine={engine} folder="/tmp/test-out" onExit={() => {}} />);
+      await flush();
+      const frame = ui.lastFrame() ?? "";
+      expect(frame).toContain("[Change]");
+      expect(frame).toContain("/tmp/test-out");
+      ui.unmount();
+    });
+  });
+
+  test("Enter on [Change] opens popup; Save applies new folder via engine.setOutputFolder", async () => {
+    await withEngine(async (engine) => {
+      const ui = render(<App engine={engine} folder="/tmp/test-out" onExit={() => {}} />);
+      await flush();
+      // Enter on [Change] (focusIndex 0)
+      ui.stdin.write("\r");
+      await flush();
+      expect(ui.lastFrame() ?? "").toContain("Change download folder");
+      // Type a new folder suffix
+      ui.stdin.write("-edit");
+      await flush();
+      // Tab past input → Cancel → Save, then Enter
+      ui.stdin.write("\t");
+      await flush();
+      ui.stdin.write("\t");
+      await flush();
+      ui.stdin.write("\r");
+      await flush();
+      // Popup closes, folder updated
+      const after = await Effect.runPromise(engine.outputFolder);
+      expect(after).toBe("/tmp/test-out-edit");
+      expect(ui.lastFrame() ?? "").not.toContain("Change download folder");
+      expect(ui.lastFrame() ?? "").toContain("/tmp/test-out-edit");
+      ui.unmount();
+    });
+  });
+
+  test("Esc inside ChangeFolderPopup closes it without saving", async () => {
+    await withEngine(async (engine) => {
+      const ui = render(<App engine={engine} folder="/tmp/test-out" onExit={() => {}} />);
+      await flush();
+      ui.stdin.write("\r");
+      await flush();
+      expect(ui.lastFrame() ?? "").toContain("Change download folder");
+      ui.stdin.write("\x1b");
+      await flush();
+      expect(ui.lastFrame() ?? "").not.toContain("Change download folder");
+      const after = await Effect.runPromise(engine.outputFolder);
+      expect(after).toBe("/tmp/test-out");
       ui.unmount();
     });
   });

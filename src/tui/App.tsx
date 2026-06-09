@@ -1,7 +1,8 @@
 import { Box, useApp, useInput, useStdout } from "ink";
 import { useEffect, useMemo, useState } from "react";
-import { Effect } from "effect";
+import { Effect, Fiber, Stream } from "effect";
 import type { DownloadEngineService, EngineSnapshot } from "../service/DownloadEngine";
+import { ChangeFolderPopup } from "./ChangeFolderPopup";
 import { ExitConfirm } from "./ExitConfirm";
 import { Header } from "./Header";
 import { Queue, type ActionableControl } from "./Queue";
@@ -23,6 +24,23 @@ const computeActionable = (snap: EngineSnapshot): ReadonlyArray<ActionableContro
   return out;
 };
 
+const useOutputFolder = (engine: DownloadEngineService, initial: string): string => {
+  const [folder, setFolder] = useState(initial);
+  useEffect(() => {
+    Effect.runPromise(engine.outputFolder)
+      .then(setFolder)
+      .catch(() => {});
+    const subscribe = Stream.runForEach(engine.events, (e) =>
+      e._tag === "OutputFolderChanged" ? Effect.sync(() => setFolder(e.path)) : Effect.void,
+    );
+    const fiber = Effect.runFork(subscribe);
+    return () => {
+      Effect.runFork(Fiber.interrupt(fiber));
+    };
+  }, [engine]);
+  return folder;
+};
+
 const hasActiveJobs = (snap: EngineSnapshot): boolean => snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
 
 const looksLikePaste = (input: string): boolean => input.length > 5;
@@ -33,8 +51,9 @@ export interface AppProps {
   readonly onExit?: () => void;
 }
 
-export const App = ({ engine, folder, onExit }: AppProps) => {
+export const App = ({ engine, folder: initialFolder, onExit }: AppProps) => {
   const snapshot = useEngineState(engine);
+  const folder = useOutputFolder(engine, initialFolder);
   const app = useApp();
   const exit = onExit ?? (() => app.exit());
   const { stdout } = useStdout();
@@ -44,16 +63,17 @@ export const App = ({ engine, folder, onExit }: AppProps) => {
   const [transient, setTransient] = useState<string | null>(null);
   const [popupOpen, setPopupOpen] = useState(false);
   const [popupFocus, setPopupFocus] = useState(0);
+  const [changeFolderOpen, setChangeFolderOpen] = useState(false);
 
   const actionable = useMemo(() => computeActionable(snapshot), [snapshot]);
+  const focusCount = actionable.length + 1; // index 0 = [Change]
+  const changeFocused = focusIndex === 0;
 
   useEffect(() => {
-    if (actionable.length === 0) {
-      if (focusIndex !== 0) setFocusIndex(0);
-    } else if (focusIndex >= actionable.length) {
-      setFocusIndex(actionable.length - 1);
+    if (focusIndex >= focusCount) {
+      setFocusIndex(focusCount - 1);
     }
-  }, [actionable.length, focusIndex]);
+  }, [focusCount, focusIndex]);
 
   useEffect(() => {
     if (transient === null) return;
@@ -62,6 +82,10 @@ export const App = ({ engine, folder, onExit }: AppProps) => {
   }, [transient]);
 
   useInput((input, key) => {
+    if (changeFolderOpen) {
+      return; // ChangeFolderPopup owns input while open
+    }
+
     if (popupOpen) {
       if (key.escape) {
         setPopupOpen(false);
@@ -93,14 +117,16 @@ export const App = ({ engine, folder, onExit }: AppProps) => {
     }
 
     if (key.tab) {
-      if (actionable.length > 0) {
-        setFocusIndex((i) => (i + 1) % actionable.length);
-      }
+      setFocusIndex((i) => (i + 1) % focusCount);
       return;
     }
 
     if (key.return) {
-      const target = actionable[focusIndex];
+      if (changeFocused) {
+        setChangeFolderOpen(true);
+        return;
+      }
+      const target = actionable[focusIndex - 1];
       if (!target) return;
       if (target.type === "remove") {
         Effect.runPromise(engine.remove(target.id)).catch(() => {});
@@ -121,14 +147,26 @@ export const App = ({ engine, folder, onExit }: AppProps) => {
     }
   });
 
+  const queueFocusIndex = focusIndex - 1;
+
   return (
     <Box flexDirection="column" height={rows}>
-      <Header folder={folder} />
+      <Header folder={folder} changeFocused={changeFocused} />
       <Box marginTop={1} flexDirection="column" flexGrow={1}>
-        <Queue snapshot={snapshot} actionable={actionable} focusIndex={focusIndex} />
+        <Queue snapshot={snapshot} actionable={actionable} focusIndex={queueFocusIndex} />
       </Box>
       <StatusBar transientMessage={transient ?? undefined} />
       {popupOpen ? <ExitConfirm focus={popupFocus} /> : null}
+      {changeFolderOpen ? (
+        <ChangeFolderPopup
+          initial={folder}
+          onSave={(path) => {
+            Effect.runPromise(engine.setOutputFolder(path)).catch(() => {});
+            setChangeFolderOpen(false);
+          }}
+          onCancel={() => setChangeFolderOpen(false)}
+        />
+      ) : null}
     </Box>
   );
 };
