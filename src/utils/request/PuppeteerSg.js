@@ -1,5 +1,5 @@
-import path from 'path'
-import puppeteer from 'puppeteer'
+import path from "path";
+import puppeteer from "puppeteer";
 import { directoryIo } from "../io/DirectoryIo.js";
 
 class PuppeteerSg {
@@ -8,7 +8,7 @@ class PuppeteerSg {
   constructor() {
     if (!PuppeteerSg.instance) {
       PuppeteerSg.instance = this;
-      process.on('exit', () => {
+      process.on("exit", () => {
         this.close();
       });
     }
@@ -19,10 +19,10 @@ class PuppeteerSg {
    * Launch a browser
    */
   async launch() {
-    const useNoSandbox = process.env.CI === 'true' || process.env.PUPPETEER_NO_SANDBOX === 'true';
+    const useNoSandbox = process.env.CI === "true" || process.env.PUPPETEER_NO_SANDBOX === "true";
     const args = [];
     if (useNoSandbox) {
-      args.push('--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage');
+      args.push("--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage");
     }
     this.browser = await puppeteer.launch({
       headless: "new",
@@ -38,16 +38,16 @@ class PuppeteerSg {
    */
   async getPage(url) {
     if (!this.browser) {
-      await this.launch()
+      await this.launch();
     }
-    let page = await this.browser.newPage()
+    let page = await this.browser.newPage();
     await page.goto(url, {
       waitUntil: "load",
-    })
-    await page.emulateMediaType('screen')
-    await this.injectHelperFunctions(page)
-    await new Promise(resolve => setTimeout(resolve, this.buffer))
-    return page
+    });
+    await page.emulateMediaType("screen");
+    await this.injectHelperFunctions(page);
+    await new Promise((resolve) => setTimeout(resolve, this.buffer));
+    return page;
   }
 
   /**
@@ -59,7 +59,7 @@ class PuppeteerSg {
       path: pdfPath,
       printBackground: true,
       timeout: 0,
-      ...options
+      ...options,
     });
   }
 
@@ -128,4 +128,4 @@ class PuppeteerSg {
   }
 }
 
-export const puppeteerSg = new PuppeteerSg()
+export const puppeteerSg = new PuppeteerSg();
