@@ -1,25 +1,23 @@
-FROM node:22-alpine
+FROM oven/bun:1.3.14-debian
 
 ENV PUPPETEER_SKIP_DOWNLOAD=true \
-    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser \
+    PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
     CI=true
 
-RUN apk add --no-cache \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     chromium \
     ca-certificates \
-    freetype \
-    harfbuzz \
-    nss \
-    ttf-freefont
+    fonts-freefont-ttf \
+    && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
-COPY package*.json ./
-RUN npm ci --omit=dev
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile --production
 
 COPY config.ini run.js ./
 COPY src ./src
 
 RUN mkdir -p output
 
-ENTRYPOINT ["node", "run.js"]
+ENTRYPOINT ["bun", "run.js"]

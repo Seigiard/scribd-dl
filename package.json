@@ -2,22 +2,26 @@
   "name": "scribd-dl",
   "version": "1.0.0",
   "description": "Scribd Document Downloader",
-  "main": "index.js",
-  "scripts": {
-    "start": "node run.js",
-    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
-    "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
-    "test:cov": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
-    "lint": "eslint --fix \"{src,apps,libs}/**/*.js\""
-  },
   "keywords": [],
+  "license": "GPL-3.0-or-later",
   "author": {
     "name": "ray.yukawai",
     "email": "ray.yukawai@gmail.com"
   },
-  "license": "GPL-3.0-or-later",
+  "type": "module",
+  "main": "run.js",
+  "types": "module",
+  "scripts": {
+    "start": "bun run.js",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "test:cov": "bun test --coverage",
+    "lint": "oxlint run.js src test",
+    "lint:fix": "oxlint --fix run.js src test",
+    "format": "oxfmt --write package.json run.js src test",
+    "format:check": "oxfmt --check package.json run.js src test"
+  },
   "dependencies": {
-    "axios": "^1.17.0",
     "cli-progress": "^3.12.0",
     "ini": "^7.0.0",
     "pdf-lib": "^1.17.1",
@@ -25,15 +29,9 @@
     "sanitize-filename": "^1.6.4",
     "sharp": "^0.34.5"
   },
-  "type": "module",
-  "types": "module",
   "devDependencies": {
-    "@eslint/js": "^10.0.1",
-    "eslint": "^10.4.1",
-    "globals": "^17.6.0",
-    "jest": "^30.4.2"
+    "oxfmt": "^0.54.0",
+    "oxlint": "^1.69.0"
   },
-  "jest": {
-    "transform": {}
-  }
+  "packageManager": "bun@1.3.14"
 }
