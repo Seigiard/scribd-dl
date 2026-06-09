@@ -1,6 +1,6 @@
 ---
 title: "feat: Ink-based TUI as a second DownloadEngine client"
-status: active
+status: completed
 date: 2026-06-09
 type: feat
 depth: standard
