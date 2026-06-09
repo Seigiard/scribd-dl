@@ -1,10 +1,10 @@
 import { existsSync } from "node:fs";
-import { Args, Command } from "@effect/cli";
+import { Args, Command, Options } from "@effect/cli";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import { DownloadEngine, DownloadEngineLive } from "./src/service/DownloadEngine";
 import { ScribdDownloaderLive } from "./src/service/ScribdDownloader";
-import { ConfigLoader, ConfigLoaderLive } from "./src/utils/io/ConfigLoader";
+import { ConfigLoader, type ConfigData, DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
 import { DirectoryIo, DirectoryIoLive } from "./src/utils/io/DirectoryIo";
 import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
 import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
@@ -12,6 +12,24 @@ import { UrlListUnreadable } from "./src/errors/DomainErrors";
 
 const urlOrFileArg = Args.text({ name: "url-or-file" }).pipe(
   Args.withDescription("Scribd document URL, or path to a file with URLs (one per line, # for comments)."),
+);
+
+const outputOpt = Options.text("output").pipe(
+  Options.withAlias("o"),
+  Options.withDescription(`Output directory (default: "${DEFAULT_CONFIG.directory.output}").`),
+  Options.withDefault(DEFAULT_CONFIG.directory.output),
+);
+
+const filenameOpt = Options.text("filename").pipe(
+  Options.withDescription(
+    `Filename mode: "title" (use document title) or any other value to fall back to document id (default: "${DEFAULT_CONFIG.directory.filename}").`,
+  ),
+  Options.withDefault(DEFAULT_CONFIG.directory.filename),
+);
+
+const rendertimeOpt = Options.integer("rendertime").pipe(
+  Options.withDescription(`Scribd lazy-load render time in ms before extracting pages (default: ${DEFAULT_CONFIG.scribd.rendertime}).`),
+  Options.withDefault(DEFAULT_CONFIG.scribd.rendertime),
 );
 
 const isTerminal = (status: string): boolean => status === "Downloaded" || status === "Failed";
@@ -79,14 +97,22 @@ export const runCli = (arg: string): Effect.Effect<void, UrlListUnreadable, Down
     }),
   );
 
-const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLoaderLive, DirectoryIoLive, PuppeteerSgLive);
-const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
-const EngineLayer = Layer.provide(DownloadEngineLive, ScribdLayer);
-const CliLayer = Layer.mergeAll(EngineLayer, ConfigLoaderLive, DirectoryIoLive);
+const buildLayer = (config: ConfigData) => {
+  const ConfigLayer = makeConfigLoader(config);
+  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive);
+  const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
+  const EngineLayer = Layer.provide(DownloadEngineLive, ScribdLayer);
+  return Layer.mergeAll(EngineLayer, ConfigLayer, DirectoryIoLive);
+};
 
-const command = Command.make("scribd-dl", { arg: urlOrFileArg }, ({ arg }) => runCli(arg).pipe(Effect.provide(CliLayer))).pipe(
-  Command.withDescription("Download documents from Scribd. Pass a single URL, or a file path for batch mode."),
-);
+const command = Command.make(
+  "scribd-dl",
+  { arg: urlOrFileArg, output: outputOpt, filename: filenameOpt, rendertime: rendertimeOpt },
+  ({ arg, output, filename, rendertime }) => {
+    const config: ConfigData = { scribd: { rendertime }, directory: { output, filename } };
+    return runCli(arg).pipe(Effect.provide(buildLayer(config)));
+  },
+).pipe(Command.withDescription("Download documents from Scribd. Pass a single URL, or a file path for batch mode."));
 
 const cli = Command.run(command, {
   name: "Scribd Downloader",

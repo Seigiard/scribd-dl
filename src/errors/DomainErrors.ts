@@ -23,10 +23,6 @@ export class PdfMergeFailed extends Data.TaggedError("PdfMergeFailed")<{
   readonly cause: unknown;
 }> {}
 
-export class ConfigInvalid extends Data.TaggedError("ConfigInvalid")<{
-  readonly cause: unknown;
-}> {}
-
 export class DirectoryIoFailed extends Data.TaggedError("DirectoryIoFailed")<{
   readonly path: string;
   readonly op: "create" | "remove";

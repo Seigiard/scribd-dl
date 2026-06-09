@@ -38,14 +38,14 @@ The downloader runs on [Effect.ts](https://effect.website/) with **Layer-based d
 - `ScribdDownloader` (`src/service/ScribdDownloader.ts`) — Effect-based scraping + PDF generation, consumed by `DownloadEngine`'s worker as the executor of one job.
 - `PuppeteerSg` (`src/utils/request/PuppeteerSg.ts`) — `Layer.scoped` over `Effect.acquireRelease(puppeteer.launch, browser.close)`. **Scope guarantees browser cleanup** on success, error, and interrupt — no `process.on("exit")` best-effort logic.
 - `PdfGenerator` (`src/utils/io/PdfGenerator.ts`) — Effect wrapper over `pdf-lib` (`merge` only; image-flow `generate` was removed with Slideshare).
-- `ConfigLoader` (`src/utils/io/ConfigLoader.ts`) — `Layer.effect` reading `config.ini` lazily via `Bun.file`, validated through Effect's built-in `Schema`. Memoized — the file is read once per root Layer.
+- `ConfigLoader` (`src/utils/io/ConfigLoader.ts`) — `Context.Tag` exposing `ConfigData`. `makeConfigLoader(data)` returns a `Layer.succeed`. Defaults live in `DEFAULT_CONFIG`. `run.ts` builds the layer from CLI options (`--output`, `--filename`, `--rendertime`) — no file is read at startup; any wrapper or shell can override via flags.
 - `DirectoryIo` (`src/utils/io/DirectoryIo.ts`) — `fs.promises.mkdir/rm` wrapped in tagged errors (`DirectoryIoFailed`).
 
 Domain errors live in `src/errors/DomainErrors.ts` as `Data.TaggedError` classes. Each `*Live` Layer fails into one of them; consumers see typed error channels.
 
 `run.ts` composes all Layers and provides them to the handler effect — `PuppeteerSgLive` is intentionally kept out of the top-level CLI layer so `@effect/cli --help` does not spawn a browser.
 
-Configuration: `config.ini` is parsed once by `ConfigLoaderLive`. `[DIRECTORY] filename=title` uses document title as the output filename; any other value falls back to the document ID. Output goes to `[DIRECTORY] output` (default `output/`), sanitized via `sanitize-filename`.
+Configuration: passed as CLI flags. `--filename title` uses document title as the output filename; any other value falls back to the document ID. `--output <dir>` (default `output/`), sanitized via `sanitize-filename`. `--rendertime <ms>` controls Scribd lazy-load wait before page extraction. There is no config file — flags only.
 
 ## URL parsing for batch input
 
