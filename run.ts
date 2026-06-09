@@ -2,61 +2,89 @@ import { existsSync } from "node:fs";
 import { Args, Command } from "@effect/cli";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
-import { App, AppLive } from "./src/App";
-import { ConfigLoaderLive } from "./src/utils/io/ConfigLoader";
-import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
-import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
-import { UrlListReader, UrlListReaderLive } from "./src/utils/io/UrlListReader";
-import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
+import { DownloadEngine, DownloadEngineLive } from "./src/service/DownloadEngine";
 import { ScribdDownloaderLive } from "./src/service/ScribdDownloader";
+import { ConfigLoader, ConfigLoaderLive } from "./src/utils/io/ConfigLoader";
+import { DirectoryIo, DirectoryIoLive } from "./src/utils/io/DirectoryIo";
+import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
+import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
+import { UrlListUnreadable } from "./src/errors/DomainErrors";
 
 const urlOrFileArg = Args.text({ name: "url-or-file" }).pipe(
   Args.withDescription("Scribd document URL, or path to a file with URLs (one per line, # for comments)."),
 );
 
-const mainEffect = (arg: string) =>
-  Effect.gen(function* () {
-    const isFile = yield* Effect.sync(() => existsSync(arg));
+const isTerminal = (status: string): boolean => status === "Downloaded" || status === "Failed";
 
-    if (isFile) {
-      const reader = yield* UrlListReader;
-      const urls = yield* reader.read(arg);
-      if (urls.length === 0) {
+export const runCli = (arg: string): Effect.Effect<void, UrlListUnreadable, DownloadEngine | DirectoryIo | ConfigLoader> =>
+  Effect.scoped(
+    Effect.gen(function* () {
+      const engine = yield* DownloadEngine;
+      const dir = yield* DirectoryIo;
+      const config = yield* ConfigLoader;
+      yield* dir.create(config.directory.output);
+
+      const isFile = yield* Effect.sync(() => existsSync(arg));
+      const text = isFile
+        ? yield* Effect.tryPromise({
+            try: () => Bun.file(arg).text(),
+            catch: (cause) => new UrlListUnreadable({ path: arg, cause }),
+          })
+        : arg;
+
+      const created = yield* engine.enqueue(text);
+      if (created.length === 0) {
         yield* Effect.sync(() => console.error(`No URLs found in ${arg}`));
         yield* Effect.sync(() => process.exit(1));
         return;
       }
-      const app = yield* App;
-      const report = yield* app.executeBatch(urls);
-      yield* Effect.sync(() => {
-        console.log(`\n=== Batch summary ===`);
-        console.log(`Total: ${report.total}, OK: ${report.ok}, Failed: ${report.failed}`);
-        if (report.failed > 0) {
-          console.log(`Failed URLs:`);
-          for (const r of report.results) {
-            if (r.status === "fail") {
-              console.log(`  - ${r.url}: ${r.error}`);
+
+      if (isFile && created.length > 1) {
+        yield* Effect.sync(() => console.log(`\nQueued ${created.length} URLs`));
+      }
+
+      while (true) {
+        const snap = yield* engine.snapshot;
+        if (snap.jobs.every((j) => isTerminal(j.status))) {
+          break;
+        }
+        yield* Effect.sleep("50 millis");
+      }
+
+      const final = yield* engine.snapshot;
+      const failed = final.jobs.filter((j) => j.status === "Failed");
+
+      if (isFile && created.length > 1) {
+        yield* Effect.sync(() => {
+          console.log(`\n=== Batch summary ===`);
+          console.log(`Total: ${final.jobs.length}, OK: ${final.jobs.length - failed.length}, Failed: ${failed.length}`);
+          if (failed.length > 0) {
+            console.log(`Failed URLs:`);
+            for (const j of failed) {
+              console.log(`  - ${j.url}: ${j.failure?.reason ?? "unknown"}`);
             }
           }
-          process.exit(1);
-        }
-      });
-      return;
-    }
+        });
+      } else if (failed.length > 0) {
+        yield* Effect.sync(() => {
+          for (const j of failed) {
+            console.error(`[FAIL] ${j.url}: ${j.failure?.reason ?? "unknown"}`);
+          }
+        });
+      }
 
-    const app = yield* App;
-    yield* app.execute(arg);
-  });
+      if (failed.length > 0) {
+        yield* Effect.sync(() => process.exit(1));
+      }
+    }),
+  );
 
-const ServicesLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLoaderLive, DirectoryIoLive, UrlListReaderLive, PuppeteerSgLive);
+const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLoaderLive, DirectoryIoLive, PuppeteerSgLive);
+const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
+const EngineLayer = Layer.provide(DownloadEngineLive, ScribdLayer);
+const CliLayer = Layer.mergeAll(EngineLayer, ConfigLoaderLive, DirectoryIoLive);
 
-const ScribdLayer = Layer.provide(ScribdDownloaderLive, ServicesLayer);
-
-const AppLayer = Layer.provide(AppLive, Layer.mergeAll(ScribdLayer, ConfigLoaderLive, DirectoryIoLive));
-
-const HandlerLayer = Layer.mergeAll(AppLayer, UrlListReaderLive);
-
-const command = Command.make("scribd-dl", { arg: urlOrFileArg }, ({ arg }) => mainEffect(arg).pipe(Effect.provide(HandlerLayer))).pipe(
+const command = Command.make("scribd-dl", { arg: urlOrFileArg }, ({ arg }) => runCli(arg).pipe(Effect.provide(CliLayer))).pipe(
   Command.withDescription("Download documents from Scribd. Pass a single URL, or a file path for batch mode."),
 );
 
@@ -65,4 +93,6 @@ const cli = Command.run(command, {
   version: "1.0.0",
 });
 
-BunRuntime.runMain(cli(process.argv).pipe(Effect.provide(BunContext.layer)));
+if (import.meta.main) {
+  BunRuntime.runMain(cli(process.argv).pipe(Effect.provide(BunContext.layer)));
+}

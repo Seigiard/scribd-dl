@@ -30,17 +30,16 @@ When the argument is an existing file on the host, the script mounts it read-onl
 
 Scribd-only product. Slideshare and Everand support was removed.
 
-Entry point `run.ts` uses `@effect/cli` for argv parsing and `BunRuntime.runMain` to drive a single `mainEffect`. It branches on `existsSync(arg)`: existing file → `UrlListReader.read` → `App.executeBatch`; otherwise → `App.execute(url)`.
+Entry point `run.ts` uses `@effect/cli` for argv parsing and `BunRuntime.runMain` (guarded by `import.meta.main` so tests can import `runCli` without bootstrapping the CLI). `runCli(arg)` branches on `existsSync(arg)`: existing file → `Bun.file(arg).text()`; otherwise → `arg` is treated as raw text. The text is handed to `DownloadEngine.enqueue`, which extracts URLs, classifies them, and drives them through the queue.
 
 The downloader runs on [Effect.ts](https://effect.website/) with **Layer-based dependency injection** instead of singleton instances. Each component is a `Context.Tag` with a `*Live` Layer:
 
-- `App` (`src/App.ts`) — router. Scribd URL → `ScribdDownloader.execute`. Anything else → `UnsupportedUrl` tagged error.
-- `ScribdDownloader` (`src/service/ScribdDownloader.ts`) — Effect-based scraping + PDF generation, consumes the four utility layers via DI.
+- `DownloadEngine` (`src/service/DownloadEngine.ts`) — event-driven job queue. `enqueue(text)` extracts URLs and classifies scribd vs unsupported, supported go to a single-fiber worker, unsupported immediately become Failed Jobs (`retryable: false`). Exposes `remove / retry / snapshot / events`. Other UIs (Ink-TUI, browser via Tauri+HTTP adapter) plug into the same `Context.Tag` without changing the engine.
+- `ScribdDownloader` (`src/service/ScribdDownloader.ts`) — Effect-based scraping + PDF generation, consumed by `DownloadEngine`'s worker as the executor of one job.
 - `PuppeteerSg` (`src/utils/request/PuppeteerSg.ts`) — `Layer.scoped` over `Effect.acquireRelease(puppeteer.launch, browser.close)`. **Scope guarantees browser cleanup** on success, error, and interrupt — no `process.on("exit")` best-effort logic.
 - `PdfGenerator` (`src/utils/io/PdfGenerator.ts`) — Effect wrapper over `pdf-lib` (`merge` only; image-flow `generate` was removed with Slideshare).
 - `ConfigLoader` (`src/utils/io/ConfigLoader.ts`) — `Layer.effect` reading `config.ini` lazily via `Bun.file`, validated through Effect's built-in `Schema`. Memoized — the file is read once per root Layer.
 - `DirectoryIo` (`src/utils/io/DirectoryIo.ts`) — `fs.promises.mkdir/rm` wrapped in tagged errors (`DirectoryIoFailed`).
-- `UrlListReader` (`src/utils/io/UrlListReader.ts`) — tolerant per-line URL extraction (see below).
 
 Domain errors live in `src/errors/DomainErrors.ts` as `Data.TaggedError` classes. Each `*Live` Layer fails into one of them; consumers see typed error channels.
 
@@ -50,7 +49,7 @@ Configuration: `config.ini` is parsed once by `ConfigLoaderLive`. `[DIRECTORY] f
 
 ## URL parsing for batch input
 
-`UrlListReader.read(filePath)` is intentionally tolerant: per line, trim → skip empty and `#`-prefixed → take the first `https?://\S+` match. Markdown bullets (`- `, `* `), bare URLs, and inline text before the URL all work. This was a deliberate choice to handle the existing `links.md` (markdown list) without a full markdown parser — keep it that way unless the input format requirement actually changes.
+`DownloadEngine.enqueue(text)` is intentionally tolerant: per line, trim → skip empty and `#`-prefixed → take the first `https?://\S+` match. Markdown bullets (`- `, `* `), bare URLs, and inline text before the URL all work. This was a deliberate choice to handle the existing `links.md` (markdown list) without a full markdown parser — keep it that way unless the input format requirement actually changes.
 
 ## Conventions
 

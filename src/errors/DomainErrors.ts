@@ -41,3 +41,17 @@ export class UrlListUnreadable extends Data.TaggedError("UrlListUnreadable")<{
 export class UnsupportedUrl extends Data.TaggedError("UnsupportedUrl")<{
   readonly url: string;
 }> {}
+
+export class JobNotFound extends Data.TaggedError("JobNotFound")<{
+  readonly id: string;
+}> {}
+
+export class NotRemovable extends Data.TaggedError("NotRemovable")<{
+  readonly id: string;
+  readonly status: string;
+}> {}
+
+export class NotRetryable extends Data.TaggedError("NotRetryable")<{
+  readonly id: string;
+  readonly status: string;
+}> {}
