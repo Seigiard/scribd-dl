@@ -9,17 +9,17 @@
     "email": "ray.yukawai@gmail.com"
   },
   "type": "module",
-  "main": "run.js",
+  "main": "run.ts",
   "types": "module",
   "scripts": {
     "start": "bun run.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "test:cov": "bun test --coverage",
-    "lint": "oxlint run.js run.ts src test",
-    "lint:fix": "oxlint --fix run.js run.ts src test",
-    "format": "oxfmt --write package.json run.js run.ts src test",
-    "format:check": "oxfmt --check package.json run.js run.ts src test"
+    "lint": "oxlint run.ts src test",
+    "lint:fix": "oxlint --fix run.ts src test",
+    "format": "oxfmt --write package.json run.ts src test",
+    "format:check": "oxfmt --check package.json run.ts src test"
   },
   "dependencies": {
     "@effect/cli": "^0.75.2",
