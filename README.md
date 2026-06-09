@@ -49,28 +49,10 @@ cd scribd-dl
 bun install
 ```
 
-## Configuration ##
-
-Edit `config.ini` to change rendering time or output details:
-```ini
-[SCRIBD]
-rendertime=100
-
-[DIRECTORY]
-output=output
-filename=title
-```
-
-| Config | Description |
-| --- | --- |
-| `rendertime` | Wait time (ms) for page rendering |
-| `output` | Output folder |
-| `filename` | `title`: use document title as filename, otherwise the document ID |
-
 ## Usage (CLI) ##
 
 ```console
-Usage: bun start <url-or-file>
+Usage: bun start [-o, --output <dir>] [--filename <mode>] [--rendertime <ms>] <url-or-file>
 ```
 
 Single URL:
@@ -83,6 +65,24 @@ Batch mode — pass a file with one URL per line (`#` starts a comment, markdown
 bun start ./links.md
 ```
 
+### Flags ###
+
+All settings are CLI flags — there is no config file.
+
+| Flag | Default | Description |
+| --- | --- | --- |
+| `-o, --output <dir>` | `output` | Output folder for generated PDFs. |
+| `--filename <mode>` | `title` | `title` uses the document title; any other value falls back to the document ID. |
+| `--rendertime <ms>` | `100` | Wait time (ms) for Scribd lazy-load to settle before extracting pages. |
+
+Examples:
+```console
+bun start -o ~/Downloads/scribd "https://www.scribd.com/document/123456789/Example-Document"
+bun start --rendertime 300 --filename id ./links.md
+```
+
+`bun start --help` prints the full flag reference.
+
 Ensure you have the legal right and platform permission to download the referenced content before using this command.
 
 ## Usage (Docker) ##
@@ -92,7 +92,7 @@ Docker builds an image with Bun and Chromium included, so it does not require Bu
 ./docker-download.sh "https://www.scribd.com/document/123456789/Example-Document"
 ```
 
-Downloaded files are written to `output` by default. Override the output directory with `SCRIBD_DL_OUTPUT`:
+Downloaded files are written to `output` by default. Override the output directory with `SCRIBD_DL_OUTPUT`, which the wrapper forwards as `--output` to the binary:
 ```console
 SCRIBD_DL_OUTPUT=/path/to/output ./docker-download.sh "https://www.scribd.com/document/123456789/Example-Document"
 ```
