@@ -11,7 +11,7 @@ import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg.ts";
 import { ScribdDownloaderLive } from "./src/service/ScribdDownloader.ts";
 
 const urlOrFileArg = Args.text({ name: "url-or-file" }).pipe(
-  Args.withDescription("Document URL (scribd/slideshare/everand) or path to a file with URLs (one per line, # for comments)."),
+  Args.withDescription("Scribd document URL, or path to a file with URLs (one per line, # for comments)."),
 );
 
 const mainEffect = (arg: string) =>
@@ -57,7 +57,7 @@ const AppLayer = Layer.provide(AppLive, Layer.mergeAll(ScribdLayer, ConfigLoader
 const HandlerLayer = Layer.mergeAll(AppLayer, UrlListReaderLive);
 
 const command = Command.make("scribd-dl", { arg: urlOrFileArg }, ({ arg }) => mainEffect(arg).pipe(Effect.provide(HandlerLayer))).pipe(
-  Command.withDescription("Download documents from Scribd, Slideshare, or Everand. Pass a single URL, or a file path for batch mode."),
+  Command.withDescription("Download documents from Scribd. Pass a single URL, or a file path for batch mode."),
 );
 
 const cli = Command.run(command, {

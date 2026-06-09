@@ -4,7 +4,6 @@ import { ConfigInvalid } from "../../errors/DomainErrors.js";
 
 export interface ConfigData {
   readonly scribd: { readonly rendertime: number };
-  readonly slideshare: { readonly rendertime: number };
   readonly directory: { readonly output: string; readonly filename: string };
 }
 
@@ -12,7 +11,6 @@ export class ConfigLoader extends Context.Tag("ConfigLoader")<ConfigLoader, Conf
 
 const RawIniSchema = Schema.Struct({
   SCRIBD: Schema.Struct({ rendertime: Schema.NumberFromString }),
-  SLIDESHARE: Schema.Struct({ rendertime: Schema.NumberFromString }),
   DIRECTORY: Schema.Struct({ output: Schema.String, filename: Schema.String }),
 });
 
@@ -34,7 +32,6 @@ const loadConfig: Effect.Effect<ConfigData, ConfigInvalid, never> = Effect.gen(f
 
   return {
     scribd: { rendertime: decoded.SCRIBD.rendertime },
-    slideshare: { rendertime: decoded.SLIDESHARE.rendertime },
     directory: { output: decoded.DIRECTORY.output, filename: decoded.DIRECTORY.filename },
   };
 });

@@ -6,7 +6,7 @@
 
 ---
 
-A command-line tool for downloading document content where you are authorized to do so.
+A command-line tool for downloading Scribd documents where you are authorized to do so.
 
 (This project is not intended to bypass paywalls, violate terms of service, or download copyrighted content you are not permitted to access.)
 
@@ -24,14 +24,7 @@ Downloading or redistributing copyrighted material you don’t own or have a lic
 
 ## About ##
 
-Scribd-dl is a utility that helps generate local copies of content for personal use where permitted from supported platforms if and only if you have the right to do so. It works by rendering pages and saving them in a format you can view offline.
-
-Currently supported sources:
-- [scribd.com](https://www.scribd.com/)
-- [slideshare.net](https://www.slideshare.net/)
-- [everand.com](https://www.everand.com/podcasts) podcast audio pages
-
-for documents you are authorized to view and save
+Scribd-dl is a utility that helps generate local copies of [scribd.com](https://www.scribd.com/) documents for personal use where permitted. It works by rendering pages with a headless browser and saving them as PDF.
 
 This tool does not remove paywalls, circumvent protections, or provide unauthorized access.
 
@@ -63,30 +56,31 @@ Edit `config.ini` to change rendering time or output details:
 [SCRIBD]
 rendertime=100
 
-[SLIDESHARE]
-rendertime=100
-
 [DIRECTORY]
 output=output
 filename=title
 ```
 
-| Config | Description | Support |
-| --- | --- | --- |
-| `rendertime` | Wait time (ms) for page rendering | [scribd.com](https://www.scribd.com/)<br/>[slideshare.net](https://www.slideshare.net/) |
-| `output` | Output folder | [scribd.com](https://www.scribd.com/)<br/>[slideshare.net](https://www.slideshare.net/)<br/>[everand.com](https://www.everand.com/podcasts) |
-| `filename` | Output filename<br/>`title`: filename = default filename / title<br/>(otherwise, filename = ID) | [scribd.com](https://www.scribd.com/)<br/>[slideshare.net](https://www.slideshare.net/) |
+| Config | Description |
+| --- | --- |
+| `rendertime` | Wait time (ms) for page rendering |
+| `output` | Output folder |
+| `filename` | `title`: use document title as filename, otherwise the document ID |
 
 ## Usage (CLI) ##
 
 ```console
-Usage: bun start <url>
+Usage: bun start <url-or-file>
 ```
 
-Example:
-Download a document you have access to:
+Single URL:
 ```console
-bun start "https://www.scribd.com/doc/123456789/Example-Document"
+bun start "https://www.scribd.com/document/123456789/Example-Document"
+```
+
+Batch mode — pass a file with one URL per line (`#` starts a comment, markdown bullets and inline text tolerated):
+```console
+bun start ./links.md
 ```
 
 Ensure you have the legal right and platform permission to download the referenced content before using this command.
@@ -95,31 +89,24 @@ Ensure you have the legal right and platform permission to download the referenc
 
 Docker builds an image with Bun and Chromium included, so it does not require Bun on the host:
 ```console
-./docker-download.sh "https://www.scribd.com/doc/123456789/Example-Document"
+./docker-download.sh "https://www.scribd.com/document/123456789/Example-Document"
 ```
 
 Downloaded files are written to `output` by default. Override the output directory with `SCRIBD_DL_OUTPUT`:
 ```console
-SCRIBD_DL_OUTPUT=/path/to/output ./docker-download.sh "https://www.scribd.com/doc/123456789/Example-Document"
+SCRIBD_DL_OUTPUT=/path/to/output ./docker-download.sh "https://www.scribd.com/document/123456789/Example-Document"
 ```
-
 
 ## Conventions ##
 
-- Source files are TypeScript (`.ts`, strict mode). The Scribd vertical (`run.ts`, `App.ts`, `ScribdDownloader.ts`, all `utils/io/*` and `utils/request/*`) runs on [Effect.ts](https://effect.website/): Layer-based dependency injection, Scope-based resource lifecycle, tagged errors.
-- Legacy `.js` files remain for `SlideshareDownloader` and `EverandDownloader` pending a separate migration phase.
-- ESM imports use `.js` extensions project-wide; sibling-collision pairs (where a `.ts` shares a name with a still-needed legacy `.js`) import the `.ts` until full migration completes.
+- Source files are TypeScript (`.ts`, strict mode), running on [Effect.ts](https://effect.website/): Layer-based dependency injection, Scope-based resource lifecycle, tagged errors.
+- Bun runs `.ts` natively; no separate build step.
 
 ## Support URL Format ##
 - https://www.scribd.com/doc/**
 - https://www.scribd.com/document/**
 - https://www.scribd.com/presentation/**
 - https://www.scribd.com/embeds/**
-- https://www.slideshare.net/**
-- https://www.slideshare.net/slideshow/**
-- https://www.everand.com/podcast-show/**
-- https://www.everand.com/podcast/**
-- https://www.everand.com/listen/podcast/**
 
 ## Why This Matters ##
 
@@ -127,7 +114,7 @@ Tools that automate downloading from websites can be misused to access content w
 
 ## Disclaimer
 
-This project is not affiliated with, endorsed by, or sponsored by Scribd, SlideShare, or Everand.
+This project is not affiliated with, endorsed by, or sponsored by Scribd.
 
 All trademarks and copyrights belong to their respective owners.
 

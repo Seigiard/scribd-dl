@@ -41,9 +41,3 @@ export class UrlListUnreadable extends Data.TaggedError("UrlListUnreadable")<{
 export class UnsupportedUrl extends Data.TaggedError("UnsupportedUrl")<{
   readonly url: string;
 }> {}
-
-export class LegacyDownloaderFailed extends Data.TaggedError("LegacyDownloaderFailed")<{
-  readonly domain: "slideshare" | "everand";
-  readonly url: string;
-  readonly cause: unknown;
-}> {}

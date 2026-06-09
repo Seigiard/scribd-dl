@@ -7,8 +7,6 @@ import { DirectoryIo, type DirectoryIoService } from "../src/utils/io/DirectoryI
 
 interface MockState {
   scribdExecute: ReturnType<typeof mock>;
-  slideshareExecute: ReturnType<typeof mock>;
-  everandExecute: ReturnType<typeof mock>;
   dirCreate: ReturnType<typeof mock>;
   dirRemove: ReturnType<typeof mock>;
   config: ConfigData;
@@ -16,38 +14,20 @@ interface MockState {
 
 const state: MockState = {
   scribdExecute: mock(),
-  slideshareExecute: mock(),
-  everandExecute: mock(),
   dirCreate: mock(),
   dirRemove: mock(),
   config: {
     scribd: { rendertime: 100 },
-    slideshare: { rendertime: 100 },
     directory: { output: "/tmp/out", filename: "title" },
   },
 };
 
-mock.module("../src/service/SlideshareDownloader.js", () => ({
-  slideshareDownloader: {
-    execute: (url: string) => state.slideshareExecute(url) as Promise<void>,
-  },
-}));
-
-mock.module("../src/service/EverandDownloader.js", () => ({
-  everandDownloader: {
-    execute: (url: string) => state.everandExecute(url) as Promise<void>,
-  },
-}));
-
 const resetState = () => {
   state.scribdExecute = mock(() => Effect.void);
-  state.slideshareExecute = mock(async () => {});
-  state.everandExecute = mock(async () => {});
   state.dirCreate = mock(() => Effect.void);
   state.dirRemove = mock(() => Effect.void);
   state.config = {
     scribd: { rendertime: 100 },
-    slideshare: { rendertime: 100 },
     directory: { output: "/tmp/out", filename: "title" },
   };
 };
@@ -102,7 +82,7 @@ describe("App", () => {
   });
 
   describe("execute routing", () => {
-    test("routes scribd URL to ScribdDownloader and not legacy", async () => {
+    test("routes scribd URL to ScribdDownloader", async () => {
       // #given
       const url = "https://www.scribd.com/document/123/foo";
 
@@ -113,38 +93,6 @@ describe("App", () => {
       expect(Exit.isSuccess(exit)).toBe(true);
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
       expect(state.scribdExecute).toHaveBeenCalledWith(url);
-      expect(state.slideshareExecute).not.toHaveBeenCalled();
-      expect(state.everandExecute).not.toHaveBeenCalled();
-    });
-
-    test("routes slideshare URL to legacy slideshare singleton and not Scribd", async () => {
-      // #given
-      const url = "https://www.slideshare.net/foo/bar";
-
-      // #when
-      const exit = await runExecute(url);
-
-      // #then
-      expect(Exit.isSuccess(exit)).toBe(true);
-      expect(state.slideshareExecute).toHaveBeenCalledTimes(1);
-      expect(state.slideshareExecute).toHaveBeenCalledWith(url);
-      expect(state.scribdExecute).not.toHaveBeenCalled();
-      expect(state.everandExecute).not.toHaveBeenCalled();
-    });
-
-    test("routes everand URL to legacy everand singleton", async () => {
-      // #given
-      const url = "https://www.everand.com/podcast/123/foo";
-
-      // #when
-      const exit = await runExecute(url);
-
-      // #then
-      expect(Exit.isSuccess(exit)).toBe(true);
-      expect(state.everandExecute).toHaveBeenCalledTimes(1);
-      expect(state.everandExecute).toHaveBeenCalledWith(url);
-      expect(state.scribdExecute).not.toHaveBeenCalled();
-      expect(state.slideshareExecute).not.toHaveBeenCalled();
     });
 
     test("unsupported URL fails with UnsupportedUrl", async () => {
@@ -156,26 +104,24 @@ describe("App", () => {
       expect(firstFailureTag(exit)).toBe("UnsupportedUrl");
     });
 
-    test("legacy slideshare throw maps to LegacyDownloaderFailed", async () => {
-      // #given
-      state.slideshareExecute = mock(async () => {
-        throw new Error("legacy boom");
-      });
-
+    test("slideshare URL is now unsupported", async () => {
       // #when
       const exit = await runExecute("https://www.slideshare.net/foo/bar");
 
       // #then
       expect(Exit.isFailure(exit)).toBe(true);
-      expect(firstFailureTag(exit)).toBe("LegacyDownloaderFailed");
-      if (Exit.isFailure(exit)) {
-        const failure = Cause.failureOption(exit.cause);
-        if (failure._tag === "Some") {
-          const e = failure.value as { domain: string; url: string };
-          expect(e.domain).toBe("slideshare");
-          expect(e.url).toBe("https://www.slideshare.net/foo/bar");
-        }
-      }
+      expect(firstFailureTag(exit)).toBe("UnsupportedUrl");
+      expect(state.scribdExecute).not.toHaveBeenCalled();
+    });
+
+    test("everand URL is now unsupported", async () => {
+      // #when
+      const exit = await runExecute("https://www.everand.com/podcast/123/foo");
+
+      // #then
+      expect(Exit.isFailure(exit)).toBe(true);
+      expect(firstFailureTag(exit)).toBe("UnsupportedUrl");
+      expect(state.scribdExecute).not.toHaveBeenCalled();
     });
 
     test("ensures output directory exists before downloading", async () => {
