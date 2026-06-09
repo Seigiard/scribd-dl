@@ -1,11 +1,10 @@
+/* global document */
+
 import cliProgress from "cli-progress"
 import { puppeteerSg } from "../utils/request/PuppeteerSg.js";
-import { pdfGenerator } from "../utils/io/PdfGenerator.js";
 import { configLoader } from "../utils/io/ConfigLoader.js";
 import { directoryIo } from "../utils/io/DirectoryIo.js"
 import * as everandRegex from "../const/EverandRegex.js"
-import { Image } from "../object/Image.js"
-import sharp from "sharp";
 import axios from "axios";
 import fs from "fs"
 
@@ -75,8 +74,6 @@ class EverandDownloader {
     }
 
     async series(url) {
-        const seriesId = everandRegex.PODCAST_SERIES.exec(url)[1]
-
         // navigate to everand
         let page = await puppeteerSg.getPage(url)
 

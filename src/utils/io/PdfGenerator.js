@@ -32,7 +32,7 @@ class PdfGenerator {
             try {
                 imageBytes = await fs.readFile(path);
             } catch (err) {
-                throw new Error(`Failed to read image: ${path} — ${err.message}`);
+                throw new Error(`Failed to read image: ${path} — ${err.message}`, { cause: err });
             }
             
             // embed image based on its format
@@ -60,7 +60,7 @@ class PdfGenerator {
             await fs.writeFile(outputPath, pdfBytes);
             console.log(`Generated: ${outputPath}`);
         } catch (err) {
-            throw new Error(`Failed to save PDF: ${outputPath} — ${err.message}`);
+            throw new Error(`Failed to save PDF: ${outputPath} — ${err.message}`, { cause: err });
         }
     }
 

@@ -22,7 +22,7 @@ class PuppeteerSg {
     const useNoSandbox = process.env.CI === 'true' || process.env.PUPPETEER_NO_SANDBOX === 'true';
     const args = [];
     if (useNoSandbox) {
-      args.push('--no-sandbox', '--disable-setuid-sandbox');
+      args.push('--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage');
     }
     this.browser = await puppeteer.launch({
       headless: "new",

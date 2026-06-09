@@ -1,5 +1,5 @@
+import { describe, expect, test } from "bun:test";
 import { configLoader } from "../src/utils/io/ConfigLoader.js";
-
 
 describe("load", () => {
     test("return 'output' if load DIRECTORY.output", () => {

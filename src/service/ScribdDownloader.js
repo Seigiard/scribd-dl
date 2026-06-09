@@ -1,3 +1,5 @@
+/* global document, getComputedStyle, window */
+
 import cliProgress from "cli-progress"
 import sanitize from "sanitize-filename";
 import { configLoader } from "../utils/io/ConfigLoader.js";
@@ -59,8 +61,6 @@ class ScribdDownloader {
                 directoryIo.remove(tempDir)
             }
             console.log(`Generated: ${pdfPath}`);
-        } catch (err) {
-            throw err;
         } finally {
             await page.close()
             await puppeteerSg.close()

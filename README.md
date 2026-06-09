@@ -1,4 +1,4 @@
-# Scribd-dl ![nodedotjs](https://img.shields.io/badge/node.js-v21.6-339933.svg?style=flat&logo=nodedotjs&logoColor=white) ![npm](https://img.shields.io/badge/npm-10.2-dc2c35.svg?style=flat&logo=npm&logoColor=white)  ![Regression Tests](https://github.com/rkwyu/scribd-dl/actions/workflows/test.yml/badge.svg) 
+# Scribd-dl ![Bun](https://img.shields.io/badge/bun-1.3.14-000000.svg?style=flat&logo=bun&logoColor=white) ![Regression Tests](https://github.com/rkwyu/scribd-dl/actions/workflows/test.yml/badge.svg) 
 
 <a href="https://buymeacoffee.com/r1y5i" target="_blank">
 <img style="border-radius: 20px" src="https://cdn.buymeacoffee.com/buttons/default-orange.png" alt="Buy Me A Coffee" height="41" width="174">
@@ -37,16 +37,15 @@ This tool does not remove paywalls, circumvent protections, or provide unauthori
 
 ## Prerequisites ##
 
-Install [Node.js](https://nodejs.org/en/download/) (recommended: latest LTS) to run this tool.
+Install [Bun](https://bun.sh/docs/installation) (recommended: version `1.3.14` or newer) to run this tool locally.
 
-> Please install Node.js using pre-built installers for your platform. You may encounter incompatibility issues with different development tools otherwise. 
+If you prefer not to install Bun locally, use the Docker workflow below.
 
 Confirm installation:
 ```console
-node -v
-npm -v
+bun -v
 ```
-The commands should print the versions of Node.js and npm accordingly.  
+The command should print the installed Bun version.
 
 ## Setup ##
 
@@ -54,7 +53,7 @@ Clone the repository and install dependencies:
 ```console
 git clone https://github.com/rkwyu/scribd-dl
 cd scribd-dl
-npm install
+bun install
 ```
 
 ## Configuration ##
@@ -81,16 +80,28 @@ filename=title
 ## Usage (CLI) ##
 
 ```console
-Usage: npm start <url>
+Usage: bun start <url>
 ```
 
 Example:
 Download a document you have access to:
 ```console
-npm start "https://www.scribd.com/doc/123456789/Example-Document"
+bun start "https://www.scribd.com/doc/123456789/Example-Document"
 ```
 
 Ensure you have the legal right and platform permission to download the referenced content before using this command.
+
+## Usage (Docker) ##
+
+Docker builds an image with Bun and Chromium included, so it does not require Bun on the host:
+```console
+./docker-download.sh "https://www.scribd.com/doc/123456789/Example-Document"
+```
+
+Downloaded files are written to `output` by default. Override the output directory with `SCRIBD_DL_OUTPUT`:
+```console
+SCRIBD_DL_OUTPUT=/path/to/output ./docker-download.sh "https://www.scribd.com/doc/123456789/Example-Document"
+```
 
 
 ## Support URL Format ##

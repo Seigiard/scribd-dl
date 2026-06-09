@@ -1,3 +1,5 @@
+/* global document, window */
+
 import cliProgress from "cli-progress"
 import { puppeteerSg } from "../utils/request/PuppeteerSg.js";
 import { pdfGenerator } from "../utils/io/PdfGenerator.js";
@@ -65,8 +67,6 @@ class SlideshareDownloader {
             SlideshareDownloader.progressBar.stop();
             await pdfGenerator.generate(images, pdfPath)
             directoryIo.remove(`${tempDir}`)
-        } catch (err) {
-            throw err;
         } finally {
             await page.close()
             await puppeteerSg.close()
