@@ -79,6 +79,11 @@ class ScribdDownloader {
       // Inject CSS to fix faded text issue
       const style = document.createElement("style");
       style.innerHTML = `
+                html, body, div.document_scroller {
+                    background: transparent;
+                    background-color: transparent;
+                }
+
                 .text_layer, .text_layer span, .text_layer div, .text_layer p {
                     opacity: 1 !important;
                     text-shadow: none !important;
