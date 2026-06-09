@@ -28,6 +28,25 @@ class App {
       throw new Error(`Unsupported URL: ${url}`);
     }
   }
+
+  async executeBatch(urls) {
+    const results = [];
+    for (let i = 0; i < urls.length; i++) {
+      const url = urls[i];
+      console.log(`\n[${i + 1}/${urls.length}] ${url}`);
+      try {
+        await this.execute(url);
+        results.push({ url, status: "ok" });
+      } catch (e) {
+        const message = e instanceof Error ? e.message : String(e);
+        console.error(`[FAIL] ${url}: ${message}`);
+        results.push({ url, status: "fail", error: message });
+      }
+    }
+    const ok = results.filter((r) => r.status === "ok").length;
+    const failed = results.length - ok;
+    return { total: results.length, ok, failed, results };
+  }
 }
 
 export const app = new App();
