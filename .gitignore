@@ -17,3 +17,5 @@ page_html.txt
 test_scribd.js
 
 links.md
+
+*.tsbuildinfo
