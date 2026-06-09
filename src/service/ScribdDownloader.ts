@@ -2,10 +2,10 @@ import { Context, Effect, Layer } from "effect";
 import type { Page } from "puppeteer";
 import cliProgress from "cli-progress";
 import sanitize from "sanitize-filename";
-import { ConfigLoader } from "../utils/io/ConfigLoader.ts";
-import { DirectoryIo } from "../utils/io/DirectoryIo.ts";
-import { PdfGenerator } from "../utils/io/PdfGenerator.ts";
-import { PuppeteerSg } from "../utils/request/PuppeteerSg.ts";
+import { ConfigLoader } from "../utils/io/ConfigLoader";
+import { DirectoryIo } from "../utils/io/DirectoryIo";
+import { PdfGenerator } from "../utils/io/PdfGenerator";
+import { PuppeteerSg } from "../utils/request/PuppeteerSg";
 import {
   DirectoryIoFailed,
   PageLoadFailed,
@@ -13,10 +13,10 @@ import {
   PdfGenerationFailed,
   PdfMergeFailed,
   UnsupportedUrl,
-} from "../errors/DomainErrors.js";
-import type { PageDimensions } from "../types/PageDimensions.js";
-import type { DocumentMeta } from "../types/DocumentMeta.js";
-import * as scribdRegex from "../const/ScribdRegex.js";
+} from "../errors/DomainErrors";
+import type { PageDimensions } from "../types/PageDimensions";
+import type { DocumentMeta } from "../types/DocumentMeta";
+import * as scribdRegex from "../const/ScribdRegex";
 
 export type ScribdError = UnsupportedUrl | PageLoadFailed | PageProcessFailed | PdfGenerationFailed | PdfMergeFailed | DirectoryIoFailed;
 

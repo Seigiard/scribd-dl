@@ -1,11 +1,11 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Effect, Exit, Layer } from "effect";
 import type { Page } from "puppeteer";
-import { ScribdDownloader, ScribdDownloaderLive } from "../src/service/ScribdDownloader.ts";
-import { PuppeteerSg, type PuppeteerSgService } from "../src/utils/request/PuppeteerSg.ts";
-import { PdfGenerator, type PdfGeneratorService } from "../src/utils/io/PdfGenerator.ts";
-import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader.ts";
-import { DirectoryIo, type DirectoryIoService } from "../src/utils/io/DirectoryIo.ts";
+import { ScribdDownloader, ScribdDownloaderLive } from "../src/service/ScribdDownloader";
+import { PuppeteerSg, type PuppeteerSgService } from "../src/utils/request/PuppeteerSg";
+import { PdfGenerator, type PdfGeneratorService } from "../src/utils/io/PdfGenerator";
+import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
+import { DirectoryIo, type DirectoryIoService } from "../src/utils/io/DirectoryIo";
 
 interface FakePage {
   evaluate: ReturnType<typeof mock>;

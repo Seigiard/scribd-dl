@@ -1,5 +1,5 @@
 import { Context, Effect, Layer } from "effect";
-import { UrlListUnreadable } from "../../errors/DomainErrors.js";
+import { UrlListUnreadable } from "../../errors/DomainErrors";
 
 const URL_REGEX = /(https?:\/\/\S+)/;
 

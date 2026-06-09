@@ -1,6 +1,6 @@
 import { Context, Effect, Layer } from "effect";
 import * as fs from "node:fs/promises";
-import { DirectoryIoFailed } from "../../errors/DomainErrors.js";
+import { DirectoryIoFailed } from "../../errors/DomainErrors";
 
 export interface DirectoryIoService {
   readonly create: (path: string) => Effect.Effect<void, DirectoryIoFailed, never>;

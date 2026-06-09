@@ -4,7 +4,7 @@ import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { PDFDocument } from "pdf-lib";
-import { PdfGenerator, PdfGeneratorLive } from "../src/utils/io/PdfGenerator.ts";
+import { PdfGenerator, PdfGeneratorLive } from "../src/utils/io/PdfGenerator";
 
 const createPdf = async (filePath: string, pageCount: number): Promise<void> => {
   const doc = await PDFDocument.create();

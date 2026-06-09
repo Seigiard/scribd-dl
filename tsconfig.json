@@ -6,7 +6,7 @@
     "moduleResolution": "bundler",
     "target": "esnext",
     "verbatimModuleSyntax": true,
-    "allowImportingTsExtensions": true,
+    "allowImportingTsExtensions": false,
     "noEmit": true,
     "isolatedModules": true,
     "esModuleInterop": true,

@@ -1,6 +1,6 @@
 import { Context, Effect, Layer, Schema } from "effect";
 import ini from "ini";
-import { ConfigInvalid } from "../../errors/DomainErrors.js";
+import { ConfigInvalid } from "../../errors/DomainErrors";
 
 export interface ConfigData {
   readonly scribd: { readonly rendertime: number };

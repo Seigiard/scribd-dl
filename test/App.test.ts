@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Cause, Effect, Exit, Layer } from "effect";
-import { App, AppLive } from "../src/App.ts";
-import { ScribdDownloader, type ScribdDownloaderService } from "../src/service/ScribdDownloader.ts";
-import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader.ts";
-import { DirectoryIo, type DirectoryIoService } from "../src/utils/io/DirectoryIo.ts";
+import { App, AppLive } from "../src/App";
+import { ScribdDownloader, type ScribdDownloaderService } from "../src/service/ScribdDownloader";
+import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
+import { DirectoryIo, type DirectoryIoService } from "../src/utils/io/DirectoryIo";
 
 interface MockState {
   scribdExecute: ReturnType<typeof mock>;

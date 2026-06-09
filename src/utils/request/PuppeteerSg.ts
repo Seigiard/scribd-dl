@@ -1,7 +1,7 @@
 import { Context, Effect, Layer } from "effect";
 import puppeteer from "puppeteer";
 import type { LaunchOptions, Page, PDFOptions } from "puppeteer";
-import { BrowserLaunchFailed, PageLoadFailed, PdfGenerationFailed } from "../../errors/DomainErrors.js";
+import { BrowserLaunchFailed, PageLoadFailed, PdfGenerationFailed } from "../../errors/DomainErrors";
 
 const PAGE_BUFFER_MS = 1000;
 
