@@ -51,10 +51,11 @@ bun install
 
 ```text
 packages/
-  engine/         # CLI + HTTP/WS sidecar + Ink TUI (Effect.ts)
-  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract
+  engine/         # headless CLI + HTTP/WS sidecar (Effect.ts)
+  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract + thin client
 apps/
-  web/            # @scribd-dl/web — Vite SPA client
+  tui/            # @scribd-dl/tui — Ink/React terminal client (HTTP/WS)
+  web/            # @scribd-dl/web — Vite SPA client (HTTP/WS)
   desktop/        # reserved slot for the future Tauri client
 ```
 
@@ -100,8 +101,8 @@ Ensure you have the legal right and platform permission to download the referenc
 
 | Command | What it does |
 | --- | --- |
-| `bun run tui` | Launch the Ink-based terminal UI client. |
-| `bun run engine` | Run the HTTP/WS sidecar engine (default port 4747) for the SPA and future desktop clients. |
+| `bun run engine` | Run the HTTP/WS sidecar engine (default port 4747) for the TUI, SPA, and future desktop clients. |
+| `bun run tui` | Launch the Ink terminal UI client. Requires `bun run engine` running first; accepts `--engine-url` (default `http://localhost:4747`). |
 | `bun run app:dev` | Start the Vite dev server for the SPA in `apps/web`. |
 | `bun run dev:spa` | Run the engine and Vite side-by-side with interleaved logs. |
 | `bun run test` | Run all workspace tests (engine `bun:test` + web Vitest). |

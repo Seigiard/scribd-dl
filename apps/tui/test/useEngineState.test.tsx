@@ -91,10 +91,7 @@ describe("useEngineState (HTTP/WS client)", () => {
 
   test("each WS message triggers a snapshot refetch", async () => {
     // #given
-    installFetchStub(
-      { jobs: [] },
-      { jobs: [{ id: "a", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" }] },
-    );
+    installFetchStub({ jobs: [] }, { jobs: [{ id: "a", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" }] });
     const ui = render(React.createElement(Probe, { baseUrl: BASE }));
     await flush();
     const callsBefore = snapshotCalls;

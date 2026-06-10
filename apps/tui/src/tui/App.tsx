@@ -23,8 +23,7 @@ const computeActionable = (snap: EngineSnapshot): ReadonlyArray<ActionableContro
   return out;
 };
 
-const hasActiveJobs = (snap: EngineSnapshot): boolean =>
-  snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
+const hasActiveJobs = (snap: EngineSnapshot): boolean => snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
 
 const looksLikePaste = (input: string): boolean => input.length > 5;
 
