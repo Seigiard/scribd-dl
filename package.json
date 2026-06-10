@@ -15,21 +15,20 @@
   "type": "module",
   "scripts": {
     "start": "bun packages/engine/run.ts",
-    "tui": "bun apps/tui/tui.ts",
+    "tui": "bun packages/engine/tui.ts",
     "engine": "bun packages/engine/engine.ts",
     "app:dev": "bun --filter @scribd-dl/web dev",
     "app:build": "bun --filter @scribd-dl/web build",
     "app:test": "bun --filter @scribd-dl/web test",
     "dev:spa": "bun scripts/dev-spa.ts",
-    "dev:tui": "bun scripts/dev-tui.ts",
     "test": "bun --filter '*' test",
     "test:smoke": "bun --filter @scribd-dl/engine test:smoke",
     "test:watch": "bun --filter @scribd-dl/engine test:watch",
     "test:cov": "bun --filter @scribd-dl/engine test:cov",
-    "lint": "oxlint packages/engine/run.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src packages/shared/test apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
-    "lint:fix": "oxlint --fix packages/engine/run.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src packages/shared/test apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
-    "format": "oxfmt --write package.json packages/engine/run.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src packages/shared/test apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
-    "format:check": "oxfmt --check package.json packages/engine/run.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src packages/shared/test apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts"
+    "lint": "oxlint packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts",
+    "lint:fix": "oxlint --fix packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts",
+    "format": "oxfmt --write package.json packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts",
+    "format:check": "oxfmt --check package.json packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts"
   },
   "devDependencies": {
     "oxfmt": "^0.54.0",

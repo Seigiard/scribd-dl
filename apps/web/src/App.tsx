@@ -4,7 +4,7 @@ import { Queue } from "@/components/Queue";
 import { StatusBar } from "@/components/StatusBar";
 import { useEngineState } from "@/hooks/useEngineState";
 import { usePasteHandler } from "@/hooks/usePasteHandler";
-import { enqueueText, fetchFolder, removeJob, retryJob } from "@scribd-dl/shared";
+import { enqueueText, fetchFolder, removeJob, retryJob } from "@/lib/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const NO_LINKS_MESSAGE = "No links found in clipboard";
