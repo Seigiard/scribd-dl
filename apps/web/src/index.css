@@ -35,8 +35,7 @@
   --color-status-failed-fg: #f4a3a3;
   --color-status-failed-bg: rgba(204, 64, 64, 0.16);
 
-  --font-sans:
-    "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-sans: "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
   --radius-md: 8px;

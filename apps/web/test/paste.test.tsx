@@ -57,7 +57,8 @@ describe("paste handler", () => {
   test("paste with a scribd URL triggers POST /enqueue and does not show the transient message", async () => {
     // #given
     installFetch((call) => {
-      if (call.url.endsWith("/enqueue")) return { jobs: [{ id: "j1", url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "x", status: "Queued" }] };
+      if (call.url.endsWith("/enqueue"))
+        return { jobs: [{ id: "j1", url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "x", status: "Queued" }] };
       if (call.url.endsWith("/folder")) return { path: "/Users/me/Downloads" };
       return { jobs: [] };
     });

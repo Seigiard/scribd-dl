@@ -1,17 +1,33 @@
 {
   "name": "scribd-dl",
   "version": "1.0.0",
-  "description": "Scribd Document Downloader",
   "private": true,
+  "description": "Scribd Document Downloader",
   "license": "GPL-3.0-or-later",
   "author": {
     "name": "ray.yukawai",
     "email": "ray.yukawai@gmail.com"
   },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "type": "module",
-  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "//": "Root scripts are wired in U6 of the monorepo-migration plan."
+    "start": "bun packages/engine/run.ts",
+    "tui": "bun packages/engine/tui.ts",
+    "engine": "bun packages/engine/engine.ts",
+    "app:dev": "bun --filter @scribd-dl/web dev",
+    "app:build": "bun --filter @scribd-dl/web build",
+    "app:test": "bun --filter @scribd-dl/web test",
+    "dev:spa": "bun scripts/dev-spa.ts",
+    "test": "bun --filter '*' test",
+    "test:watch": "bun --filter @scribd-dl/engine test:watch",
+    "test:cov": "bun --filter @scribd-dl/engine test:cov",
+    "lint": "oxlint packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts",
+    "lint:fix": "oxlint --fix packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts",
+    "format": "oxfmt --write package.json packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts",
+    "format:check": "oxfmt --check package.json packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts"
   },
   "devDependencies": {
     "oxfmt": "^0.54.0",

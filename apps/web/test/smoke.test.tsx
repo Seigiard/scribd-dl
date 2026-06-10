@@ -18,7 +18,10 @@ class StubSocket {
 beforeEach(() => {
   Object.defineProperty(window, "__SCRIBD_DL_BACKEND__", { value: "http://stub:0", configurable: true });
   vi.stubGlobal("WebSocket", StubSocket);
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ jobs: [], path: "/Users/me/Downloads" }) }));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ jobs: [], path: "/Users/me/Downloads" }) }),
+  );
 });
 
 afterEach(() => {

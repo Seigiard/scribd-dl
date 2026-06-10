@@ -65,7 +65,9 @@ afterEach(() => {
 describe("useEngineState", () => {
   test("opens WS, fetches snapshot on open, exposes snapshot via state", async () => {
     // #given
-    const fetchMock = vi.fn().mockResolvedValue(snapshotFor({ jobs: [{ id: "j1", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" }] }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(snapshotFor({ jobs: [{ id: "j1", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" }] }));
     vi.stubGlobal("fetch", fetchMock);
 
     // #when
@@ -86,7 +88,15 @@ describe("useEngineState", () => {
     let calls = 0;
     const fetchMock = vi.fn().mockImplementation(async () => {
       calls += 1;
-      return snapshotFor({ jobs: Array.from({ length: calls }, (_, i) => ({ id: `j${i}`, url: "u", domain: "scribd" as const, displayTitle: "t", status: "Queued" as const })) });
+      return snapshotFor({
+        jobs: Array.from({ length: calls }, (_, i) => ({
+          id: `j${i}`,
+          url: "u",
+          domain: "scribd" as const,
+          displayTitle: "t",
+          status: "Queued" as const,
+        })),
+      });
     });
     vi.stubGlobal("fetch", fetchMock);
     const { result } = renderHook(() => useEngineState());
@@ -95,7 +105,10 @@ describe("useEngineState", () => {
     await waitFor(() => expect(result.current.snapshot.jobs).toHaveLength(1));
 
     // #when
-    await triggerMessage(lastSocket(), { _tag: "JobAdded", job: { id: "x", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" } });
+    await triggerMessage(lastSocket(), {
+      _tag: "JobAdded",
+      job: { id: "x", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" },
+    });
 
     // #then
     await waitFor(() => expect(result.current.snapshot.jobs).toHaveLength(2));

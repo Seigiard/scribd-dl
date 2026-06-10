@@ -65,7 +65,7 @@ const shutdown = (exitCode: number) => {
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
-launch("engine", "36", "bun", ["engine.ts", "--port", ENGINE_PORT, "--output", OUTPUT], ROOT);
-launch("vite", "35", "bun", ["run", "dev"], resolve(ROOT, "app"));
+launch("engine", "36", "bun", ["packages/engine/engine.ts", "--port", ENGINE_PORT, "--output", OUTPUT], ROOT);
+launch("vite", "35", "bun", ["run", "dev"], resolve(ROOT, "apps/web"));
 
 process.stdout.write(`\x1b[2mdev:spa — engine on http://127.0.0.1:${ENGINE_PORT}, Vite on http://127.0.0.1:5173\x1b[0m\n`);
