@@ -2,7 +2,9 @@ import { Command } from "@effect/cli";
 import { HttpServer } from "@effect/platform";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
+import { ConfigStoreLive } from "./src/service/ConfigStore";
 import { DownloadEngineLive } from "./src/service/DownloadEngine";
+import { JobStoreLive } from "./src/service/JobStore";
 import { ScribdDownloaderLive } from "./src/service/ScribdDownloader";
 import { DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
 import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
@@ -28,7 +30,9 @@ const buildEngineLayer = () => {
   const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
   const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive, TitleResolverLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
-  return Layer.provide(DownloadEngineLive, Layer.mergeAll(ScribdLayer, ConfigLayer));
+  const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
+  const EngineDeps = Layer.mergeAll(ScribdLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive);
+  return Layer.provide(DownloadEngineLive, EngineDeps);
 };
 
 const command = Command.make("scribd-dl-engine", { port: portOpt }, ({ port }) => {

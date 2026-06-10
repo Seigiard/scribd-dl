@@ -2,9 +2,11 @@ import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
 import { render } from "ink";
 import React from "react";
+import { ConfigStoreLive } from "./src/service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive } from "./src/service/DownloadEngine";
+import { JobStoreLive } from "./src/service/JobStore";
 import { ScribdDownloaderLive } from "./src/service/ScribdDownloader";
-import { ConfigLoader, DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
+import { DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
 import { DirectoryIo, DirectoryIoLive } from "./src/utils/io/DirectoryIo";
 import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
 import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
@@ -15,21 +17,23 @@ const buildLayer = () => {
   const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
   const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive, TitleResolverLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
-  const EngineLayer = Layer.provide(DownloadEngineLive, Layer.mergeAll(ScribdLayer, ConfigLayer));
+  const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
+  const EngineDeps = Layer.mergeAll(ScribdLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive);
+  const EngineLayer = Layer.provide(DownloadEngineLive, EngineDeps);
   return Layer.mergeAll(EngineLayer, ConfigLayer, DirectoryIoLive);
 };
 
 const program = Effect.scoped(
   Effect.gen(function* () {
     const engine = yield* DownloadEngine;
-    const cfg = yield* ConfigLoader;
     const dir = yield* DirectoryIo;
-    yield* dir.create(cfg.directory.output);
+    const folder = yield* engine.outputFolder;
+    yield* dir.create(folder);
 
     const instance = yield* Effect.acquireRelease(
       Effect.sync(() => {
         process.stdout.write("\x1b[?1049h\x1b[H");
-        return render(React.createElement(App, { engine, folder: cfg.directory.output }));
+        return render(React.createElement(App, { engine, folder }));
       }),
       () =>
         Effect.sync(() => {

@@ -1,7 +1,9 @@
 import { describe, expect, mock, test } from "bun:test";
 import { render } from "ink-testing-library";
 import { Effect, Layer } from "effect";
+import { ConfigStore, type ConfigStoreService } from "../../src/service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive, type DownloadEngineService } from "../../src/service/DownloadEngine";
+import { JobStore, type JobStoreService } from "../../src/service/JobStore";
 import { ScribdDownloader, type ScribdDownloaderService } from "../../src/service/ScribdDownloader";
 import { ConfigLoader, type ConfigData } from "../../src/utils/io/ConfigLoader";
 import { App } from "../../src/tui/App";
@@ -10,9 +12,22 @@ const testConfig: ConfigData = { scribd: { rendertime: 100 }, directory: { outpu
 
 const buildLayer = (execute: ScribdDownloaderService["execute"] = () => Effect.never as ReturnType<ScribdDownloaderService["execute"]>) => {
   const scribdSvc: ScribdDownloaderService = { execute };
+  const configStoreSvc: ConfigStoreService = {
+    read: Effect.sync(() => ({ outputFolder: testConfig.directory.output })),
+    write: () => Effect.void,
+  };
+  const jobStoreSvc: JobStoreService = {
+    read: Effect.sync(() => []),
+    write: () => Effect.void,
+  };
   return Layer.provide(
     DownloadEngineLive,
-    Layer.mergeAll(Layer.succeed(ScribdDownloader, scribdSvc), Layer.succeed(ConfigLoader, testConfig)),
+    Layer.mergeAll(
+      Layer.succeed(ScribdDownloader, scribdSvc),
+      Layer.succeed(ConfigLoader, testConfig),
+      Layer.succeed(ConfigStore, configStoreSvc),
+      Layer.succeed(JobStore, jobStoreSvc),
+    ),
   );
 };
 
