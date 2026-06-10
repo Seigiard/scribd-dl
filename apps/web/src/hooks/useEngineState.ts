@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { fetchSnapshot } from "@/lib/api";
-import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
-import type { EngineSnapshot } from "@scribd-dl/shared";
+import { getBackendUrl } from "@/lib/backendUrl";
+import { fetchSnapshot, subscribeEvents, type EngineSnapshot, type EventsSubscription } from "@scribd-dl/shared";
 
 const EMPTY_SNAPSHOT: EngineSnapshot = { jobs: [] };
 
@@ -17,7 +16,7 @@ export const useEngineState = (): UseEngineState => {
   const [baseUrl, setBaseUrl] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [reconnectKey, setReconnectKey] = useState(0);
-  const wsRef = useRef<WebSocket | null>(null);
+  const subRef = useRef<EventsSubscription | null>(null);
 
   const reconnect = useCallback(() => setReconnectKey((k) => k + 1), []);
 
@@ -40,32 +39,31 @@ export const useEngineState = (): UseEngineState => {
       if (!alive) return;
       setBaseUrl(url);
 
-      const ws = new WebSocket(`${toWsUrl(url)}/events`);
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        if (!alive) return;
-        setIsConnected(true);
-        void refresh();
-      };
-      ws.onmessage = () => {
-        if (!alive) return;
-        void refresh();
-      };
-      ws.onclose = () => {
-        if (!alive) return;
-        setIsConnected(false);
-      };
-      ws.onerror = () => {
-        if (!alive) return;
-        setIsConnected(false);
-      };
+      subRef.current = subscribeEvents(url, {
+        onOpen: () => {
+          if (!alive) return;
+          setIsConnected(true);
+          void refresh();
+        },
+        onMessage: () => {
+          if (!alive) return;
+          void refresh();
+        },
+        onClose: () => {
+          if (!alive) return;
+          setIsConnected(false);
+        },
+        onError: () => {
+          if (!alive) return;
+          setIsConnected(false);
+        },
+      });
     })();
 
     return () => {
       alive = false;
-      wsRef.current?.close();
-      wsRef.current = null;
+      subRef.current?.close();
+      subRef.current = null;
     };
   }, [reconnectKey]);
 
