@@ -11,13 +11,12 @@ import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE_PORT = process.env.SCRIBD_DL_ENGINE_PORT ?? "4747";
-const OUTPUT = process.env.SCRIBD_DL_OUTPUT ?? "output";
 const LOG_PATH = resolve(ROOT, ".dev-tui-engine.log");
 const READY_TIMEOUT_MS = 10_000;
 
 const log = createWriteStream(LOG_PATH, { flags: "w" });
 
-const engine = spawn("bun", ["packages/engine/engine.ts", "--port", ENGINE_PORT, "--output", OUTPUT], {
+const engine = spawn("bun", ["packages/engine/engine.ts", "--port", ENGINE_PORT], {
   cwd: ROOT,
   env: process.env,
   stdio: ["ignore", "pipe", "pipe"],
