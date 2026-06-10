@@ -9,18 +9,15 @@ define("sd-folder-modal").setup((ctx) => {
   ctx.host.innerHTML = `
     <article class="terminal-card">
       <header>Change download folder</header>
-      <div class="modal-body">
-        <fieldset>
-          <div class="form-group">
-            <label for="sd-folder-input">New path:</label>
-            <input id="sd-folder-input" type="text" data-ref="input" />
-          </div>
-        </fieldset>
-        <div class="terminal-alert terminal-alert-error" data-ref="error" hidden></div>
+      <div class="p-1">
+        <div class="form-group">
+          <input id="sd-folder-input" type="text" data-ref="input" autocomplete="off" spellcheck="false" />
+        </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-default" data-ref="cancel">Cancel</button>
           <button type="button" class="btn btn-primary" data-ref="save">Save</button>
         </div>
+        <div class="terminal-alert terminal-alert-error" data-ref="error" hidden></div>
       </div>
     </article>
   `;
@@ -67,13 +64,24 @@ define("sd-folder-modal").setup((ctx) => {
     }
   });
 
+  ctx.on(
+    document,
+    "keydown",
+    (event) => {
+      if (ctx.host.hidden) return;
+      if (event.key === "Escape") {
+        event.preventDefault();
+        event.stopPropagation();
+        close();
+      }
+    },
+    { capture: true },
+  );
+
   ctx.on(input, "keydown", (event) => {
     if (event.key === "Enter") {
       event.preventDefault();
       void trySave();
-    } else if (event.key === "Escape") {
-      event.preventDefault();
-      close();
     }
   });
 

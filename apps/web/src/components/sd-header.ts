@@ -5,7 +5,7 @@ define("sd-header").setup((ctx) => {
   ctx.host.innerHTML = `
     <div class="folder-row">
       <span>Download folder: <span data-ref="display">—</span></span>
-      <button type="button" class="btn btn-default" data-ref="change">Change</button>
+      <button type="button" class="btn btn-default btn-ghost" data-ref="change">Change</button>
     </div>
   `;
 
