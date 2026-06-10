@@ -1,0 +1,154 @@
+@import "terminal.css";
+
+:root {
+  --status-queued: var(--font-color);
+  --status-downloading: var(--primary-color);
+  --status-downloaded: var(--primary-color);
+  --status-failed: var(--error-color);
+}
+
+html,
+body {
+  min-height: 100%;
+  margin: 0;
+}
+
+body > sd-app {
+  display: block;
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 2rem 1rem;
+}
+
+sd-app > .terminal-card > sd-header,
+sd-app > .terminal-card > sd-queue,
+sd-app > .terminal-card > sd-statusbar,
+sd-app > .terminal-card > sd-disconnect-banner {
+  display: block;
+}
+
+sd-header .folder-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--font-color);
+}
+
+sd-header .folder-row .btn {
+  padding: 0.2rem 0.5rem;
+  margin: 0;
+  min-height: auto;
+  line-height: 1;
+}
+
+sd-queue {
+  min-height: 300px;
+  max-height: 60vh;
+  overflow-y: auto;
+  padding: 1rem 0;
+  margin-bottom: 1rem;
+}
+
+sd-queue-item {
+  display: block;
+  margin-bottom: 1.5rem;
+}
+
+sd-queue-item .item-head {
+  display: flex;
+  justify-content: space-between;
+  font-weight: bold;
+  gap: 1rem;
+}
+
+sd-queue-item .item-body {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 1rem;
+}
+
+sd-queue-item .item-url {
+  opacity: 0.7;
+  word-break: break-all;
+  font-size: 0.9em;
+}
+
+sd-queue-item .item-progress {
+  font-size: 0.9em;
+  opacity: 0.85;
+  margin-top: 0.2rem;
+}
+
+sd-queue-item .item-reason {
+  color: var(--error-color);
+  font-size: 0.9em;
+  margin-top: 0.2rem;
+}
+
+sd-queue-item .item-action .btn {
+  padding: 0.1rem 0.4rem;
+  min-height: auto;
+  line-height: 1;
+  margin: 0;
+}
+
+sd-queue-item[data-status="Downloaded"] .item-status,
+sd-queue-item[data-status="Downloading"] .item-status {
+  color: var(--primary-color);
+}
+
+sd-queue-item[data-status="Failed"] .item-status {
+  color: var(--error-color);
+}
+
+sd-queue-item[data-status="Downloading"] .item-status {
+  animation: sd-blink 1s linear infinite;
+}
+
+@keyframes sd-blink {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+sd-statusbar {
+  border-top: 1px dotted var(--font-color);
+  padding-top: 0.5rem;
+  font-size: 0.9em;
+  opacity: 0.85;
+}
+
+sd-folder-modal[hidden] {
+  display: none;
+}
+
+sd-folder-modal {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+sd-folder-modal .terminal-card {
+  width: 450px;
+  max-width: calc(100vw - 2rem);
+  background-color: var(--background-color);
+}
+
+sd-folder-modal .modal-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  gap: 1rem;
+}
+
+sd-folder-modal .terminal-alert[hidden] {
+  display: none;
+}
