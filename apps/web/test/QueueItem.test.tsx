@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { describe, expect, test, vi } from "vitest";
 import { QueueItem } from "../src/components/QueueItem";
-import type { Job } from "../src/lib/types";
+import type { Job } from "@scribd-dl/shared";
 
 const baseJob: Job = {
   id: "j1",

@@ -1,4 +1,4 @@
-export type JobId = string & { readonly _brand: "JobId" };
+export type JobId = string;
 
 export type JobStatus = "Queued" | "Downloading" | "Downloaded" | "Failed";
 

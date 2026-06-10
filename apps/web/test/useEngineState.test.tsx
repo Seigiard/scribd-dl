@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { useEngineState } from "../src/hooks/useEngineState";
-import type { EngineSnapshot } from "../src/lib/types";
+import type { EngineSnapshot } from "@scribd-dl/shared";
 
 interface MockWS {
   url: string;

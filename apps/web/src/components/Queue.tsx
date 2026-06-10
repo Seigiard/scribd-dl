@@ -1,5 +1,5 @@
 import { QueueItem } from "@/components/QueueItem";
-import type { EngineSnapshot } from "@/lib/types";
+import type { EngineSnapshot } from "@scribd-dl/shared";
 
 export interface QueueProps {
   readonly snapshot: EngineSnapshot;

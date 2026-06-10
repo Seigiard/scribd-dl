@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { fetchSnapshot } from "@/lib/api";
 import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
-import type { EngineSnapshot } from "@/lib/types";
+import type { EngineSnapshot } from "@scribd-dl/shared";
 
 const EMPTY_SNAPSHOT: EngineSnapshot = { jobs: [] };
 

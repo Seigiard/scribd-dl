@@ -2,7 +2,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
-import type { Job, JobStatus } from "@/lib/types";
+import type { Job, JobStatus } from "@scribd-dl/shared";
 
 export interface QueueItemProps {
   readonly job: Job;
