@@ -9,7 +9,8 @@
     "engine": "bun engine.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
-    "test:cov": "bun test --coverage"
+    "test:cov": "bun test --coverage",
+    "test:smoke": "RUN_SMOKE_TESTS=1 bun test test/smoke"
   },
   "dependencies": {
     "@effect/cli": "^0.75.2",

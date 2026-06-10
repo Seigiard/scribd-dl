@@ -22,6 +22,7 @@
     "app:test": "bun --filter @scribd-dl/web test",
     "dev:spa": "bun scripts/dev-spa.ts",
     "test": "bun --filter '*' test",
+    "test:smoke": "bun --filter @scribd-dl/engine test:smoke",
     "test:watch": "bun --filter @scribd-dl/engine test:watch",
     "test:cov": "bun --filter @scribd-dl/engine test:cov",
     "lint": "oxlint packages/engine/run.ts packages/engine/tui.ts packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/web/src apps/web/test scripts",

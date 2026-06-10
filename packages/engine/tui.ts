@@ -9,12 +9,13 @@ import { ConfigLoader, type ConfigData, makeConfigLoader } from "./src/utils/io/
 import { DirectoryIo, DirectoryIoLive } from "./src/utils/io/DirectoryIo";
 import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
 import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
+import { TitleResolverLive } from "./src/utils/request/TitleResolver";
 import { outputOpt, filenameOpt, rendertimeOpt } from "./src/cli/options";
 import { App } from "./src/tui/App";
 
 const buildLayer = (config: ConfigData) => {
   const ConfigLayer = makeConfigLoader(config);
-  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive);
+  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive, TitleResolverLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
   const EngineLayer = Layer.provide(DownloadEngineLive, Layer.mergeAll(ScribdLayer, ConfigLayer));
   return Layer.mergeAll(EngineLayer, ConfigLayer, DirectoryIoLive);

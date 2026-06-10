@@ -5,6 +5,7 @@ import { ConfigLoader } from "../utils/io/ConfigLoader";
 import { DirectoryIo } from "../utils/io/DirectoryIo";
 import { PdfGenerator } from "../utils/io/PdfGenerator";
 import { PuppeteerSg } from "../utils/request/PuppeteerSg";
+import { TitleResolver } from "../utils/request/TitleResolver";
 import {
   DirectoryIoFailed,
   PageLoadFailed,
@@ -61,7 +62,7 @@ const processPage = (
   page: Page,
   url: string,
   rendertime: number,
-): Effect.Effect<{ readonly title: string | null; readonly pages: ReadonlyArray<PageDimensions> }, PageProcessFailed, never> =>
+): Effect.Effect<{ readonly pages: ReadonlyArray<PageDimensions> }, PageProcessFailed, never> =>
   Effect.tryPromise({
     try: () =>
       page.evaluate(async (rendertime: number) => {
@@ -99,9 +100,6 @@ const processPage = (
 
         win.__helpers__.removeMarginSelectorAll("div.outer_page_container div[id^='outer_page_']");
 
-        // eslint-disable-next-line no-undef
-        const titleElement = document.querySelector('[data-e2e="doc_page_title"]');
-        const title = titleElement?.textContent?.trim() || null;
         const pages: Array<{ id: string; width: number; height: number }> = [];
         // eslint-disable-next-line no-undef
         document.querySelectorAll("div.outer_page_container div[id^='outer_page_']").forEach((dom) => {
@@ -119,7 +117,7 @@ const processPage = (
           // eslint-disable-next-line no-undef
           document.body.innerHTML = container.innerHTML;
         }
-        return { title, pages };
+        return { pages };
       }, rendertime),
     catch: (cause) => new PageProcessFailed({ url, cause }),
   });
@@ -202,54 +200,60 @@ const allSameDimensions = (pages: ReadonlyArray<PageDimensions>): boolean => {
   return pages.every((p) => p.width === first.width && p.height === first.height);
 };
 
-export const ScribdDownloaderLive: Layer.Layer<ScribdDownloader, never, PuppeteerSg | PdfGenerator | ConfigLoader | DirectoryIo> =
-  Layer.effect(
-    ScribdDownloader,
-    Effect.gen(function* () {
-      const puppeteerSg = yield* PuppeteerSg;
-      const pdfGenerator = yield* PdfGenerator;
-      const config = yield* ConfigLoader;
-      const directoryIo = yield* DirectoryIo;
+export const ScribdDownloaderLive: Layer.Layer<
+  ScribdDownloader,
+  never,
+  PuppeteerSg | PdfGenerator | ConfigLoader | DirectoryIo | TitleResolver
+> = Layer.effect(
+  ScribdDownloader,
+  Effect.gen(function* () {
+    const puppeteerSg = yield* PuppeteerSg;
+    const pdfGenerator = yield* PdfGenerator;
+    const config = yield* ConfigLoader;
+    const directoryIo = yield* DirectoryIo;
+    const titleResolver = yield* TitleResolver;
 
-      const execute = (url: string, folder: string, onEvent: OnEvent): Effect.Effect<void, ScribdError, never> =>
-        Effect.scoped(
-          Effect.gen(function* () {
-            const embedUrl = yield* resolveEmbedUrl(url);
-            const id = yield* extractId(embedUrl);
+    const execute = (url: string, folder: string, onEvent: OnEvent): Effect.Effect<void, ScribdError, never> =>
+      Effect.scoped(
+        Effect.gen(function* () {
+          const embedUrl = yield* resolveEmbedUrl(url);
+          const id = yield* extractId(embedUrl);
 
-            const page = yield* Effect.acquireRelease(puppeteerSg.getPage(embedUrl), (p) => Effect.promise(() => p.close()));
+          const titleEff = config.directory.filename === "title" ? titleResolver.resolve(url, id) : Effect.succeed(id);
+          const pageEff = Effect.acquireRelease(puppeteerSg.getPage(embedUrl), (p) => Effect.promise(() => p.close()));
 
-            const meta: DocumentMeta = yield* processPage(page, embedUrl, config.scribd.rendertime).pipe(
-              Effect.map(({ title, pages }) => ({ title, id, pages })),
-            );
+          const [title, page] = yield* Effect.all([titleEff, pageEff], { concurrency: "unbounded" });
 
-            yield* onEvent({ _tag: "TitleResolved", title: meta.title ?? id });
-            yield* onEvent({ _tag: "ScrapeProgress", done: meta.pages.length, total: meta.pages.length });
+          const { pages } = yield* processPage(page, embedUrl, config.scribd.rendertime);
+          const meta: DocumentMeta = { title, id, pages };
 
-            const rawName = config.directory.filename === "title" ? (meta.title ?? id) : id;
-            const identifier = sanitize(rawName);
-            yield* directoryIo.create(folder);
-            const pdfPath = `${folder}/${identifier}.pdf`;
+          yield* onEvent({ _tag: "TitleResolved", title: meta.title });
+          yield* onEvent({ _tag: "ScrapeProgress", done: meta.pages.length, total: meta.pages.length });
 
-            if (allSameDimensions(meta.pages)) {
-              const dims = meta.pages[0];
-              if (dims) {
-                yield* puppeteerSg.generatePDF(page, pdfPath, { width: dims.width, height: dims.height });
-              } else {
-                yield* puppeteerSg.generatePDF(page, pdfPath);
-              }
-              yield* onEvent({ _tag: "RenderProgress", done: 1, total: 1 });
+          const identifier = sanitize(meta.title);
+          const safeIdentifier = identifier === "" ? id : identifier;
+          yield* directoryIo.create(folder);
+          const pdfPath = `${folder}/${safeIdentifier}.pdf`;
+
+          if (allSameDimensions(meta.pages)) {
+            const dims = meta.pages[0];
+            if (dims) {
+              yield* puppeteerSg.generatePDF(page, pdfPath, { width: dims.width, height: dims.height });
             } else {
-              const tempDir = `${folder}/${identifier}_temp`;
-              yield* directoryIo.create(tempDir);
-              const groups = yield* groupPagesByDimensions(meta.pages);
-              const pdfPaths = yield* generatePDFs(page, groups, tempDir, puppeteerSg, onEvent);
-              yield* pdfGenerator.merge(pdfPaths, pdfPath);
-              yield* directoryIo.remove(tempDir);
+              yield* puppeteerSg.generatePDF(page, pdfPath);
             }
-          }),
-        );
+            yield* onEvent({ _tag: "RenderProgress", done: 1, total: 1 });
+          } else {
+            const tempDir = `${folder}/${safeIdentifier}_temp`;
+            yield* directoryIo.create(tempDir);
+            const groups = yield* groupPagesByDimensions(meta.pages);
+            const pdfPaths = yield* generatePDFs(page, groups, tempDir, puppeteerSg, onEvent);
+            yield* pdfGenerator.merge(pdfPaths, pdfPath);
+            yield* directoryIo.remove(tempDir);
+          }
+        }),
+      );
 
-      return ScribdDownloader.of({ execute });
-    }),
-  );
+    return ScribdDownloader.of({ execute });
+  }),
+);

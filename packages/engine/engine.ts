@@ -8,6 +8,7 @@ import { type ConfigData, makeConfigLoader } from "./src/utils/io/ConfigLoader";
 import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
 import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
 import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
+import { TitleResolverLive } from "./src/utils/request/TitleResolver";
 import { outputOpt, filenameOpt, rendertimeOpt, portOpt } from "./src/cli/options";
 import { HttpServerLive } from "./src/server/HttpServerLive";
 
@@ -25,7 +26,7 @@ const program = printReady.pipe(Effect.zipRight(Effect.never));
 
 const buildEngineLayer = (config: ConfigData) => {
   const ConfigLayer = makeConfigLoader(config);
-  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive);
+  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive, TitleResolverLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
   return Layer.provide(DownloadEngineLive, Layer.mergeAll(ScribdLayer, ConfigLayer));
 };

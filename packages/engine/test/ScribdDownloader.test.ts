@@ -6,6 +6,7 @@ import { PuppeteerSg, type PuppeteerSgService } from "../src/utils/request/Puppe
 import { PdfGenerator, type PdfGeneratorService } from "../src/utils/io/PdfGenerator";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
 import { DirectoryIo, type DirectoryIoService } from "../src/utils/io/DirectoryIo";
+import { TitleResolver, type TitleResolverService } from "../src/utils/request/TitleResolver";
 
 interface FakePage {
   evaluate: ReturnType<typeof mock>;
@@ -14,8 +15,10 @@ interface FakePage {
 
 interface MockState {
   page: FakePage;
-  processPageResult: { title: string | null; pages: Array<{ id: string; width: number; height: number }> };
+  processPageResult: { pages: Array<{ id: string; width: number; height: number }> };
   processPageThrows: boolean;
+  resolvedTitle: string;
+  resolve: ReturnType<typeof mock>;
   getPage: ReturnType<typeof mock>;
   generatePDF: ReturnType<typeof mock>;
   merge: ReturnType<typeof mock>;
@@ -26,8 +29,10 @@ interface MockState {
 
 const state: MockState = {
   page: { evaluate: mock(), close: mock() },
-  processPageResult: { title: null, pages: [] },
+  processPageResult: { pages: [] },
   processPageThrows: false,
+  resolvedTitle: "doc",
+  resolve: mock(),
   getPage: mock(),
   generatePDF: mock(),
   merge: mock(),
@@ -40,8 +45,9 @@ const state: MockState = {
 };
 
 const resetState = () => {
-  state.processPageResult = { title: null, pages: [] };
+  state.processPageResult = { pages: [] };
   state.processPageThrows = false;
+  state.resolvedTitle = "doc";
   state.page = {
     evaluate: mock(async () => {
       if (state.processPageThrows) throw new Error("evaluate failed");
@@ -49,6 +55,7 @@ const resetState = () => {
     }),
     close: mock(async () => {}),
   };
+  state.resolve = mock((_url: string, _id: string) => Effect.succeed(state.resolvedTitle));
   state.getPage = mock((_url: string) => Effect.succeed(state.page as unknown as Page));
   state.generatePDF = mock(() => Effect.void);
   state.merge = mock(() => Effect.void);
@@ -72,6 +79,9 @@ const buildLayer = () => {
     create: (p) => state.dirCreate(p) as ReturnType<DirectoryIoService["create"]>,
     remove: (p) => state.dirRemove(p) as ReturnType<DirectoryIoService["remove"]>,
   };
+  const titleSvc: TitleResolverService = {
+    resolve: (url, id) => state.resolve(url, id) as ReturnType<TitleResolverService["resolve"]>,
+  };
   return Layer.provide(
     ScribdDownloaderLive,
     Layer.mergeAll(
@@ -79,6 +89,7 @@ const buildLayer = () => {
       Layer.succeed(PdfGenerator, pdfSvc),
       Layer.succeed(ConfigLoader, state.config),
       Layer.succeed(DirectoryIo, dirSvc),
+      Layer.succeed(TitleResolver, titleSvc),
     ),
   );
 };
@@ -100,7 +111,8 @@ describe("ScribdDownloader", () => {
 
   test("routes DOCUMENT URL to embed URL", async () => {
     // #given
-    state.processPageResult = { title: "doc", pages: [{ id: "p1", width: 800, height: 600 }] };
+    state.resolvedTitle = "doc";
+    state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
 
     // #when
     const exit = await runExecute("https://www.scribd.com/document/123/foo");
@@ -112,7 +124,8 @@ describe("ScribdDownloader", () => {
 
   test("routes EMBED URL as-is", async () => {
     // #given
-    state.processPageResult = { title: "doc", pages: [{ id: "p1", width: 800, height: 600 }] };
+    state.resolvedTitle = "doc";
+    state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
 
     // #when
     const exit = await runExecute("https://www.scribd.com/embeds/456/content");
@@ -144,8 +157,8 @@ describe("ScribdDownloader", () => {
 
   test("single-dimension path: one generatePDF, no merge, no temp dir", async () => {
     // #given
+    state.resolvedTitle = "doc";
     state.processPageResult = {
-      title: "doc",
       pages: [
         { id: "p1", width: 800, height: 600 },
         { id: "p2", width: 800, height: 600 },
@@ -169,8 +182,8 @@ describe("ScribdDownloader", () => {
 
   test("multi-dimension path: create temp dir, multi generatePDF, merge, remove temp dir", async () => {
     // #given
+    state.resolvedTitle = "doc";
     state.processPageResult = {
-      title: "doc",
       pages: [
         { id: "p1", width: 800, height: 600 },
         { id: "p2", width: 800, height: 600 },
@@ -190,35 +203,40 @@ describe("ScribdDownloader", () => {
     expect(state.dirRemove).toHaveBeenCalledWith("/tmp/out/doc_temp");
   });
 
-  test("filename strategy 'title' uses sanitized title", async () => {
+  test("filename strategy 'title' uses sanitized title from resolver", async () => {
     // #given
     state.config = { ...state.config, directory: { output: "/tmp/out", filename: "title" } };
-    state.processPageResult = { title: "My Doc", pages: [{ id: "p1", width: 800, height: 600 }] };
+    state.resolvedTitle = "My Doc";
+    state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
 
     // #when
     const exit = await runExecute("https://www.scribd.com/embeds/123/content");
 
     // #then
     expect(Exit.isSuccess(exit)).toBe(true);
+    expect(state.resolve).toHaveBeenCalledTimes(1);
     expect(state.generatePDF.mock.calls[0]![1]).toBe("/tmp/out/My Doc.pdf");
   });
 
-  test("filename strategy 'id' falls back to document id", async () => {
+  test("filename strategy 'id' skips resolver and uses document id", async () => {
     // #given
     state.config = { ...state.config, directory: { output: "/tmp/out", filename: "id" } };
-    state.processPageResult = { title: "My Doc", pages: [{ id: "p1", width: 800, height: 600 }] };
+    state.resolvedTitle = "My Doc"; // would be used if resolver were consulted
+    state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
 
     // #when
     const exit = await runExecute("https://www.scribd.com/embeds/789/content");
 
     // #then
     expect(Exit.isSuccess(exit)).toBe(true);
+    expect(state.resolve).not.toHaveBeenCalled();
     expect(state.generatePDF.mock.calls[0]![1]).toBe("/tmp/out/789.pdf");
   });
 
   test("title with unsafe chars is sanitized", async () => {
     // #given
-    state.processPageResult = { title: "foo/bar*baz", pages: [{ id: "p1", width: 800, height: 600 }] };
+    state.resolvedTitle = "foo/bar*baz";
+    state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
 
     // #when
     const exit = await runExecute("https://www.scribd.com/embeds/123/content");
@@ -245,8 +263,8 @@ describe("ScribdDownloader", () => {
 
   test("emits TitleResolved + ScrapeProgress + RenderProgress for single-dim run", async () => {
     // #given
+    state.resolvedTitle = "doc";
     state.processPageResult = {
-      title: "doc",
       pages: [
         { id: "p1", width: 800, height: 600 },
         { id: "p2", width: 800, height: 600 },
@@ -270,8 +288,8 @@ describe("ScribdDownloader", () => {
 
   test("emits RenderProgress N times for N groups (multi-dim)", async () => {
     // #given
+    state.resolvedTitle = "doc";
     state.processPageResult = {
-      title: "doc",
       pages: [
         { id: "p1", width: 800, height: 600 },
         { id: "p2", width: 1000, height: 700 },
@@ -296,8 +314,8 @@ describe("ScribdDownloader", () => {
 
   test("does not write to stdout during execute", async () => {
     // #given
+    state.resolvedTitle = "doc";
     state.processPageResult = {
-      title: "doc",
       pages: [
         { id: "p1", width: 800, height: 600 },
         { id: "p2", width: 1000, height: 700 },
@@ -329,7 +347,8 @@ describe("ScribdDownloader", () => {
 
   test("happy single-dim path runs to completion via runPromise", async () => {
     // #given
-    state.processPageResult = { title: "doc", pages: [{ id: "p1", width: 800, height: 600 }] };
+    state.resolvedTitle = "doc";
+    state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
 
     // #when
     await Effect.runPromise(
