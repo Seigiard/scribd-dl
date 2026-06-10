@@ -11,23 +11,31 @@ define("sd-queue-item").setup((ctx) => {
 
   ctx.host.innerHTML = `
     <div class="item-head">
+      <svg class="item-icon item-icon-status" aria-hidden="true"><use data-ref="status-use" href="#icon-queued"/></svg>
       <span class="item-title" data-ref="title"></span>
-      <span class="item-status" data-ref="status"></span>
+      <button type="button" class="item-action" data-ref="action" hidden>
+        <svg class="item-icon" aria-hidden="true"><use data-ref="action-use" href=""/></svg>
+      </button>
     </div>
-    <div class="item-body">
-      <span class="item-url" data-ref="url"></span>
-      <span class="item-action" data-ref="action"></span>
-    </div>
+    <div class="item-url" data-ref="url"></div>
     <div class="item-progress" data-ref="progress" hidden></div>
     <div class="item-reason" data-ref="reason" hidden></div>
   `;
 
   const title = ctx.getElement<HTMLSpanElement>('[data-ref="title"]');
-  const status = ctx.getElement<HTMLSpanElement>('[data-ref="status"]');
-  const url = ctx.getElement<HTMLSpanElement>('[data-ref="url"]');
-  const action = ctx.getElement<HTMLSpanElement>('[data-ref="action"]');
+  const url = ctx.getElement<HTMLDivElement>('[data-ref="url"]');
+  const action = ctx.getElement<HTMLButtonElement>('[data-ref="action"]');
   const progress = ctx.getElement<HTMLDivElement>('[data-ref="progress"]');
   const reason = ctx.getElement<HTMLDivElement>('[data-ref="reason"]');
+  const statusUse = ctx.host.querySelector('[data-ref="status-use"]') as SVGUseElement;
+  const actionUse = ctx.host.querySelector('[data-ref="action-use"]') as SVGUseElement;
+
+  const STATUS_ICON: Record<Job["status"], string> = {
+    Queued: "#icon-queued",
+    Downloading: "#icon-downloading",
+    Downloaded: "#icon-downloaded",
+    Failed: "#icon-failed",
+  };
 
   const render = (job: Job | undefined): void => {
     if (!job) {
@@ -37,7 +45,7 @@ define("sd-queue-item").setup((ctx) => {
 
     ctx.host.dataset.status = job.status;
     title.textContent = job.displayTitle || EMPTY_TITLE;
-    status.textContent = job.status === "Downloading" ? "Downloading..." : job.status;
+    statusUse.setAttribute("href", STATUS_ICON[job.status]);
     url.textContent = job.url;
 
     if (job.status === "Downloading" && job.progress) {
@@ -56,12 +64,19 @@ define("sd-queue-item").setup((ctx) => {
       reason.textContent = "";
     }
 
-    if (job.status === "Queued") {
-      action.innerHTML = `<button type="button" class="btn btn-default" data-action="remove" aria-label="Remove">Remove</button>`;
-    } else if (job.status === "Failed" && job.failure?.retryable) {
-      action.innerHTML = `<button type="button" class="btn btn-primary" data-action="retry">Retry</button>`;
+    if (job.status === "Failed" && job.failure?.retryable) {
+      actionUse.setAttribute("href", "#icon-retry");
+      action.dataset.action = "retry";
+      action.setAttribute("aria-label", "Retry");
+      action.hidden = false;
+    } else if (job.status === "Queued" || job.status === "Failed") {
+      actionUse.setAttribute("href", "#icon-delete");
+      action.dataset.action = "remove";
+      action.setAttribute("aria-label", "Remove");
+      action.hidden = false;
     } else {
-      action.innerHTML = "";
+      action.hidden = true;
+      action.removeAttribute("data-action");
     }
   };
 
