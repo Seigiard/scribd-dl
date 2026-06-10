@@ -44,17 +44,32 @@ export const ChangeFolderPopup = ({ initial, onSave, onCancel }: ChangeFolderPop
     }
   });
 
+  const inputFocused = focus === "input";
+
   return (
-    <Box borderStyle="round" paddingX={2} flexDirection="column">
-      <Text>Change download folder:</Text>
-      <Box marginTop={1}>
-        <Text inverse={focus === "input"}>{value || " "}</Text>
+    <Box borderStyle="round" paddingX={2} paddingY={1} flexDirection="column" width="100%">
+      <Text bold>Change download folder</Text>
+      <Box
+        marginTop={1}
+        paddingX={1}
+        width="100%"
+        borderStyle="single"
+        borderColor={inputFocused ? "cyan" : undefined}
+        borderDimColor={!inputFocused}
+      >
+        <Text>{value}</Text>
+        <Text color="cyan">{inputFocused ? "▎" : " "}</Text>
       </Box>
-      <Box marginTop={1}>
-        <Text inverse={focus === "cancel"}>[Cancel]</Text>
-        <Text> </Text>
-        <Text inverse={focus === "save"}>[Save]</Text>
+      <Box marginTop={1} gap={2}>
+        <Button label="Cancel" focused={focus === "cancel"} />
+        <Button label="Save" focused={focus === "save"} />
       </Box>
     </Box>
   );
 };
+
+const Button = ({ label, focused }: { label: string; focused: boolean }) => (
+  <Text color={focused ? "cyan" : undefined} bold={focused} dimColor={!focused}>
+    [{label}]
+  </Text>
+);
