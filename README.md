@@ -51,10 +51,11 @@ bun install
 
 ```text
 packages/
-  engine/         # CLI + HTTP/WS sidecar + Ink TUI (Effect.ts)
-  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract
+  engine/         # HTTP/WS sidecar (Effect.ts)
+  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract + thin client
 apps/
-  web/            # @scribd-dl/web — Vite SPA client
+  tui/            # @scribd-dl/tui — Ink/React terminal client (HTTP/WS)
+  web/            # @scribd-dl/web — Vite SPA client (HTTP/WS)
   desktop/        # reserved slot for the future Tauri client
 ```
 

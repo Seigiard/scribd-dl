@@ -1,14 +1,12 @@
 import { Box, useApp, useInput, useStdout } from "ink";
-import { useEffect, useMemo, useState } from "react";
-import { Effect, Fiber, Stream } from "effect";
-import type { EngineSnapshot } from "@scribd-dl/shared";
-import type { DownloadEngineService } from "../service/DownloadEngine";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { enqueueText, removeJob, retryJob, setFolder as apiSetFolder, type EngineSnapshot } from "@scribd-dl/shared";
+import { useEngineState } from "../hooks/useEngineState";
 import { ChangeFolderPopup } from "./ChangeFolderPopup";
 import { ExitConfirm } from "./ExitConfirm";
 import { Header } from "./Header";
 import { Queue, type ActionableControl } from "./Queue";
 import { StatusBar } from "./StatusBar";
-import { useEngineState } from "./useEngineState";
 
 const computeActionable = (snap: EngineSnapshot): ReadonlyArray<ActionableControl> => {
   const out: ActionableControl[] = [];
@@ -25,38 +23,21 @@ const computeActionable = (snap: EngineSnapshot): ReadonlyArray<ActionableContro
   return out;
 };
 
-const useOutputFolder = (engine: DownloadEngineService, initial: string): string => {
-  const [folder, setFolder] = useState(initial);
-  useEffect(() => {
-    Effect.runPromise(engine.outputFolder)
-      .then(setFolder)
-      .catch(() => {});
-    const subscribe = Stream.runForEach(engine.events, (e) =>
-      e._tag === "OutputFolderChanged" ? Effect.sync(() => setFolder(e.path)) : Effect.void,
-    );
-    const fiber = Effect.runFork(subscribe);
-    return () => {
-      Effect.runFork(Fiber.interrupt(fiber));
-    };
-  }, [engine]);
-  return folder;
-};
-
 const hasActiveJobs = (snap: EngineSnapshot): boolean => snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
 
 const looksLikePaste = (input: string): boolean => input.length > 5;
 
 export interface AppProps {
-  readonly engine: DownloadEngineService;
-  readonly folder: string;
+  readonly baseUrl: string;
+  readonly initialFolder: string;
   readonly onExit?: () => void;
 }
 
-export const App = ({ engine, folder: initialFolder, onExit }: AppProps) => {
-  const snapshot = useEngineState(engine);
-  const folder = useOutputFolder(engine, initialFolder);
+export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
+  const { snapshot, folder: liveFolder } = useEngineState(baseUrl, initialFolder);
+  const folder = liveFolder ?? initialFolder;
   const app = useApp();
-  const exit = onExit ?? (() => app.exit());
+  const exit = useCallback(() => (onExit ? onExit() : app.exit()), [app, onExit]);
   const { stdout } = useStdout();
   const rows = stdout?.rows ?? 24;
 
@@ -130,17 +111,17 @@ export const App = ({ engine, folder: initialFolder, onExit }: AppProps) => {
       const target = actionable[focusIndex - 1];
       if (!target) return;
       if (target.type === "remove") {
-        Effect.runPromise(engine.remove(target.id)).catch(() => {});
+        void removeJob(baseUrl, target.id).catch(() => {});
       } else {
-        Effect.runPromise(engine.retry(target.id)).catch(() => {});
+        void retryJob(baseUrl, target.id).catch(() => {});
       }
       return;
     }
 
     if (looksLikePaste(input)) {
-      Effect.runPromise(engine.enqueue(input))
-        .then((created) => {
-          if (created.length === 0) {
+      void enqueueText(baseUrl, input)
+        .then(({ jobs }) => {
+          if (jobs.length === 0) {
             setTransient("No links found in clipboard");
           }
         })
@@ -162,7 +143,7 @@ export const App = ({ engine, folder: initialFolder, onExit }: AppProps) => {
         <ChangeFolderPopup
           initial={folder}
           onSave={(path) => {
-            Effect.runPromise(engine.setOutputFolder(path)).catch(() => {});
+            void apiSetFolder(baseUrl, path).catch(() => {});
             setChangeFolderOpen(false);
           }}
           onCancel={() => setChangeFolderOpen(false)}
