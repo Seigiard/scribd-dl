@@ -1,7 +1,11 @@
 # Tauri-обёртка для scribd-dl: requirements
 
+> **⚠️ SUPERSEDED by [2026-06-09-desktop-app-tauri-bun-requirements.md](2026-06-09-desktop-app-tauri-bun-requirements.md)** (2026-06-09).
+>
+> Этот бриф написан **до** Effect-refactor и Ink-TUI. Архитектура «sidecar parse stdout / `bun run.js <url>` per job» устарела: сегодня есть `DownloadEngine` Layer с `enqueue/remove/retry/snapshot/events` API, и Ink-TUI уже его потребляет. Desktop = третий клиент того же engine через HTTP/WS (см. новый бриф). Этот файл оставлен как исторический контекст.
+
 **Дата:** 2026-06-09
-**Статус:** Brainstorm → готово к `/ce-plan`
+**Статус:** Superseded
 **Связано:** `run.js`, `src/App.js`, `src/utils/request/PuppeteerSg.js`, `config.ini`
 
 ## Проблема и цель
