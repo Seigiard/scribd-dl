@@ -1,16 +1,61 @@
 @import "tailwindcss";
 
+/*
+ * Design tokens — Linear (see DESIGN.md).
+ * Single chromatic accent (#5e6ad2 lavender). Four-step dark surface ladder.
+ * For functional product UI we keep distinguishable status hues (Linear's product
+ * palette allows richer color than the marketing canvas).
+ */
 @theme {
-  --color-status-queued: oklch(0.7 0 0);
-  --color-status-downloading: oklch(0.8 0.18 85);
-  --color-status-downloaded: oklch(0.75 0.18 145);
-  --color-status-failed: oklch(0.7 0.2 25);
+  --color-canvas: #010102;
+  --color-surface-1: #0f1011;
+  --color-surface-2: #141516;
+  --color-surface-3: #18191a;
+  --color-surface-4: #191a1b;
+
+  --color-hairline: #23252a;
+  --color-hairline-strong: #34343a;
+
+  --color-ink: #f7f8f8;
+  --color-ink-muted: #d0d6e0;
+  --color-ink-subtle: #8a8f98;
+  --color-ink-tertiary: #62666d;
+
+  --color-primary: #5e6ad2;
+  --color-primary-hover: #828fff;
+  --color-primary-focus: #5e69d1;
+  --color-on-primary: #ffffff;
+
+  --color-status-queued-fg: #d0d6e0;
+  --color-status-queued-bg: #141516;
+  --color-status-downloading-fg: #c4caff;
+  --color-status-downloading-bg: rgba(94, 106, 210, 0.18);
+  --color-status-downloaded-fg: #6ed98a;
+  --color-status-downloaded-bg: rgba(39, 166, 68, 0.16);
+  --color-status-failed-fg: #f4a3a3;
+  --color-status-failed-bg: rgba(204, 64, 64, 0.16);
+
+  --font-sans:
+    "Inter", "SF Pro Display", -apple-system, system-ui, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --radius-md: 8px;
+  --radius-lg: 12px;
 }
 
 html,
 body,
 #root {
   height: 100%;
+}
+
+html {
+  background-color: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 14px;
+  letter-spacing: -0.05px;
+  -webkit-font-smoothing: antialiased;
 }
 
 #root {

@@ -58,7 +58,7 @@ describe("QueueItem", () => {
     // #then
     const badge = screen.getByTestId("job-status");
     expect(badge).toHaveTextContent("Downloaded");
-    expect(badge.className).toMatch(/emerald/);
+    expect(badge.className).toMatch(/status-downloaded/);
   });
 
   test("Failed retryable job shows red Failed badge and reason", () => {

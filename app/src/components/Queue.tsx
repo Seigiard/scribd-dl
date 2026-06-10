@@ -12,7 +12,10 @@ export const Queue = ({ snapshot, onRemove, onRetry }: QueueProps) => {
     return <div className="flex-1" />;
   }
   return (
-    <div className="flex flex-1 flex-col gap-2 overflow-y-auto p-4" data-testid="queue">
+    <div
+      className="flex flex-1 flex-col gap-2 overflow-y-auto px-6 py-4"
+      data-testid="queue"
+    >
       {snapshot.jobs.map((job) => (
         <QueueItem key={job.id} job={job} onRemove={onRemove} onRetry={onRetry} />
       ))}

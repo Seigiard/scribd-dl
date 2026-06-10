@@ -5,19 +5,20 @@ import { forwardRef } from "react";
 import { cn } from "@/lib/utils";
 
 const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-neutral-400 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-focus focus-visible:ring-offset-2 focus-visible:ring-offset-canvas disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {
-        default: "bg-neutral-50 text-neutral-950 hover:bg-neutral-200",
-        outline: "border border-neutral-700 bg-transparent text-neutral-100 hover:bg-neutral-800",
-        ghost: "text-neutral-300 hover:bg-neutral-800 hover:text-neutral-50",
-        destructive: "bg-red-600 text-neutral-50 hover:bg-red-700",
+        default:
+          "bg-primary text-on-primary hover:bg-primary-hover active:bg-primary-focus",
+        secondary:
+          "border border-hairline bg-surface-1 text-ink hover:bg-surface-2 hover:border-hairline-strong",
+        ghost: "text-ink-subtle hover:bg-surface-2 hover:text-ink",
       },
       size: {
-        default: "h-9 px-4 py-2",
-        sm: "h-8 px-3 text-xs",
-        icon: "h-8 w-8 p-0",
+        default: "h-8 px-3.5 text-[13px]",
+        sm: "h-7 px-3 text-[12px]",
+        icon: "size-7 p-0 text-[15px] leading-none",
       },
     },
     defaultVariants: {
@@ -27,14 +28,18 @@ const buttonVariants = cva(
   },
 );
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement>, VariantProps<typeof buttonVariants> {
+export interface ButtonProps
+  extends ButtonHTMLAttributes<HTMLButtonElement>,
+    VariantProps<typeof buttonVariants> {
   asChild?: boolean;
 }
 
-export const Button = forwardRef<HTMLButtonElement, ButtonProps>(({ className, variant, size, asChild = false, ...props }, ref) => {
-  const Comp = asChild ? Slot : "button";
-  return <Comp ref={ref} className={cn(buttonVariants({ variant, size, className }))} {...props} />;
-});
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  ({ className, variant, size, asChild = false, ...props }, ref) => {
+    const Comp = asChild ? Slot : "button";
+    return <Comp ref={ref} className={cn(buttonVariants({ variant, size, className }))} {...props} />;
+  },
+);
 Button.displayName = "Button";
 
 export { buttonVariants };

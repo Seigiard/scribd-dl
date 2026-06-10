@@ -68,7 +68,7 @@ export const App = () => {
   );
 
   return (
-    <div className="flex h-full flex-col bg-neutral-950">
+    <div className="flex h-full flex-col bg-canvas text-ink">
       <Header folder={folder} />
       {!isConnected && baseUrl && <DisconnectBanner onReconnect={reconnect} />}
       <Queue snapshot={snapshot} onRemove={handleRemove} onRetry={handleRetry} />
