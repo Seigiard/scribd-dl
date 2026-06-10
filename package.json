@@ -2,48 +2,18 @@
   "name": "scribd-dl",
   "version": "1.0.0",
   "description": "Scribd Document Downloader",
-  "keywords": [],
+  "private": true,
   "license": "GPL-3.0-or-later",
   "author": {
     "name": "ray.yukawai",
     "email": "ray.yukawai@gmail.com"
   },
   "type": "module",
-  "main": "run.ts",
-  "types": "module",
+  "workspaces": ["packages/*", "apps/*"],
   "scripts": {
-    "start": "bun run.ts",
-    "tui": "bun tui.ts",
-    "engine": "bun engine.ts",
-    "app:dev": "cd app && bun run dev",
-    "app:build": "cd app && bun run build",
-    "app:test": "cd app && bun run test",
-    "app:install": "cd app && bun install",
-    "dev:spa": "bun scripts/dev-spa.ts",
-    "test": "bun test",
-    "test:watch": "bun test --watch",
-    "test:cov": "bun test --coverage",
-    "lint": "oxlint run.ts tui.ts engine.ts src test scripts",
-    "lint:fix": "oxlint --fix run.ts tui.ts engine.ts src test scripts",
-    "format": "oxfmt --write package.json run.ts tui.ts engine.ts src test scripts",
-    "format:check": "oxfmt --check package.json run.ts tui.ts engine.ts src test scripts"
-  },
-  "dependencies": {
-    "@effect/cli": "^0.75.2",
-    "@effect/platform": "^0.96.1",
-    "@effect/platform-bun": "^0.90.0",
-    "cli-progress": "^3.12.0",
-    "effect": "^3.21.3",
-    "ink": "^7.0.5",
-    "pdf-lib": "^1.17.1",
-    "puppeteer": "^25.1.0",
-    "react": "^19.2.7",
-    "sanitize-filename": "^1.6.4"
+    "//": "Root scripts are wired in U6 of the monorepo-migration plan."
   },
   "devDependencies": {
-    "@types/bun": "^1.3.14",
-    "@types/react": "^19.2.17",
-    "ink-testing-library": "^4.0.0",
     "oxfmt": "^0.54.0",
     "oxlint": "^1.69.0"
   },
