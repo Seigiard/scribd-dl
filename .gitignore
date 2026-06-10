@@ -1,6 +1,7 @@
 node_modules/
 output/
 coverage/
+app/dist/
 
 *.log
 npm-debug.log*

@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+@theme {
+  --color-status-queued: oklch(0.7 0 0);
+  --color-status-downloading: oklch(0.8 0.18 85);
+  --color-status-downloaded: oklch(0.75 0.18 145);
+  --color-status-failed: oklch(0.7 0.2 25);
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
