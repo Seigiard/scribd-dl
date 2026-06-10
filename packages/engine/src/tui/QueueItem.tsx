@@ -1,5 +1,5 @@
 import { Box, Text } from "ink";
-import type { Job, JobStatus } from "../service/DownloadEngine";
+import type { Job, JobStatus } from "@scribd-dl/shared";
 
 export type QueueItemAction = "remove" | "retry";
 

@@ -1,7 +1,8 @@
 import { Box, useApp, useInput, useStdout } from "ink";
 import { useEffect, useMemo, useState } from "react";
 import { Effect, Fiber, Stream } from "effect";
-import type { DownloadEngineService, EngineSnapshot } from "../service/DownloadEngine";
+import type { EngineSnapshot } from "@scribd-dl/shared";
+import type { DownloadEngineService } from "../service/DownloadEngine";
 import { ChangeFolderPopup } from "./ChangeFolderPopup";
 import { ExitConfirm } from "./ExitConfirm";
 import { Header } from "./Header";

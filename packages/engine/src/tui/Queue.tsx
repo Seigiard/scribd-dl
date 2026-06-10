@@ -1,5 +1,5 @@
 import { Box } from "ink";
-import type { EngineSnapshot, JobId } from "../service/DownloadEngine";
+import type { EngineSnapshot, JobId } from "@scribd-dl/shared";
 import { QueueItem, type QueueItemAction } from "./QueueItem";
 
 export interface ActionableControl {

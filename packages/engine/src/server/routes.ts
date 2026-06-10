@@ -1,7 +1,8 @@
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
 import { Effect, Stream } from "effect";
+import type { JobId } from "@scribd-dl/shared";
 import type { NotRemovable, NotRetryable } from "../errors/DomainErrors";
-import { DownloadEngine, type JobId } from "../service/DownloadEngine";
+import { DownloadEngine } from "../service/DownloadEngine";
 
 const jsonError = (status: number, body: object) => HttpServerResponse.json(body, { status });
 

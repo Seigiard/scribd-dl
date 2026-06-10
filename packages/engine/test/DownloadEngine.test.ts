@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Cause, Chunk, Effect, Exit, Layer, Stream } from "effect";
-import { DownloadEngine, DownloadEngineLive, type EngineSnapshot, type Job, type JobEvent } from "../src/service/DownloadEngine";
+import type { EngineSnapshot, Job, JobEvent } from "@scribd-dl/shared";
+import { DownloadEngine, DownloadEngineLive } from "../src/service/DownloadEngine";
 import { ScribdDownloader, type ScribdDownloaderService } from "../src/service/ScribdDownloader";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
 import { PageLoadFailed } from "../src/errors/DomainErrors";

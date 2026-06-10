@@ -1,51 +1,10 @@
 import { homedir } from "node:os";
 import { Cause, Context, Effect, Exit, Layer, Option, PubSub, Queue, Ref, Stream } from "effect";
+import type { EngineSnapshot, Job, JobDomain, JobEvent, JobFailure, JobId, JobProgress } from "@scribd-dl/shared";
 import { JobNotFound, NotRemovable, NotRetryable } from "../errors/DomainErrors";
 import { ConfigLoader } from "../utils/io/ConfigLoader";
 import { ScribdDownloader, type OnEvent } from "./ScribdDownloader";
 import * as scribdRegex from "../const/ScribdRegex";
-
-export type JobId = string & { readonly _brand: "JobId" };
-
-export type JobStatus = "Queued" | "Downloading" | "Downloaded" | "Failed";
-
-export type JobDomain = "scribd" | "unsupported";
-
-export interface JobFailure {
-  readonly reason: string;
-  readonly retryable: boolean;
-}
-
-export interface JobProgress {
-  readonly done: number;
-  readonly total: number;
-  readonly stage: "scrape" | "render";
-}
-
-export interface Job {
-  readonly id: JobId;
-  readonly url: string;
-  readonly domain: JobDomain;
-  readonly displayTitle: string;
-  readonly status: JobStatus;
-  readonly failure?: JobFailure;
-  readonly progress?: JobProgress;
-}
-
-export interface EngineSnapshot {
-  readonly jobs: ReadonlyArray<Job>;
-}
-
-export type JobEvent =
-  | { readonly _tag: "JobAdded"; readonly job: Job }
-  | { readonly _tag: "JobStarted"; readonly id: JobId }
-  | { readonly _tag: "JobCompleted"; readonly id: JobId }
-  | { readonly _tag: "JobFailed"; readonly id: JobId; readonly reason: string; readonly retryable: boolean }
-  | { readonly _tag: "JobRemoved"; readonly id: JobId }
-  | { readonly _tag: "JobRequeued"; readonly id: JobId }
-  | { readonly _tag: "JobTitleUpdated"; readonly id: JobId; readonly title: string }
-  | { readonly _tag: "JobProgress"; readonly id: JobId; readonly done: number; readonly total: number; readonly stage: "scrape" | "render" }
-  | { readonly _tag: "OutputFolderChanged"; readonly path: string };
 
 export interface DownloadEngineService {
   readonly enqueue: (text: string) => Effect.Effect<ReadonlyArray<Job>, never, never>;

@@ -15,5 +15,5 @@
     "jsx": "react-jsx",
     "types": ["bun"]
   },
-  "include": ["run.ts", "tui.ts", "src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "test/**/*.tsx"]
+  "include": ["run.ts", "tui.ts", "engine.ts", "src/**/*.ts", "src/**/*.tsx", "test/**/*.ts", "test/**/*.tsx"]
 }

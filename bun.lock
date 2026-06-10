@@ -4,10 +4,19 @@
   "workspaces": {
     "": {
       "name": "scribd-dl",
+      "devDependencies": {
+        "oxfmt": "^0.54.0",
+        "oxlint": "^1.69.0",
+      },
+    },
+    "packages/engine": {
+      "name": "@scribd-dl/engine",
+      "version": "1.0.0",
       "dependencies": {
         "@effect/cli": "^0.75.2",
         "@effect/platform": "^0.96.1",
         "@effect/platform-bun": "^0.90.0",
+        "@scribd-dl/shared": "workspace:*",
         "cli-progress": "^3.12.0",
         "effect": "^3.21.3",
         "ink": "^7.0.5",
@@ -20,9 +29,11 @@
         "@types/bun": "^1.3.14",
         "@types/react": "^19.2.17",
         "ink-testing-library": "^4.0.0",
-        "oxfmt": "^0.54.0",
-        "oxlint": "^1.69.0",
       },
+    },
+    "packages/shared": {
+      "name": "@scribd-dl/shared",
+      "version": "0.0.0",
     },
   },
   "packages": {
@@ -173,6 +184,10 @@
     "@pdf-lib/upng": ["@pdf-lib/upng@1.0.1", "", { "dependencies": { "pako": "^1.0.10" } }, "sha512-dQK2FUMQtowVP00mtIksrlZhdFXQZPC+taih1q4CvPZ5vqdxR/LKBaFg0oAfzd1GlHZXXSPdQfzQnt+ViGvEIQ=="],
 
     "@puppeteer/browsers": ["@puppeteer/browsers@3.0.4", "", { "dependencies": { "modern-tar": "^0.7.6", "yargs": "^17.7.2" }, "peerDependencies": { "proxy-agent": ">=8.0.1" }, "optionalPeers": ["proxy-agent"], "bin": { "browsers": "lib/main-cli.js" } }, "sha512-HGM8iAmGTf+Y7t0373szVbTmt3d7vPkYL/1bpOkOFO0YUYLgSeuYBCzESklogNPvOBnZ/MRD5f07OkpqH1trtA=="],
+
+    "@scribd-dl/engine": ["@scribd-dl/engine@workspace:packages/engine"],
+
+    "@scribd-dl/shared": ["@scribd-dl/shared@workspace:packages/shared"],
 
     "@standard-schema/spec": ["@standard-schema/spec@1.1.0", "", {}, "sha512-l2aFy5jALhniG5HgqrD6jXLi/rUWrKvqN/qJx6yoJsgKhblVd+iqqU4RCXavm/jPityDo5TCvKMnpjKnOriy0w=="],
 

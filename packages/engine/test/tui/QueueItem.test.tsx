@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { render } from "ink-testing-library";
 import { Queue } from "../../src/tui/Queue";
 import { QueueItem } from "../../src/tui/QueueItem";
-import type { Job, JobId } from "../../src/service/DownloadEngine";
+import type { Job, JobId } from "@scribd-dl/shared";
 
 const jobId = (s: string): JobId => s as JobId;
 
