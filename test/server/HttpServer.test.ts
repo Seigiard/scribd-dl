@@ -151,6 +151,90 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
   });
 });
 
+const collectFrames = (url: string, opts: { after?: () => Promise<void>; timeoutMs?: number; minFrames?: number }) =>
+  new Promise<unknown[]>((resolve, reject) => {
+    const frames: unknown[] = [];
+    const ws = new WebSocket(url);
+    const timeout = setTimeout(() => {
+      ws.close();
+      resolve(frames);
+    }, opts.timeoutMs ?? 1500);
+    ws.onopen = async () => {
+      try {
+        if (opts.after) await opts.after();
+      } catch (e) {
+        clearTimeout(timeout);
+        reject(e);
+      }
+    };
+    ws.onmessage = (e) => {
+      frames.push(JSON.parse(String(e.data)));
+      if (opts.minFrames && frames.length >= opts.minFrames) {
+        clearTimeout(timeout);
+        ws.close();
+        resolve(frames);
+      }
+    };
+    ws.onerror = () => {
+      clearTimeout(timeout);
+      reject(new Error("ws error"));
+    };
+  });
+
+describe("WebSocket /events", () => {
+  test("client connects, OPEN fires, no historical frames pushed before subscribe", async () => {
+    const frames = await collectFrames(`${baseUrl.replace("http", "ws")}/events`, { timeoutMs: 300 });
+    expect(frames).toEqual([]);
+  });
+
+  test("POST /enqueue after WS open pushes JobAdded and JobFailed for unsupported", async () => {
+    const wsUrl = `${baseUrl.replace("http", "ws")}/events`;
+    const frames = await collectFrames(wsUrl, {
+      after: async () => {
+        await fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body: j({ text: "https://example.com/x" }) });
+      },
+      minFrames: 2,
+    });
+    expect(frames.length).toBeGreaterThanOrEqual(2);
+    const tags = frames.map((f) => (f as { _tag: string })._tag);
+    expect(tags).toContain("JobAdded");
+    expect(tags).toContain("JobFailed");
+  });
+
+  test("POST /folder pushes OutputFolderChanged frame", async () => {
+    const wsUrl = `${baseUrl.replace("http", "ws")}/events`;
+    const frames = await collectFrames(wsUrl, {
+      after: async () => {
+        await fetch(`${baseUrl}/folder`, { method: "POST", headers: ct, body: j({ path: "/tmp/changed-folder" }) });
+      },
+      minFrames: 1,
+    });
+    const change = frames.find((f) => (f as { _tag: string })._tag === "OutputFolderChanged");
+    expect(change).toBeDefined();
+    expect((change as { path: string }).path).toBe("/tmp/changed-folder");
+  });
+
+  test("two concurrent WS clients both receive frames for the same enqueue", async () => {
+    const wsUrl = `${baseUrl.replace("http", "ws")}/events`;
+    // Open both, wait briefly, then enqueue.
+    const trigger = () => fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body: j({ text: "https://example.com/y" }) });
+    const both = await Promise.all([
+      collectFrames(wsUrl, {
+        after: async () => {
+          /* wait for second client */
+        },
+        minFrames: 1,
+        timeoutMs: 1200,
+      }),
+      new Promise<unknown[]>((res) =>
+        setTimeout(() => collectFrames(wsUrl, { after: () => trigger().then(() => undefined), minFrames: 1 }).then(res), 100),
+      ),
+    ]);
+    expect(both[0]!.length).toBeGreaterThanOrEqual(1);
+    expect(both[1]!.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
 describe("CORS", () => {
   test("OPTIONS preflight from tauri://localhost is allowed", async () => {
     const res = await fetch(`${baseUrl}/snapshot`, {

@@ -1,5 +1,5 @@
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import { Effect } from "effect";
+import { Effect, Stream } from "effect";
 import type { NotRemovable, NotRetryable } from "../errors/DomainErrors";
 import { DownloadEngine, type JobId } from "../service/DownloadEngine";
 
@@ -81,4 +81,25 @@ const folderPostRoute = HttpRouter.post(
   }),
 );
 
-export const router = HttpRouter.empty.pipe(snapshotRoute, enqueueRoute, removeRoute, retryRoute, folderGetRoute, folderPostRoute);
+const eventsRoute = HttpRouter.get(
+  "/events",
+  Effect.gen(function* () {
+    const engine = yield* DownloadEngine;
+    const socket = yield* HttpServerRequest.upgrade;
+    const write = yield* socket.writer;
+    const pushEvents = Stream.runForEach(engine.events, (event) => write(JSON.stringify(event)));
+    yield* Effect.forkScoped(pushEvents);
+    yield* socket.run(() => Effect.void);
+    return HttpServerResponse.empty();
+  }),
+);
+
+export const router = HttpRouter.empty.pipe(
+  snapshotRoute,
+  enqueueRoute,
+  removeRoute,
+  retryRoute,
+  folderGetRoute,
+  folderPostRoute,
+  eventsRoute,
+);
