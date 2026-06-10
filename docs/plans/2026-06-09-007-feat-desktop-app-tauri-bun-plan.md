@@ -17,6 +17,48 @@ Two notable refinements vs. origin brainstorm: per-job progress is in v1 (engine
 
 ---
 
+## Progress
+
+Branch: `feat/desktop-app`. All commits are conventional-style on this branch, do not touch `main`.
+
+| U-ID | Title                                                       | Commit    | Status   |
+| ---- | ----------------------------------------------------------- | --------- | -------- |
+| U1   | `engine.ts` + `HttpServerLive` (REST routes only)           | `8b93661` | shipped  |
+| U2   | WebSocket `/events` route                                   | `f063e66` | shipped  |
+| U3   | `app/` Vite + React + Tailwind v4 + shadcn-style scaffold   | `a24b65d` | shipped  |
+| U4   | `useEngineState` hook (HTTP + WS bridge)                    | `f7a85a1` | shipped  |
+| U5   | Header / Queue / QueueItem / StatusBar read-only render     | `38269db` | shipped  |
+| U6   | Paste handler + transient "No links found" message          | `4a8632b` | shipped  |
+| U7   | Remove + Retry actions                                      | `42ff601` | shipped  |
+| U8   | Disconnect banner + manual reconnect                        | `606cedc` | shipped  |
+| U9   | Tauri scaffold + sidecar handshake + `get_backend_url`      | —         | pending  |
+| U10  | Folder picker + persistence (Tauri)                         | —         | pending  |
+| U11  | macOS system notifications                                  | —         | pending  |
+| U12  | Quit guard                                                  | —         | pending  |
+| U13  | Packaging + smoke on clean macOS                            | —         | pending  |
+
+**Engine-side and browser-side SPA are fully shippable end-to-end without Tauri.** The browser-first dev workflow described in KTD's "Dev workflow" block is verified working: `bun run dev:spa` starts the engine on `http://127.0.0.1:4747` and Vite on `http://127.0.0.1:5173` with interleaved tagged logs, propagates `SIGINT` to both children. Open Chrome on `:5173`, paste a Scribd URL, watch the queue render live over WS, remove/retry work, disconnect banner appears when engine dies.
+
+**Test coverage on shipped work:**
+- Backend: `bun test` — 17 tests across `test/server/HttpServer.test.ts` (REST + WS + CORS scenarios).
+- Frontend: `bun run app:test` — 23 vitest cases across `app/test/{smoke,QueueItem,paste,disconnect,useEngineState}.test.tsx`.
+- Lint and format clean (`bun run lint` / `bun run format:check`).
+
+### Resume guide for fresh session
+
+When picking up U9, do these in order before touching code:
+
+1. Re-read this plan from `## High-Level Technical Design` through `## Implementation Units` — the topology, REST/WS contract, lifecycle diagrams, and remaining unit definitions are unchanged. Skim `## Open Questions` — Q1 (`@effect/platform` HttpServer + WebSocket API) is **resolved** (see Open Questions section below); Q2-Q4 and Q6-Q7 remain open and are the next-session unknowns.
+2. Run `git log --oneline main..feat/desktop-app` to see the 9 commits on this branch (1 docs + 8 U-IDs). Each commit message names the U-ID it implements.
+3. Run `bun test && bun run app:test && bun run lint && bun run format:check` from repo root. If anything fails, fix that before starting new work.
+4. Optional sanity check: `bun run dev:spa`, open Chrome on `http://127.0.0.1:5173`, paste `https://example.com/x` and confirm a Failed (unsupported) card appears in the queue. Stop the script with Ctrl+C.
+5. Now start U9. The unit's `Approach` section names the Tauri 2.x commands and config keys but the exact API surface may have shifted in current Tauri minors — verify against https://v2.tauri.app/develop/sidecar/ first. `ce-framework-docs-researcher` is the right tool if anything looks unfamiliar.
+6. U9 introduces a `src-tauri/` Rust crate. Confirm Rust toolchain is installed (`cargo --version`); install via `rustup` if not. The `app:dev` Vite config and the `engine.ts` CLI already expose the `--port`/`READY port=NNNN` contract U9 plugs into — do not reshape them.
+7. U9-U12 produce no automated test coverage by design (Rust + Tauri side-effects). Smoke is `bun run tauri:dev` (script added in U9), paste-to-Downloaded round-trip, folder picker (U10), terminal-status notification while window backgrounded (U11), quit-guard with active job (U12).
+8. U13 needs a Mac to actually smoke-test the DMG on. Build pipeline lives in `scripts/build-sidecar.sh` + Tauri's bundle config.
+
+---
+
 ## Problem Frame
 
 Two engine clients exist today: `run.ts` (single-shot CLI) and `tui.ts` (Ink-TUI). Ink-TUI delivers the desired interactive UX, but requires a terminal — Spotlight-launch isn't possible. The brainstorm closed the topology question: Bun-engine becomes an HTTP/WS service, Tauri is only a webview-host + native bridge. This plan executes that decision end-to-end: engine HTTP/WS surface, browser-first React SPA, Tauri wrapper, native bits (folder picker, notifications, quit-guard), packaging.
@@ -231,15 +273,20 @@ src-tauri/                              # Tauri Rust shim (NEW)
 
 src/server/                             # NEW under existing src/
   HttpServerLive.ts                     # @effect/platform HttpServer Layer
-  routes.ts                             # REST handlers
-  events.ts                             # WS handler
+  routes.ts                             # REST + WS handlers (shipped: U1, U2)
 
 engine.ts                               # NEW entrypoint at repo root
-                                        # mirrors run.ts shape, builds Layer + HttpServerLive
+                                        # mirrors run.ts shape, builds Layer + HttpServerLive (shipped: U1)
+
+scripts/
+  dev-spa.ts                            # bun run dev:spa — engine + Vite side-by-side
+  build-sidecar.sh                      # added in U13
 
 test/server/
-  HttpServer.test.ts                    # REST + WS tests using bun:test
+  HttpServer.test.ts                    # REST + WS tests using bun:test (shipped: U1, U2)
 ```
+
+Note: the original plan factored `routes.ts` + `events.ts` as separate files; U2 fit the WS route inline alongside REST in `routes.ts` because the shape was small enough to not earn a split. U9-U13 file paths remain as designed.
 
 `app/` and `src-tauri/` are siblings under repo root, following the Tauri 2.x convention. The existing `src/` continues to host Bun-side engine code; new `src/server/` adds the HTTP layer.
 
@@ -853,14 +900,14 @@ test/server/
 
 ## Open Questions
 
-Эти решаются в имплементации, не блокируют сейчас:
+Эти решаются в имплементации, не блокируют сейчас.
 
-1. **`@effect/platform`'s HttpServer + WebSocket API surface.** Точные имена и shape модулей в текущей версии `@effect/platform` (0.96.1). При имплементации U1/U2 проверить через `ce-framework-docs-researcher` или прямое чтение `node_modules/@effect/platform/dist`.
+1. ~~**`@effect/platform`'s HttpServer + WebSocket API surface.**~~ **Resolved in U1/U2.** `HttpRouter.empty.pipe(HttpRouter.get/post/del(...))` для routing, `HttpRouter.params` для path params, `HttpServerRequest.HttpServerRequest`'s `.json` для body, `HttpServerResponse.json(body, {status})` для responses, `HttpServerRequest.upgrade` для WS, `socket.writer` + `socket.run` для push/lifecycle. `HttpMiddleware.cors({allowedOrigins: predicate, ...})` для CORS. Composition: `HttpServer.serve(router, middleware).pipe(Layer.provideMerge(BunHttpServer.layer({port, hostname})))`. Address: `HttpServer.addressWith(addr => ...)`.
 2. **Tauri 2.x sidecar API exact API в текущей минорной версии.** `tauri::api::process::Command::new_sidecar` или новое имя, типы `CommandEvent`, async pattern для setup hook. Проверить при имплементации U9.
 3. **Tauri plugin-store / plugin-dialog / plugin-notification API в текущих версиях.** Проверить при U10, U11.
 4. **Chromium bundling strategy: bundle vs auto-download.** Решается в U13 на основе фактического размера DMG. Если bundle → +~150MB. Если auto-download → DMG ~50MB но первый запуск качает Chromium (несколько минут).
-5. **macOS application identifier** (`com.seigiard.scribd-dl` или другой). Решается перед U13.
-6. **CORS regex для dev — точное выражение.** При U1 имплементации.
+5. ~~**CORS regex для dev — точное выражение.**~~ **Resolved in U1.** Allowed if origin is in `["tauri://localhost"]` OR `URL(origin).hostname` is `localhost` или `127.0.0.1`. См. `src/server/HttpServerLive.ts`.
+6. **macOS application identifier** (`com.seigiard.scribd-dl` или другой). Решается перед U13.
 7. **WS reconnect: auto vs manual.** v1 manual (U8). Если будет заметно мешать → добавляем auto в follow-up.
 
 ---
