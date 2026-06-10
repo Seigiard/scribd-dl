@@ -1,3 +1,4 @@
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { cn } from "@/lib/utils";
@@ -5,6 +6,8 @@ import type { Job, JobStatus } from "@/lib/types";
 
 export interface QueueItemProps {
   readonly job: Job;
+  readonly onRemove?: (id: string) => void;
+  readonly onRetry?: (id: string) => void;
 }
 
 const STATUS_COLOR: Record<JobStatus, string> = {
@@ -19,8 +22,10 @@ const percent = (done: number, total: number): number => {
   return Math.min(100, Math.round((done / total) * 100));
 };
 
-export const QueueItem = ({ job }: QueueItemProps) => {
+export const QueueItem = ({ job, onRemove, onRetry }: QueueItemProps) => {
   const showProgress = job.status === "Downloading" && job.progress !== undefined;
+  const canRemove = job.status === "Queued" && onRemove !== undefined;
+  const canRetry = job.status === "Failed" && job.failure?.retryable === true && onRetry !== undefined;
   return (
     <Card data-testid="queue-item" data-job-id={job.id}>
       <CardContent className="flex flex-col gap-1 p-3">
@@ -28,9 +33,21 @@ export const QueueItem = ({ job }: QueueItemProps) => {
           <span className="truncate text-sm font-medium text-neutral-100" data-testid="job-title">
             {job.displayTitle}
           </span>
-          <span className={cn("rounded px-2 py-0.5 text-xs font-medium uppercase tracking-wide", STATUS_COLOR[job.status])} data-testid="job-status">
-            {job.status}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={cn("rounded px-2 py-0.5 text-xs font-medium uppercase tracking-wide", STATUS_COLOR[job.status])} data-testid="job-status">
+              {job.status}
+            </span>
+            {canRemove && (
+              <Button variant="ghost" size="icon" onClick={() => onRemove(job.id)} aria-label="Remove" data-testid="remove-button">
+                ×
+              </Button>
+            )}
+            {canRetry && (
+              <Button variant="outline" size="sm" onClick={() => onRetry(job.id)} data-testid="retry-button">
+                Retry
+              </Button>
+            )}
+          </div>
         </div>
         <span className="truncate font-mono text-xs text-neutral-500" data-testid="job-url">
           {job.url}

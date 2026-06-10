@@ -1,5 +1,5 @@
-import { render, screen } from "@testing-library/react";
-import { describe, expect, test } from "vitest";
+import { fireEvent, render, screen } from "@testing-library/react";
+import { describe, expect, test, vi } from "vitest";
 import { QueueItem } from "../src/components/QueueItem";
 import type { Job } from "../src/lib/types";
 
@@ -82,5 +82,62 @@ describe("QueueItem", () => {
 
     // #then
     expect(screen.getByTestId("job-reason")).toHaveTextContent("Reason: Unsupported domain");
+  });
+
+  test("Queued job with onRemove renders × button; click invokes onRemove(job.id)", () => {
+    // #given
+    const onRemove = vi.fn();
+
+    // #when
+    render(<QueueItem job={baseJob} onRemove={onRemove} />);
+    fireEvent.click(screen.getByTestId("remove-button"));
+
+    // #then
+    expect(onRemove).toHaveBeenCalledTimes(1);
+    expect(onRemove).toHaveBeenCalledWith("j1");
+  });
+
+  test("Failed retryable job with onRetry renders Retry button; click invokes onRetry(job.id)", () => {
+    // #given
+    const job: Job = { ...baseJob, status: "Failed", failure: { reason: "x", retryable: true } };
+    const onRetry = vi.fn();
+
+    // #when
+    render(<QueueItem job={job} onRetry={onRetry} />);
+    fireEvent.click(screen.getByTestId("retry-button"));
+
+    // #then
+    expect(onRetry).toHaveBeenCalledTimes(1);
+    expect(onRetry).toHaveBeenCalledWith("j1");
+  });
+
+  test("Failed unsupported (retryable=false) does not render Retry button even when onRetry is passed", () => {
+    // #given
+    const job: Job = { ...baseJob, domain: "unsupported", status: "Failed", failure: { reason: "Unsupported domain", retryable: false } };
+    const onRetry = vi.fn();
+
+    // #when
+    render(<QueueItem job={job} onRetry={onRetry} />);
+
+    // #then
+    expect(screen.queryByTestId("retry-button")).not.toBeInTheDocument();
+  });
+
+  test("Downloading and Downloaded jobs render no action buttons", () => {
+    // #given
+    const onRemove = vi.fn();
+    const onRetry = vi.fn();
+
+    // #when
+    const { rerender } = render(<QueueItem job={{ ...baseJob, status: "Downloading" }} onRemove={onRemove} onRetry={onRetry} />);
+    // #then
+    expect(screen.queryByTestId("remove-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("retry-button")).not.toBeInTheDocument();
+
+    // #when
+    rerender(<QueueItem job={{ ...baseJob, status: "Downloaded" }} onRemove={onRemove} onRetry={onRetry} />);
+    // #then
+    expect(screen.queryByTestId("remove-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("retry-button")).not.toBeInTheDocument();
   });
 });

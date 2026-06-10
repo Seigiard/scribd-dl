@@ -3,7 +3,7 @@ import { Queue } from "@/components/Queue";
 import { StatusBar } from "@/components/StatusBar";
 import { useEngineState } from "@/hooks/useEngineState";
 import { usePasteHandler } from "@/hooks/usePasteHandler";
-import { enqueueText, fetchFolder } from "@/lib/api";
+import { enqueueText, fetchFolder, removeJob, retryJob } from "@/lib/api";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 const NO_LINKS_MESSAGE = "No links found in clipboard";
@@ -50,10 +50,26 @@ export const App = () => {
 
   usePasteHandler({ onText: handlePaste });
 
+  const handleRemove = useCallback(
+    (id: string) => {
+      if (!baseUrl) return;
+      void removeJob(baseUrl, id);
+    },
+    [baseUrl],
+  );
+
+  const handleRetry = useCallback(
+    (id: string) => {
+      if (!baseUrl) return;
+      void retryJob(baseUrl, id);
+    },
+    [baseUrl],
+  );
+
   return (
     <div className="flex h-full flex-col bg-neutral-950">
       <Header folder={folder} />
-      <Queue snapshot={snapshot} />
+      <Queue snapshot={snapshot} onRemove={handleRemove} onRetry={handleRetry} />
       <StatusBar transientMessage={transientMessage} />
     </div>
   );
