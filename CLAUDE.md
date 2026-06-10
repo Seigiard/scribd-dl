@@ -15,6 +15,7 @@ bun run engine            # launch HTTP/WS sidecar (default port 4747)
 bun run tui               # launch Ink terminal UI client (requires engine running)
 bun run app:dev           # Vite dev server for the SPA (apps/web)
 bun run dev:spa           # engine + Vite together
+bun run dev:tui           # engine (backgrounded, logs to .dev-tui-engine.log) + TUI in foreground
 bun run test              # all workspace tests (engine bun:test + web Vitest)
 bun --filter @scribd-dl/engine test                  # one workspace's tests
 bun --cwd packages/engine test path/to.test.ts       # single test file

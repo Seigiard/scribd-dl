@@ -105,6 +105,7 @@ Ensure you have the legal right and platform permission to download the referenc
 | `bun run tui` | Launch the Ink terminal UI client. Requires `bun run engine` running first; accepts `--engine-url` (default `http://localhost:4747`). |
 | `bun run app:dev` | Start the Vite dev server for the SPA in `apps/web`. |
 | `bun run dev:spa` | Run the engine and Vite side-by-side with interleaved logs. |
+| `bun run dev:tui` | Run the engine in the background and the TUI in the foreground (engine logs to `.dev-tui-engine.log`). |
 | `bun run test` | Run all workspace tests (engine `bun:test` + web Vitest). |
 
 ## Conventions ##

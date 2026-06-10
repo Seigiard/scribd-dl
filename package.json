@@ -21,6 +21,7 @@
     "app:build": "bun --filter @scribd-dl/web build",
     "app:test": "bun --filter @scribd-dl/web test",
     "dev:spa": "bun scripts/dev-spa.ts",
+    "dev:tui": "bun scripts/dev-tui.ts",
     "test": "bun --filter '*' test",
     "test:smoke": "bun --filter @scribd-dl/engine test:smoke",
     "test:watch": "bun --filter @scribd-dl/engine test:watch",
