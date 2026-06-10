@@ -2,14 +2,16 @@ import { Command } from "@effect/cli";
 import { HttpServer } from "@effect/platform";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
+import { ConfigStoreLive } from "./src/service/ConfigStore";
 import { DownloadEngineLive } from "./src/service/DownloadEngine";
+import { JobStoreLive } from "./src/service/JobStore";
 import { ScribdDownloaderLive } from "./src/service/ScribdDownloader";
-import { type ConfigData, makeConfigLoader } from "./src/utils/io/ConfigLoader";
+import { DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
 import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
 import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
 import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
 import { TitleResolverLive } from "./src/utils/request/TitleResolver";
-import { outputOpt, filenameOpt, rendertimeOpt, portOpt } from "./src/cli/options";
+import { portOpt } from "./src/cli/options";
 import { HttpServerLive } from "./src/server/HttpServerLive";
 
 const printReady = HttpServer.addressWith((address) =>
@@ -24,23 +26,20 @@ const printReady = HttpServer.addressWith((address) =>
 
 const program = printReady.pipe(Effect.zipRight(Effect.never));
 
-const buildEngineLayer = (config: ConfigData) => {
-  const ConfigLayer = makeConfigLoader(config);
+const buildEngineLayer = () => {
+  const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
   const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive, TitleResolverLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
-  return Layer.provide(DownloadEngineLive, Layer.mergeAll(ScribdLayer, ConfigLayer));
+  const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
+  const EngineDeps = Layer.mergeAll(ScribdLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive);
+  return Layer.provide(DownloadEngineLive, EngineDeps);
 };
 
-const command = Command.make(
-  "scribd-dl-engine",
-  { output: outputOpt, filename: filenameOpt, rendertime: rendertimeOpt, port: portOpt },
-  ({ output, filename, rendertime, port }) => {
-    const config: ConfigData = { scribd: { rendertime }, directory: { output, filename } };
-    const EngineLayer = buildEngineLayer(config);
-    const ServerLayer = HttpServerLive(port).pipe(Layer.provide(EngineLayer));
-    return Effect.scoped(program).pipe(Effect.provide(ServerLayer));
-  },
-).pipe(Command.withDescription("Run the scribd-dl download engine as a localhost HTTP/WS server."));
+const command = Command.make("scribd-dl-engine", { port: portOpt }, ({ port }) => {
+  const EngineLayer = buildEngineLayer();
+  const ServerLayer = HttpServerLive(port).pipe(Layer.provide(EngineLayer));
+  return Effect.scoped(program).pipe(Effect.provide(ServerLayer));
+}).pipe(Command.withDescription("Run the scribd-dl download engine as a localhost HTTP/WS server."));
 
 const cli = Command.run(command, {
   name: "Scribd Downloader Engine",

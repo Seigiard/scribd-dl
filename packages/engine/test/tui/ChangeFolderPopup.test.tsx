@@ -1,6 +1,6 @@
 import { describe, expect, mock, test } from "bun:test";
 import { render } from "ink-testing-library";
-import { ChangeFolderPopup } from "../src/tui/ChangeFolderPopup";
+import { ChangeFolderPopup } from "../../src/tui/ChangeFolderPopup";
 
 const flush = (ms = 30) => new Promise<void>((r) => setTimeout(r, ms));
 

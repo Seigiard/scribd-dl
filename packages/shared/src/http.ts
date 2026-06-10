@@ -22,3 +22,7 @@ export interface ErrorResponse {
   readonly error: string;
   readonly status?: string;
 }
+
+export interface ClearResponse {
+  readonly removed: number;
+}

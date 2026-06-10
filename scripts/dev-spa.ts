@@ -10,7 +10,6 @@ import { fileURLToPath } from "node:url";
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
 const ENGINE_PORT = process.env.SCRIBD_DL_ENGINE_PORT ?? "4747";
-const OUTPUT = process.env.SCRIBD_DL_OUTPUT ?? "output";
 
 const procs: ReturnType<typeof spawn>[] = [];
 
@@ -65,7 +64,7 @@ const shutdown = (exitCode: number) => {
 process.on("SIGINT", () => shutdown(0));
 process.on("SIGTERM", () => shutdown(0));
 
-launch("engine", "36", "bun", ["packages/engine/engine.ts", "--port", ENGINE_PORT, "--output", OUTPUT], ROOT);
+launch("engine", "36", "bun", ["packages/engine/engine.ts", "--port", ENGINE_PORT], ROOT);
 launch("vite", "35", "bun", ["run", "dev"], resolve(ROOT, "apps/web"));
 
 process.stdout.write(`\x1b[2mdev:spa — engine on http://127.0.0.1:${ENGINE_PORT}, Vite on http://127.0.0.1:5173\x1b[0m\n`);

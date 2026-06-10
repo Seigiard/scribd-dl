@@ -1,17 +1,22 @@
 import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
 import { Effect, Fiber, Layer } from "effect";
 import { HttpServer } from "@effect/platform";
+import type { Job } from "@scribd-dl/shared";
+import { ConfigStore, type ConfigStoreService } from "../../src/service/ConfigStore";
 import { DownloadEngineLive } from "../../src/service/DownloadEngine";
+import { JobStore, type JobStoreService } from "../../src/service/JobStore";
 import { ScribdDownloader, type ScribdDownloaderService } from "../../src/service/ScribdDownloader";
 import { ConfigLoader, type ConfigData } from "../../src/utils/io/ConfigLoader";
 import { HttpServerLive } from "../../src/server/HttpServerLive";
 
 interface MockState {
   scribdExecute: ReturnType<typeof mock>;
+  restoredJobs: ReadonlyArray<Job>;
 }
 
 const state: MockState = {
   scribdExecute: mock(() => Effect.void),
+  restoredJobs: [],
 };
 
 const defaultConfig: ConfigData = {
@@ -23,8 +28,21 @@ const scribdMockLayer = Layer.succeed(ScribdDownloader, {
   execute: (url, folder, onEvent) => state.scribdExecute(url, folder, onEvent) as ReturnType<ScribdDownloaderService["execute"]>,
 } satisfies ScribdDownloaderService);
 
+const configStoreMockLayer = Layer.succeed(ConfigStore, {
+  read: Effect.sync(() => ({ outputFolder: defaultConfig.directory.output })),
+  write: () => Effect.void,
+} satisfies ConfigStoreService);
+
+const jobStoreMockLayer = Layer.succeed(JobStore, {
+  read: Effect.sync(() => state.restoredJobs),
+  write: () => Effect.void,
+} satisfies JobStoreService);
+
 const buildEngineLayer = (config: ConfigData = defaultConfig) =>
-  Layer.provide(DownloadEngineLive, Layer.mergeAll(scribdMockLayer, Layer.succeed(ConfigLoader, config)));
+  Layer.provide(
+    DownloadEngineLive,
+    Layer.mergeAll(scribdMockLayer, Layer.succeed(ConfigLoader, config), configStoreMockLayer, jobStoreMockLayer),
+  );
 
 let serverFiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;
 let baseUrl = "";
@@ -232,6 +250,74 @@ describe("WebSocket /events", () => {
     ]);
     expect(both[0]!.length).toBeGreaterThanOrEqual(1);
     expect(both[1]!.length).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe("HttpServer clear endpoints", () => {
+  // The shared server is used by prior tests, which leave the worker busy on a
+  // never-resolving scribd job. So we can't easily produce a Downloaded job here.
+  // Downloaded-path behavior is covered at the engine level in DownloadEngine.test.ts.
+  // These tests cover the HTTP contract: status code, response shape, route ordering.
+
+  test("DELETE /jobs/failed returns 200 with removed count and removes the job", async () => {
+    // #given — enqueue an unsupported URL (immediately Failed without needing the worker)
+    const enq = await fetch(`${baseUrl}/enqueue`, {
+      method: "POST",
+      headers: ct,
+      body: j({ text: "https://example.com/clear-failed-test" }),
+    });
+    const enqBody = (await enq.json()) as { jobs: Array<{ id: string; status: string }> };
+    const newId = enqBody.jobs[0]!.id;
+    expect(enqBody.jobs[0]!.status).toBe("Failed");
+
+    // #when
+    const res = await fetch(`${baseUrl}/jobs/failed`, { method: "DELETE" });
+
+    // #then
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { removed: number };
+    expect(body.removed).toBeGreaterThanOrEqual(1);
+
+    const snap = (await (await fetch(`${baseUrl}/snapshot`)).json()) as { jobs: Array<{ id: string }> };
+    expect(snap.jobs.find((jb) => jb.id === newId)).toBeUndefined();
+  });
+
+  test("DELETE /jobs/failed with no failed left returns 200 removed:0", async () => {
+    // #given — prior test cleared all failed; verify again
+
+    // #when
+    const res = await fetch(`${baseUrl}/jobs/failed`, { method: "DELETE" });
+
+    // #then
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ removed: 0 });
+  });
+
+  test("DELETE /jobs/completed with no completed returns 200 removed:0", async () => {
+    // #when
+    const res = await fetch(`${baseUrl}/jobs/completed`, { method: "DELETE" });
+
+    // #then — route matches /jobs/completed (not /jobs/:id with id='completed')
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ removed: 0 });
+  });
+
+  test("DELETE /jobs/:id on Failed returns 204 (broadened from Queued-only)", async () => {
+    // #given — enqueue an unsupported URL (Failed)
+    const enq = await fetch(`${baseUrl}/enqueue`, {
+      method: "POST",
+      headers: ct,
+      body: j({ text: "https://example.com/remove-failed-broaden-test" }),
+    });
+    const enqBody = (await enq.json()) as { jobs: Array<{ id: string; status: string }> };
+    const newId = enqBody.jobs[0]!.id;
+    expect(enqBody.jobs[0]!.status).toBe("Failed");
+
+    // #when
+    const res = await fetch(`${baseUrl}/jobs/${newId}`, { method: "DELETE" });
+
+    // #then
+    expect(res.status).toBe(204);
   });
 });
 

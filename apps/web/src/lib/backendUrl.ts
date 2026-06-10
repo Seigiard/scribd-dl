@@ -30,3 +30,5 @@ export const getBackendUrl = async (): Promise<string> => {
   // Vite dev / plain browser.
   return DEV_FALLBACK;
 };
+
+export const toWsUrl = (httpUrl: string): string => httpUrl.replace(/^http/, "ws");

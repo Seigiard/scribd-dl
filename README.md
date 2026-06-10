@@ -51,61 +51,39 @@ bun install
 
 ```text
 packages/
-  engine/         # headless CLI + HTTP/WS sidecar (Effect.ts)
-  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract + thin client
+  engine/         # CLI + HTTP/WS sidecar + Ink TUI (Effect.ts)
+  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract
 apps/
-  tui/            # @scribd-dl/tui — Ink/React terminal client (HTTP/WS)
-  web/            # @scribd-dl/web — Vite SPA client (HTTP/WS)
+  web/            # @scribd-dl/web — Vite SPA client
   desktop/        # reserved slot for the future Tauri client
 ```
 
 Cross-package types live in `@scribd-dl/shared`. Duplicating them in consumers is forbidden — engine and web both import the contract from there.
 
-## Usage (CLI) ##
+## Usage ##
+
+The engine is a localhost HTTP/WS sidecar. Clients (Ink TUI, Vite SPA, future Tauri desktop) talk to it for queue and progress.
 
 ```console
-Usage: bun start [-o, --output <dir>] [--filename <mode>] [--rendertime <ms>] <url-or-file>
+bun run engine            # start the engine on default port 4747
+bun run tui               # launch the Ink TUI client (auto-connects to a local engine)
+bun run dev:spa           # run engine + Vite side-by-side with interleaved logs
 ```
 
-Single URL:
-```console
-bun start "https://www.scribd.com/document/123456789/Example-Document"
-```
+Engine state (download folder and job queue) is persisted under `~/.config/scribd-dl/`:
 
-Batch mode — pass a file with one URL per line (`#` starts a comment, markdown bullets and inline text tolerated):
-```console
-bun start ./urls.txt
-```
+| File | Purpose |
+| --- | --- |
+| `settings.json` | Persistent `outputFolder` chosen by the user. |
+| `jobs.jsonl` | State-snapshot of the queue (one job per line). Jobs that were `Downloading` when the engine stopped are restored as `Queued`. |
 
-### Flags ###
+There is no config file beyond `settings.json` — `outputFolder` is the only persistent setting; everything else lives as constants in the code.
 
-All settings are CLI flags — there is no config file.
-
-| Flag | Default | Description |
-| --- | --- | --- |
-| `-o, --output <dir>` | `output` | Output folder for generated PDFs. |
-| `--filename <mode>` | `title` | `title` uses the document title; any other value falls back to the document ID. |
-| `--rendertime <ms>` | `100` | Wait time (ms) for Scribd lazy-load to settle before extracting pages. |
-
-Examples:
-```console
-bun start -o ~/Downloads/scribd "https://www.scribd.com/document/123456789/Example-Document"
-bun start --rendertime 300 --filename id ./urls.txt
-```
-
-`bun start --help` prints the full flag reference.
-
-Ensure you have the legal right and platform permission to download the referenced content before using this command.
-
-## Other entry points ##
+### Other entry points ###
 
 | Command | What it does |
 | --- | --- |
-| `bun run engine` | Run the HTTP/WS sidecar engine (default port 4747) for the TUI, SPA, and future desktop clients. |
-| `bun run tui` | Launch the Ink terminal UI client. Requires `bun run engine` running first; accepts `--engine-url` (default `http://localhost:4747`). |
 | `bun run app:dev` | Start the Vite dev server for the SPA in `apps/web`. |
-| `bun run dev:spa` | Run the engine and Vite side-by-side with interleaved logs. |
-| `bun run dev:tui` | Run the engine in the background and the TUI in the foreground (engine logs to `.dev-tui-engine.log`). |
 | `bun run test` | Run all workspace tests (engine `bun:test` + web Vitest). |
 
 ## Conventions ##

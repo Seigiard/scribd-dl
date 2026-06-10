@@ -51,3 +51,9 @@ export class NotRetryable extends Data.TaggedError("NotRetryable")<{
   readonly id: string;
   readonly status: string;
 }> {}
+
+export class PersistenceFailed extends Data.TaggedError("PersistenceFailed")<{
+  readonly path: string;
+  readonly op: "read" | "write";
+  readonly cause: unknown;
+}> {}

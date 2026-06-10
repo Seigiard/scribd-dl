@@ -31,6 +31,24 @@ const enqueueRoute = HttpRouter.post(
   }),
 );
 
+const clearCompletedRoute = HttpRouter.del(
+  "/jobs/completed",
+  Effect.gen(function* () {
+    const engine = yield* DownloadEngine;
+    const removed = yield* engine.clearCompleted;
+    return yield* HttpServerResponse.json({ removed });
+  }),
+);
+
+const clearFailedRoute = HttpRouter.del(
+  "/jobs/failed",
+  Effect.gen(function* () {
+    const engine = yield* DownloadEngine;
+    const removed = yield* engine.clearFailed;
+    return yield* HttpServerResponse.json({ removed });
+  }),
+);
+
 const removeRoute = HttpRouter.del(
   "/jobs/:id",
   Effect.gen(function* () {
@@ -98,6 +116,8 @@ const eventsRoute = HttpRouter.get(
 export const router = HttpRouter.empty.pipe(
   snapshotRoute,
   enqueueRoute,
+  clearCompletedRoute,
+  clearFailedRoute,
   removeRoute,
   retryRoute,
   folderGetRoute,

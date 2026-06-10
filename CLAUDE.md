@@ -10,12 +10,10 @@ Repository is a **Bun workspaces monorepo** — one root `bun.lock`, one hoisted
 
 ```bash
 bun install               # install deps for all workspaces (single root bun.lock)
-bun start <url-or-file>   # run CLI: single URL, or path to a file with URLs
-bun run engine            # launch HTTP/WS sidecar (default port 4747)
-bun run tui               # launch Ink terminal UI client (requires engine running)
+bun run engine            # launch HTTP/WS sidecar (default port 4747) — only entry point
+bun run tui               # launch Ink terminal UI (client of engine)
 bun run app:dev           # Vite dev server for the SPA (apps/web)
 bun run dev:spa           # engine + Vite together
-bun run dev:tui           # engine (backgrounded, logs to .dev-tui-engine.log) + TUI in foreground
 bun run test              # all workspace tests (engine bun:test + web Vitest)
 bun --filter @scribd-dl/engine test                  # one workspace's tests
 bun --cwd packages/engine test path/to.test.ts       # single test file
@@ -29,14 +27,13 @@ bun run format:check      # oxfmt --check (CI)
 
 ```text
 packages/
-  engine/         # @scribd-dl/engine — headless: CLI (run.ts) + HTTP/WS sidecar (engine.ts)
-  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract + thin client (client.ts)
+  engine/         # @scribd-dl/engine — HTTP/WS sidecar (engine.ts), Ink TUI (tui.ts)
+  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract (single source of truth)
 apps/
-  tui/            # @scribd-dl/tui — Ink/React TUI client (HTTP/WS via @scribd-dl/shared)
-  web/            # @scribd-dl/web — Vite SPA client (HTTP/WS via @scribd-dl/shared)
+  web/            # @scribd-dl/web — Vite SPA client
   desktop/        # reserved slot for the future Tauri client
 docs/             # plans, brainstorms, requirements (lives at repo root)
-output/           # runtime artefact dir (lives at repo root; see Architecture note)
+output/           # default download dir (lives at repo root; see Architecture note)
 scripts/          # repo-root tooling (dev-spa.ts launches engine + Vite together)
 ```
 
@@ -46,28 +43,30 @@ Internal versioning between workspaces uses `"@scribd-dl/shared": "workspace:*"`
 
 Scribd-only product. Slideshare and Everand support was removed.
 
-Entry point `packages/engine/run.ts` uses `@effect/cli` for argv parsing and `BunRuntime.runMain` (guarded by `import.meta.main` so tests can import `runCli` without bootstrapping the CLI). `runCli(arg)` branches on `existsSync(arg)`: existing file → `Bun.file(arg).text()`; otherwise → `arg` is treated as raw text. The text is handed to `DownloadEngine.enqueue`, which extracts URLs, classifies them, and drives them through the queue.
+The single entry point is `packages/engine/engine.ts` — `@effect/cli` parses one option (`--port`) and starts the HTTP/WS sidecar via `BunRuntime.runMain`. There is no standalone CLI download mode; all clients (Ink TUI, Vite SPA, future Tauri desktop) talk to the engine over HTTP/WS.
 
 The downloader runs on [Effect.ts](https://effect.website/) with **Layer-based dependency injection** instead of singleton instances. Each component is a `Context.Tag` with a `*Live` Layer:
 
-- `DownloadEngine` (`packages/engine/src/service/DownloadEngine.ts`) — event-driven job queue. `enqueue(text)` extracts URLs and classifies scribd vs unsupported, supported go to a single-fiber worker, unsupported immediately become Failed Jobs (`retryable: false`). Exposes `remove / retry / snapshot / events`. UI clients (Ink TUI in `apps/tui`, SPA in `apps/web`, future Tauri desktop) consume the engine over HTTP/WS via `@scribd-dl/shared`; they do not link the engine in-process.
+- `DownloadEngine` (`packages/engine/src/service/DownloadEngine.ts`) — event-driven job queue. `enqueue(text)` extracts URLs and classifies scribd vs unsupported, supported go to a single-fiber worker, unsupported immediately become Failed Jobs (`retryable: false`). Exposes `remove / retry / snapshot / events / outputFolder / setOutputFolder`. Other UIs plug into the same `Context.Tag` without changing the engine.
+- `ConfigStore` (`packages/engine/src/service/ConfigStore.ts`) — persistent `outputFolder` setting backed by `~/.config/scribd-dl/settings.json`. Atomic write via tmp+rename. Corrupt/missing files fall back to defaults with a warning.
+- `JobStore` (`packages/engine/src/service/JobStore.ts`) — persistent state-snapshot of the queue backed by `~/.config/scribd-dl/jobs.jsonl` (one JSON-encoded `Job` per line). Atomic write serialized by a Semaphore. On read, `Downloading` is normalized to `Queued` (with `progress` dropped) so a kill-mid-flight engine resumes work on next start.
 - `ScribdDownloader` (`packages/engine/src/service/ScribdDownloader.ts`) — Effect-based scraping + PDF generation, consumed by `DownloadEngine`'s worker as the executor of one job.
 - `PuppeteerSg` (`packages/engine/src/utils/request/PuppeteerSg.ts`) — `Layer.scoped` over `Effect.acquireRelease(puppeteer.launch, browser.close)`. **Scope guarantees browser cleanup** on success, error, and interrupt — no `process.on("exit")` best-effort logic.
 - `PdfGenerator` (`packages/engine/src/utils/io/PdfGenerator.ts`) — Effect wrapper over `pdf-lib` (`merge` only; image-flow `generate` was removed with Slideshare).
-- `ConfigLoader` (`packages/engine/src/utils/io/ConfigLoader.ts`) — `Context.Tag` exposing `ConfigData`. `makeConfigLoader(data)` returns a `Layer.succeed`. Defaults live in `DEFAULT_CONFIG`. `run.ts` builds the layer from CLI options (`--output`, `--filename`, `--rendertime`) — no file is read at startup; any wrapper or shell can override via flags.
+- `ConfigLoader` (`packages/engine/src/utils/io/ConfigLoader.ts`) — `Context.Tag` exposing the *static defaults* (`DEFAULT_CONFIG`: `rendertime`, `filename`, default `outputFolder`). `makeConfigLoader(data)` returns a `Layer.succeed`. Persistent overrides live in `ConfigStore`; `ConfigLoader` is the floor.
 - `DirectoryIo` (`packages/engine/src/utils/io/DirectoryIo.ts`) — `fs.promises.mkdir/rm` wrapped in tagged errors (`DirectoryIoFailed`).
 
 Domain errors live in `packages/engine/src/errors/DomainErrors.ts` as `Data.TaggedError` classes. Each `*Live` Layer fails into one of them; consumers see typed error channels.
 
-`run.ts` composes all Layers and provides them to the handler effect — `PuppeteerSgLive` is intentionally kept out of the top-level CLI layer so `@effect/cli --help` does not spawn a browser.
+**Persistence behavior.** `DownloadEngine` reads `ConfigStore` and `JobStore` once during its `Layer.scoped` acquire, seeds its `Ref<Map>` + `Ref<folder>` from them, and writes back on every status / title / folder mutation. `JobProgress` events are broadcast on WS but **never** persisted — only state that survives a restart hits disk. Persist errors are logged but never fail the operation that caused them.
 
-Configuration: passed as CLI flags. `--filename title` uses document title as the output filename; any other value falls back to the document ID. `--output <dir>` (default `output/`), sanitized via `sanitize-filename`. `--rendertime <ms>` controls Scribd lazy-load wait before page extraction. There is no config file — flags only.
+Configuration: there are no CLI flags for `outputFolder` / `filename` / `rendertime`. `outputFolder` is mutated via `POST /folder` (or persisted on startup); `filename` and `rendertime` are constants in `DEFAULT_CONFIG`.
 
-**`output/` location:** root scripts that produce files invoke entry points by direct path (e.g. `bun packages/engine/run.ts`, `bun apps/tui/tui.ts`), never `bun --cwd <workspace> …`, so `process.cwd()` stays at repo root and `output/` lands at repo root regardless of which entry point ran. Do not switch these to `--cwd`.
+**`output/` location:** when nothing has been persisted yet, the engine uses `DEFAULT_CONFIG.directory.output` (`"output"`), resolved against `process.cwd()`. `bun run engine` runs from the repo root so `output/` lands there.
 
 ## Wire contract
 
-`packages/shared` is the **single source of truth** for the job/HTTP/WS contract — `Job`, `JobId`, `JobStatus`, `JobDomain`, `JobFailure`, `JobProgress`, `EngineSnapshot`, `JobEvent`, `ProgressStage` in `jobs.ts`; HTTP request/response body shapes in `http.ts`. It also ships a thin **plain-Promise HTTP/WS client** (`client.ts` — `fetchSnapshot`, `enqueueText`, `removeJob`, `retryJob`, `fetchFolder`, `setFolder`, `subscribeEvents`, `toWsUrl`) used by both `apps/web` and `apps/tui`. Built on global `fetch`/`WebSocket` — no `effect` runtime in shared. `packages/engine`, `apps/web`, and `apps/tui` all import from `@scribd-dl/shared`. Duplicating these types or transport functions in any consumer is forbidden — if the contract changes, edit `packages/shared/src/{jobs,http,client}.ts` and let TypeScript surface the consumer breaks.
+`packages/shared` is the **single source of truth** for the job/HTTP/WS contract — `Job`, `JobId`, `JobStatus`, `JobDomain`, `JobFailure`, `JobProgress`, `EngineSnapshot`, `JobEvent`, `ProgressStage` in `jobs.ts`; HTTP request/response body shapes in `http.ts`. Both `packages/engine` and `apps/web` import from `@scribd-dl/shared`. Duplicating these types in any consumer is forbidden — if the contract changes, edit `packages/shared/src/jobs.ts` or `http.ts` and let TypeScript surface the consumer breaks.
 
 ## URL parsing for batch input
 
