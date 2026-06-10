@@ -32,8 +32,6 @@ This tool does not remove paywalls, circumvent protections, or provide unauthori
 
 Install [Bun](https://bun.sh/docs/installation) (recommended: version `1.3.14` or newer) to run this tool locally.
 
-If you prefer not to install Bun locally, use the Docker workflow below.
-
 Confirm installation:
 ```console
 bun -v
@@ -42,12 +40,25 @@ The command should print the installed Bun version.
 
 ## Setup ##
 
-Clone the repository and install dependencies:
+Clone the repository and install dependencies (Bun workspaces — single `bun install` at the root hoists everything):
 ```console
 git clone https://github.com/rkwyu/scribd-dl
 cd scribd-dl
 bun install
 ```
+
+## Repository layout ##
+
+```text
+packages/
+  engine/         # CLI + HTTP/WS sidecar + Ink TUI (Effect.ts)
+  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract
+apps/
+  web/            # @scribd-dl/web — Vite SPA client
+  desktop/        # reserved slot for the future Tauri client
+```
+
+Cross-package types live in `@scribd-dl/shared`. Duplicating them in consumers is forbidden — engine and web both import the contract from there.
 
 ## Usage (CLI) ##
 
@@ -62,7 +73,7 @@ bun start "https://www.scribd.com/document/123456789/Example-Document"
 
 Batch mode — pass a file with one URL per line (`#` starts a comment, markdown bullets and inline text tolerated):
 ```console
-bun start ./links.md
+bun start ./urls.txt
 ```
 
 ### Flags ###
@@ -78,24 +89,22 @@ All settings are CLI flags — there is no config file.
 Examples:
 ```console
 bun start -o ~/Downloads/scribd "https://www.scribd.com/document/123456789/Example-Document"
-bun start --rendertime 300 --filename id ./links.md
+bun start --rendertime 300 --filename id ./urls.txt
 ```
 
 `bun start --help` prints the full flag reference.
 
 Ensure you have the legal right and platform permission to download the referenced content before using this command.
 
-## Usage (Docker) ##
+## Other entry points ##
 
-Docker builds an image with Bun and Chromium included, so it does not require Bun on the host:
-```console
-./docker-download.sh "https://www.scribd.com/document/123456789/Example-Document"
-```
-
-Downloaded files are written to `output` by default. Override the output directory with `SCRIBD_DL_OUTPUT`, which the wrapper forwards as `--output` to the binary:
-```console
-SCRIBD_DL_OUTPUT=/path/to/output ./docker-download.sh "https://www.scribd.com/document/123456789/Example-Document"
-```
+| Command | What it does |
+| --- | --- |
+| `bun run tui` | Launch the Ink-based terminal UI client. |
+| `bun run engine` | Run the HTTP/WS sidecar engine (default port 4747) for the SPA and future desktop clients. |
+| `bun run app:dev` | Start the Vite dev server for the SPA in `apps/web`. |
+| `bun run dev:spa` | Run the engine and Vite side-by-side with interleaved logs. |
+| `bun run test` | Run all workspace tests (engine `bun:test` + web Vitest). |
 
 ## Conventions ##
 

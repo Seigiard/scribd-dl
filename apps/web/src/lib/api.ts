@@ -1,12 +1,4 @@
-import type { EngineSnapshot, Job } from "./types";
-
-interface EnqueueResponse {
-  readonly jobs: ReadonlyArray<Job>;
-}
-
-interface FolderResponse {
-  readonly path: string;
-}
+import type { EngineSnapshot, EnqueueResponse, FolderResponse } from "@scribd-dl/shared";
 
 const json = { "Content-Type": "application/json" };
 
