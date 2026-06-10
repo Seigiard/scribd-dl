@@ -5,8 +5,17 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>scribd-dl</title>
   </head>
-  <body class="bg-neutral-950 text-neutral-100 antialiased">
-    <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+  <body>
+    <sd-app>
+      <article class="terminal-card">
+        <header>Scribd downloader</header>
+        <sd-header></sd-header>
+        <sd-disconnect-banner hidden></sd-disconnect-banner>
+        <sd-queue></sd-queue>
+        <sd-statusbar></sd-statusbar>
+      </article>
+      <sd-folder-modal hidden></sd-folder-modal>
+    </sd-app>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
