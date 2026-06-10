@@ -1,3 +1,4 @@
+import { DisconnectBanner } from "@/components/DisconnectBanner";
 import { Header } from "@/components/Header";
 import { Queue } from "@/components/Queue";
 import { StatusBar } from "@/components/StatusBar";
@@ -10,7 +11,7 @@ const NO_LINKS_MESSAGE = "No links found in clipboard";
 const TRANSIENT_MS = 2000;
 
 export const App = () => {
-  const { snapshot, baseUrl } = useEngineState();
+  const { snapshot, baseUrl, isConnected, reconnect } = useEngineState();
   const [folder, setFolder] = useState<string | null>(null);
   const [transientMessage, setTransientMessage] = useState<string | null>(null);
   const transientTimerRef = useRef<number | null>(null);
@@ -69,6 +70,7 @@ export const App = () => {
   return (
     <div className="flex h-full flex-col bg-neutral-950">
       <Header folder={folder} />
+      {!isConnected && baseUrl && <DisconnectBanner onReconnect={reconnect} />}
       <Queue snapshot={snapshot} onRemove={handleRemove} onRetry={handleRetry} />
       <StatusBar transientMessage={transientMessage} />
     </div>
