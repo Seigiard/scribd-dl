@@ -1,19 +1,5 @@
 @import "terminal.css";
 
-:root {
-  color-scheme: dark;
-  --background-color: #0e0f12;
-  --font-color: #d8dbe0;
-  --invert-font-color: #0e0f12;
-  --primary-color: #6ee7b7;
-  --secondary-color: #8c9099;
-  --error-color: #ff6b9d;
-  --progress-bar-background: #2a2d33;
-  --progress-bar-fill: var(--primary-color);
-  --code-bg-color: #1a1c20;
-  --block-background-color: #15171b;
-}
-
 [hidden] {
   display: none !important;
 }
@@ -22,8 +8,6 @@ html,
 body {
   min-height: 100%;
   margin: 0;
-  background-color: var(--background-color);
-  color: var(--font-color);
 }
 
 body > sd-app {
