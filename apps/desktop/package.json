@@ -1,0 +1,9 @@
+{
+  "name": "@scribd-dl/desktop",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "//": "Placeholder: real Tauri scripts land when the desktop client is implemented."
+  }
+}

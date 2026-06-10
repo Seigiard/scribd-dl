@@ -9,6 +9,10 @@
         "oxlint": "^1.69.0",
       },
     },
+    "apps/desktop": {
+      "name": "@scribd-dl/desktop",
+      "version": "0.0.0",
+    },
     "apps/web": {
       "name": "@scribd-dl/web",
       "version": "0.1.0",
@@ -417,6 +421,8 @@
     "@rollup/rollup-win32-x64-gnu": ["@rollup/rollup-win32-x64-gnu@4.61.1", "", { "os": "win32", "cpu": "x64" }, "sha512-gK1iCEPfpoSG9wfBihXxvBMi8ZfcWffYkEsC/Eih+iFENTaewvNcrEQ69lIOWYO5pePHKLHHO7nq5AILGO/HQQ=="],
 
     "@rollup/rollup-win32-x64-msvc": ["@rollup/rollup-win32-x64-msvc@4.61.1", "", { "os": "win32", "cpu": "x64" }, "sha512-X+zaP2x+j4RXGfbp/seSoRHWnPxzApilDszisZxbYH5C/jTxFhCtDNdPGZb9lJyYPs24wGxruPF7Y+sIXt9Gzw=="],
+
+    "@scribd-dl/desktop": ["@scribd-dl/desktop@workspace:apps/desktop"],
 
     "@scribd-dl/engine": ["@scribd-dl/engine@workspace:packages/engine"],
 
