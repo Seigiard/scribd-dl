@@ -100,8 +100,8 @@ const processPage = (
         win.__helpers__.removeMarginSelectorAll("div.outer_page_container div[id^='outer_page_']");
 
         // eslint-disable-next-line no-undef
-        const overlay = document.querySelector("div.mobile_overlay a") as HTMLAnchorElement | null;
-        const title = overlay ? decodeURIComponent(overlay.href.split("/").pop()!.trim()) : null;
+        const titleElement = document.querySelector('[data-e2e="doc_page_title"]');
+        const title = titleElement?.textContent?.trim() || null;
         const pages: Array<{ id: string; width: number; height: number }> = [];
         // eslint-disable-next-line no-undef
         document.querySelectorAll("div.outer_page_container div[id^='outer_page_']").forEach((dom) => {
