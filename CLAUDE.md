@@ -11,9 +11,10 @@ Repository is a **Bun workspaces monorepo** — one root `bun.lock`, one hoisted
 ```bash
 bun install               # install deps for all workspaces (single root bun.lock)
 bun run engine            # launch HTTP/WS sidecar (default port 4747) — only entry point
-bun run tui               # launch Ink terminal UI (client of engine)
+bun run tui               # launch Ink terminal UI (apps/tui client of engine)
 bun run app:dev           # Vite dev server for the SPA (apps/web)
 bun run dev:spa           # engine + Vite together
+bun run dev:tui           # engine (backgrounded, logs to .dev-tui-engine.log) + TUI in foreground
 bun run test              # all workspace tests (engine bun:test + web Vitest)
 bun --filter @scribd-dl/engine test                  # one workspace's tests
 bun --cwd packages/engine test path/to.test.ts       # single test file
@@ -27,10 +28,11 @@ bun run format:check      # oxfmt --check (CI)
 
 ```text
 packages/
-  engine/         # @scribd-dl/engine — HTTP/WS sidecar (engine.ts), Ink TUI (tui.ts)
-  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract (single source of truth)
+  engine/         # @scribd-dl/engine — HTTP/WS sidecar (engine.ts)
+  shared/         # @scribd-dl/shared — job/HTTP/WS wire contract + thin client (client.ts)
 apps/
-  web/            # @scribd-dl/web — Vite SPA client
+  tui/            # @scribd-dl/tui — Ink/React terminal client (HTTP/WS via @scribd-dl/shared)
+  web/            # @scribd-dl/web — Vite SPA client (HTTP/WS, local api.ts shim)
   desktop/        # reserved slot for the future Tauri client
 docs/             # plans, brainstorms, requirements (lives at repo root)
 output/           # default download dir (lives at repo root; see Architecture note)
