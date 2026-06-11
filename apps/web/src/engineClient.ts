@@ -1,3 +1,4 @@
+import type { JobEvent } from "@scribd-dl/shared";
 import { enqueueText, fetchFolder, fetchSnapshot, removeJob, retryJob, setFolder } from "@/lib/api";
 import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
 import { $connected, $folder, applySnapshot, showTransient } from "@/store";
@@ -28,6 +29,23 @@ const loadFolder = async (): Promise<void> => {
   }
 };
 
+const handleWsEvent = (event: JobEvent): void => {
+  if (event._tag === "OutputFolderChanged") {
+    $folder.set(event.path);
+    return;
+  }
+  void refresh();
+};
+
+const parseEvent = (data: unknown): JobEvent | null => {
+  if (typeof data !== "string") return null;
+  try {
+    return JSON.parse(data) as JobEvent;
+  } catch {
+    return null;
+  }
+};
+
 const openSocket = (): void => {
   if (!baseUrl) return;
   const next = new WebSocket(`${toWsUrl(baseUrl)}/events`);
@@ -39,9 +57,11 @@ const openSocket = (): void => {
     void refresh();
     void loadFolder();
   };
-  next.onmessage = () => {
+  next.onmessage = (msg) => {
     if (ws !== next) return;
-    void refresh();
+    const event = parseEvent(msg.data);
+    if (event) handleWsEvent(event);
+    else void refresh();
   };
   next.onclose = () => {
     if (ws !== next) return;
@@ -135,6 +155,7 @@ export const __testing = {
   setBaseUrl: (url: string | null): void => {
     baseUrl = url;
   },
+  handleWsEvent,
   reset: (): void => {
     if (ws) {
       const old = ws;
