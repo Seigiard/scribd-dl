@@ -565,6 +565,124 @@ describe("DownloadEngine", () => {
       // #then
       expect(tags).toEqual(["JobRemoved", "JobRemoved"]);
     });
+
+    test("clearAll on empty queue returns 0", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const removed = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          return yield* engine.clearAll;
+        }),
+      );
+
+      // #then
+      expect(removed).toBe(0);
+    });
+
+    test("clearAll on Queued-only queue removes all and returns count", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue(
+            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b\nhttps://www.scribd.com/document/3/c",
+          );
+          const removed = yield* engine.clearAll;
+          const snap = yield* engine.snapshot;
+          return { removed, snap };
+        }),
+      );
+
+      // #then
+      expect(result.removed).toBe(3);
+      expect(result.snap.jobs).toHaveLength(0);
+    });
+
+    test("clearAll with mixed statuses removes all", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+      state.restoredJobs = [
+        { id: "a" as Job["id"], url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "1", status: "Queued" },
+        { id: "b" as Job["id"], url: "https://www.scribd.com/document/2/y", domain: "scribd", displayTitle: "2", status: "Downloaded" },
+        {
+          id: "c" as Job["id"],
+          url: "https://www.scribd.com/document/3/z",
+          domain: "scribd",
+          displayTitle: "3",
+          status: "Failed",
+          failure: { reason: "x", retryable: true },
+        },
+      ];
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const removed = yield* engine.clearAll;
+          const snap = yield* engine.snapshot;
+          return { removed, snap };
+        }),
+      );
+
+      // #then
+      expect(result.removed).toBe(3);
+      expect(result.snap.jobs).toHaveLength(0);
+    });
+
+    test("clearAll interrupts active Downloading and prevents Failed status from being written", async () => {
+      // #given — execute hangs until interrupted
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/active");
+          // wait until worker has picked up and started downloading
+          for (let i = 0; i < 200; i++) {
+            const snap = yield* engine.snapshot;
+            if (snap.jobs.some((j) => j.status === "Downloading")) break;
+            yield* Effect.sleep("5 millis");
+          }
+          const removed = yield* engine.clearAll;
+          // give worker time to settle if anything else fires
+          yield* Effect.sleep("50 millis");
+          const snap = yield* engine.snapshot;
+          return { removed, snap };
+        }),
+      );
+
+      // #then — job removed, no zombie Failed status written
+      expect(result.removed).toBe(1);
+      expect(result.snap.jobs).toHaveLength(0);
+    });
+
+    test("clearAll followed by enqueue keeps the worker functional", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.void);
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          yield* engine.clearAll;
+          yield* engine.enqueue("https://www.scribd.com/document/2/b");
+          yield* waitForQuiet(engine);
+          return yield* engine.snapshot;
+        }),
+      );
+
+      // #then — second enqueue progressed to Downloaded normally
+      expect(result.jobs).toHaveLength(1);
+      expect(result.jobs[0]!.status).toBe("Downloaded");
+    });
   });
 
   describe("retry", () => {

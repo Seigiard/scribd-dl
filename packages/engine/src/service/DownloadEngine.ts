@@ -1,4 +1,4 @@
-import { Cause, Context, Effect, Exit, Layer, Option, PubSub, Queue, Ref, Stream } from "effect";
+import { Cause, Context, Effect, Exit, Fiber, Layer, Option, PubSub, Queue, Ref, Stream } from "effect";
 import * as fs from "node:fs/promises";
 import type { EngineSnapshot, Job, JobDomain, JobEvent, JobFailure, JobId, JobProgress } from "@scribd-dl/shared";
 import { JobNotFound, NotRemovable, NotRetryable } from "../errors/DomainErrors";
@@ -17,6 +17,7 @@ export interface DownloadEngineService {
   readonly retry: (id: JobId) => Effect.Effect<void, JobNotFound | NotRetryable, never>;
   readonly clearCompleted: Effect.Effect<number, never, never>;
   readonly clearFailed: Effect.Effect<number, never, never>;
+  readonly clearAll: Effect.Effect<number, never, never>;
   readonly snapshot: Effect.Effect<EngineSnapshot, never, never>;
   readonly events: Stream.Stream<JobEvent, never, never>;
   readonly outputFolder: Effect.Effect<string, never, never>;
@@ -99,6 +100,8 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
       const folderRef = yield* Ref.make(settings.outputFolder);
       const queue = yield* Queue.unbounded<JobId>();
       const pubsub = yield* PubSub.unbounded<JobEvent>();
+      type ActiveFiber = { readonly id: JobId; readonly fiber: Fiber.RuntimeFiber<unknown, unknown> };
+      const activeFiberRef = yield* Ref.make<Option.Option<ActiveFiber>>(Option.none());
 
       for (const job of restored) {
         if (job.status === "Queued") {
@@ -283,6 +286,28 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
       const clearCompleted = clearByStatus("Downloaded");
       const clearFailed = clearByStatus("Failed");
 
+      const clearAll: Effect.Effect<number, never, never> = Effect.gen(function* () {
+        const map = yield* Ref.get(stateRef);
+        const ids = Array.from(map.keys());
+        if (ids.length === 0) return 0;
+
+        // interrupt active download fiber first; clearing state before interrupt
+        // signals the worker's exit path to skip status mutation for that id.
+        yield* Ref.set(stateRef, new Map());
+        const active = yield* Ref.get(activeFiberRef);
+        if (Option.isSome(active)) {
+          yield* Fiber.interrupt(active.value.fiber);
+          yield* Ref.set(activeFiberRef, Option.none());
+        }
+
+        for (const id of ids) {
+          yield* publish({ _tag: "JobRemoved", id });
+        }
+        yield* publishSnapshot;
+        yield* persistJobs;
+        return ids.length;
+      });
+
       const retry = (id: JobId): Effect.Effect<void, JobNotFound | NotRetryable, never> =>
         Effect.gen(function* () {
           const map = yield* Ref.get(stateRef);
@@ -343,12 +368,22 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
           yield* publish({ _tag: "JobStarted", id });
           yield* persistJobs;
           const folder = yield* Ref.get(folderRef);
-          const exit = yield* Effect.exit(scribd.execute(current.url, folder, makeOnEvent(id)));
-          const latest = (yield* Ref.get(stateRef)).get(id) ?? downloading;
-          const { progress: _drop, ...withoutProgress } = latest;
+          const fiber = yield* Effect.fork(scribd.execute(current.url, folder, makeOnEvent(id)));
+          yield* Ref.set(activeFiberRef, Option.some({ id, fiber }));
+          const exit = yield* Fiber.await(fiber);
+          yield* Ref.set(activeFiberRef, Option.none());
+
+          // If clearAll removed the job from state mid-flight, skip status update.
+          const after = (yield* Ref.get(stateRef)).get(id);
+          if (!after) return;
+
+          const { progress: _drop, ...withoutProgress } = after;
           if (Exit.isSuccess(exit)) {
             yield* setJob({ ...withoutProgress, status: "Downloaded" });
             yield* publish({ _tag: "JobCompleted", id });
+          } else if (Cause.isInterruptedOnly(exit.cause)) {
+            // External interrupt (e.g. clearAll racing); state already adjusted.
+            return;
           } else {
             const reason = formatCause(exit.cause);
             const failure: JobFailure = { reason, retryable: true };
@@ -373,6 +408,17 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
           yield* persistSettings(expanded);
         });
 
-      return DownloadEngine.of({ enqueue, remove, retry, clearCompleted, clearFailed, snapshot, events, outputFolder, setOutputFolder });
+      return DownloadEngine.of({
+        enqueue,
+        remove,
+        retry,
+        clearCompleted,
+        clearFailed,
+        clearAll,
+        snapshot,
+        events,
+        outputFolder,
+        setOutputFolder,
+      });
     }),
   );
