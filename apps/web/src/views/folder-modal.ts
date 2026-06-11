@@ -60,8 +60,32 @@ const onBackdropClick = (e: MouseEvent): void => {
   if (e.target === e.currentTarget) close();
 };
 
+let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
+
+const attachEscape = (): void => {
+  if (escapeHandler) return;
+  escapeHandler = (e: KeyboardEvent) => {
+    if (e.key !== "Escape") return;
+    e.preventDefault();
+    e.stopPropagation();
+    close();
+  };
+  window.addEventListener("keydown", escapeHandler, { capture: true });
+};
+
+const detachEscape = (): void => {
+  if (!escapeHandler) return;
+  window.removeEventListener("keydown", escapeHandler, { capture: true });
+  escapeHandler = null;
+};
+
 $modal.listen((mode) => {
-  if (mode === "folder") $modalError.set(null);
+  if (mode === "folder") {
+    $modalError.set(null);
+    attachEscape();
+  } else {
+    detachEscape();
+  }
 });
 
 export const folderModal = ({ mode, folder, error }: FolderModalProps): Hole => {

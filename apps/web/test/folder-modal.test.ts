@@ -98,6 +98,23 @@ describe("folderModal()", () => {
     expect($modal.get()).toBe("none");
   });
 
+  it("global Escape (focus outside input) closes the modal", () => {
+    $modal.set("folder");
+    mountModal({ mode: "folder", folder: "/x", error: null });
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect($modal.get()).toBe("none");
+  });
+
+  it("global Escape is detached when modal closes", () => {
+    $modal.set("folder");
+    mountModal({ mode: "folder", folder: "/x", error: null });
+    $modal.set("none");
+    saveFolderMock.mockClear();
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    expect($modal.get()).toBe("none");
+    expect(saveFolderMock).not.toHaveBeenCalled();
+  });
+
   it("Cancel click closes without saving", () => {
     $modal.set("folder");
     const root = mountModal({ mode: "folder", folder: "/x", error: null });
