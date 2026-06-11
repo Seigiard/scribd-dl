@@ -78,10 +78,25 @@ const detachEscape = (): void => {
   escapeHandler = null;
 };
 
+let needsFocus = false;
+
+const onInputRef = (el: HTMLInputElement | null): void => {
+  if (!el || !needsFocus) return;
+  needsFocus = false;
+  // ref fires before uhtml attaches the fragment to the document;
+  // defer so focus() runs on a connected element.
+  queueMicrotask(() => {
+    el.focus();
+    const end = el.value.length;
+    el.setSelectionRange(end, end);
+  });
+};
+
 $modal.listen((mode) => {
   if (mode === "folder") {
     $modalError.set(null);
     $draftFolder.set($folder.get() ?? "");
+    needsFocus = true;
     attachEscape();
   } else {
     $modalError.set(null);
@@ -103,6 +118,7 @@ export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
             autocomplete="off"
             spellcheck="false"
             .value=${draft}
+            ref=${onInputRef}
             @input=${onInput}
             @keydown=${onInputKeydown}
           />

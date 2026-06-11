@@ -43,6 +43,47 @@ describe("folderModal()", () => {
     expect(root.querySelector(".folder-modal")).toBeNull();
   });
 
+  it("opening modal focuses the input with caret at end of draft", async () => {
+    // #given
+    $folder.set("/home/me/Downloads");
+
+    // #when — opening triggers seed + needsFocus flag, then render attaches focus
+    $modal.set("folder");
+    const root = mountModal({
+      mode: "folder",
+      folder: "/home/me/Downloads",
+      error: null,
+      draft: $draftFolder.get(),
+    });
+    await flush();
+
+    // #then
+    const input = root.querySelector<HTMLInputElement>(".folder-modal-input")!;
+    expect(document.activeElement).toBe(input);
+    expect(input.selectionStart).toBe("/home/me/Downloads".length);
+    expect(input.selectionEnd).toBe("/home/me/Downloads".length);
+  });
+
+  it("re-render while modal stays open does not re-steal focus", async () => {
+    // #given — modal opened, focus moved away by user
+    $modal.set("folder");
+    const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/x" });
+    await flush();
+    const input = root.querySelector<HTMLInputElement>(".folder-modal-input")!;
+    expect(document.activeElement).toBe(input);
+
+    const cancelBtn = root.querySelector<HTMLButtonElement>("button.btn-default")!;
+    cancelBtn.focus();
+    expect(document.activeElement).toBe(cancelBtn);
+
+    // #when — re-render due to $modalError change (modal still open)
+    render(root, folderModal({ mode: "folder", folder: null, error: "boom", draft: "/x" }));
+    await flush();
+
+    // #then — focus stays on Cancel; ref does not re-steal it
+    expect(document.activeElement).toBe(cancelBtn);
+  });
+
   it("renders modal with input value from draft when open", () => {
     const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/home/me/Downloads" });
     const input = root.querySelector<HTMLInputElement>(".folder-modal-input")!;
