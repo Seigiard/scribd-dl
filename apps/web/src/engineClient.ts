@@ -115,12 +115,12 @@ export const handlePastedText = async (text: string): Promise<void> => {
   if (!baseUrl) return;
   const links = extractUrls(text);
   if (links.length === 0) {
-    showTransient(NO_LINKS_MESSAGE);
+    showTransient("info", NO_LINKS_MESSAGE);
     return;
   }
   try {
     const { jobs } = await enqueueText(baseUrl, text);
-    if (jobs.length === 0) showTransient(NO_LINKS_MESSAGE);
+    if (jobs.length === 0) showTransient("info", NO_LINKS_MESSAGE);
   } catch {
     // transport errors surface via the disconnect banner
   }

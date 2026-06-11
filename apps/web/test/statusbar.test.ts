@@ -21,20 +21,22 @@ describe("statusbar()", () => {
     const container = document.createElement("div");
 
     // #when
-    render(container, statusbar({ transient: "No links found in clipboard" }));
+    render(container, statusbar({ transient: { severity: "info", message: "No links found in clipboard" } }));
 
     // #then
     expect(container.textContent).toBe("No links found in clipboard");
   });
 
-  it("treats an empty string as a valid transient (no fallback)", () => {
+  it("applies severity class to the statusbar element", () => {
     // #given
     const container = document.createElement("div");
 
     // #when
-    render(container, statusbar({ transient: "" }));
+    render(container, statusbar({ transient: { severity: "error", message: "Disconnected", sticky: true } }));
 
     // #then
-    expect(container.textContent).toBe("");
+    const el = container.querySelector(".statusbar") as HTMLElement | null;
+    expect(el).not.toBeNull();
+    expect(el!.classList.contains("statusbar-error")).toBe(true);
   });
 });
