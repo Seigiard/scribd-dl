@@ -1,6 +1,7 @@
 use std::time::{Duration, Instant};
 
-use tauri::State;
+use tauri::{AppHandle, State};
+use tauri_plugin_dialog::DialogExt;
 
 use crate::sidecar::SidecarState;
 
@@ -19,4 +20,26 @@ pub async fn get_backend_url(state: State<'_, SidecarState>) -> Result<String, S
         }
         tokio::time::sleep(POLL_INTERVAL).await;
     }
+}
+
+#[tauri::command]
+pub async fn pick_folder(
+    app: AppHandle,
+    default_path: Option<String>,
+) -> Result<Option<String>, String> {
+    let (tx, rx) = tokio::sync::oneshot::channel::<Option<String>>();
+
+    let mut builder = app.dialog().file();
+    if let Some(p) = default_path.as_deref().filter(|s| !s.is_empty()) {
+        builder = builder.set_directory(p);
+    }
+
+    builder.pick_folder(move |selected| {
+        let path = selected.and_then(|fp| fp.into_path().ok());
+        let path_str = path.map(|p| p.to_string_lossy().to_string());
+        let _ = tx.send(path_str);
+    });
+
+    rx.await
+        .map_err(|e| format!("folder picker dropped without response: {e}"))
 }

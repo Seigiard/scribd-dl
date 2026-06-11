@@ -14,6 +14,15 @@ declare global {
   }
 }
 
+export const isTauri = (): boolean => typeof window !== "undefined" && Boolean(window.__TAURI__?.core?.invoke);
+
+export const invokeTauri = async <T>(cmd: string, args?: Record<string, unknown>): Promise<T> => {
+  if (typeof window === "undefined" || !window.__TAURI__?.core?.invoke) {
+    throw new Error("Tauri runtime not available");
+  }
+  return window.__TAURI__.core.invoke<T>(cmd, args);
+};
+
 export const getBackendUrl = async (): Promise<string> => {
   // Test override (set in tests to control the resolved url).
   if (typeof window !== "undefined" && window.__SCRIBD_DL_BACKEND__) {

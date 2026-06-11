@@ -1,6 +1,7 @@
 import { atom } from "nanostores";
 import { html, type Hole } from "uhtml";
 import { saveFolder } from "@/engineClient";
+import { invokeTauri, isTauri } from "@/lib/backendUrl";
 import { $folder, $modal, type ModalMode } from "@/store";
 
 const EMPTY_ERROR = "Path cannot be empty";
@@ -41,6 +42,21 @@ const onInput = (e: Event): void => {
 
 const onSaveClick = (): void => {
   void trySave();
+};
+
+const tryBrowse = async (): Promise<void> => {
+  try {
+    const picked = await invokeTauri<string | null>("pick_folder", {
+      defaultPath: $draftFolder.get() || null,
+    });
+    if (picked) $draftFolder.set(picked);
+  } catch {
+    // native picker errors are non-fatal — leave draft untouched
+  }
+};
+
+const onBrowseClick = (): void => {
+  void tryBrowse();
 };
 
 const onInputKeydown = (e: KeyboardEvent): void => {
@@ -125,6 +141,9 @@ export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-default" @click=${close}>Cancel</button>
+          ${isTauri()
+            ? html`<button type="button" class="btn btn-default" data-action="browse" @click=${onBrowseClick}>Browse…</button>`
+            : null}
           <button type="button" class="btn btn-primary" @click=${onSaveClick}>Save</button>
         </div>
         ${error ? html`<div class="terminal-alert terminal-alert-error">${error}</div>` : null}
