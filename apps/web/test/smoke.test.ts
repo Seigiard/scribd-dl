@@ -10,8 +10,6 @@ vi.mock("@/engineClient", () => ({
 }));
 
 await import("@/components/sd-app");
-await import("@/components/sd-queue");
-await import("@/components/sd-queue-item");
 await import("@/components/sd-folder-modal");
 const { resetStores } = await import("@/store");
 
@@ -19,15 +17,18 @@ describe("SPA smoke", () => {
   beforeEach(() => {
     resetStores();
     document.body.innerHTML = `
-      <sd-app>
-        <article class="terminal-card">
-          <header>Scribd downloader</header>
-          <sd-header></sd-header>
-          <sd-disconnect-banner hidden></sd-disconnect-banner>
-          <sd-queue></sd-queue>
-        </article>
-        <sd-folder-modal hidden></sd-folder-modal>
-      </sd-app>
+      <div class="terminal-banner terminal-header">
+        <strong>Scribd downloader</strong>
+        <div class="mount-header"></div>
+      </div>
+      <div class="terminal-content">
+        <div class="mount-banner"></div>
+        <div class="mount-queue"></div>
+      </div>
+      <div class="terminal-footer">
+        <div class="mount-statusbar"></div>
+      </div>
+      <div class="mount-modal"></div>
     `;
   });
 
@@ -35,16 +36,11 @@ describe("SPA smoke", () => {
     document.body.innerHTML = "";
   });
 
-  it("mounts the full scaffold without throwing", () => {
-    expect(document.querySelector("sd-app")).not.toBeNull();
-    expect(document.querySelector("sd-header")).not.toBeNull();
-    expect(document.querySelector("sd-queue")).not.toBeNull();
-    expect(document.querySelector("sd-disconnect-banner")).not.toBeNull();
-    expect(document.querySelector("sd-folder-modal")).not.toBeNull();
-  });
-
-  it("queue starts empty", () => {
-    const queue = document.querySelector("sd-queue")!;
-    expect(queue.querySelectorAll("sd-queue-item")).toHaveLength(0);
+  it("scaffold has all mount containers", () => {
+    expect(document.querySelector(".mount-header")).not.toBeNull();
+    expect(document.querySelector(".mount-banner")).not.toBeNull();
+    expect(document.querySelector(".mount-queue")).not.toBeNull();
+    expect(document.querySelector(".mount-statusbar")).not.toBeNull();
+    expect(document.querySelector(".mount-modal")).not.toBeNull();
   });
 });
