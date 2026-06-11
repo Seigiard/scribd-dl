@@ -7,6 +7,8 @@ vi.mock("@/engineClient", () => ({
   saveFolder: vi.fn(),
   removeJobById: vi.fn(),
   retryJobById: vi.fn(),
+  commandClearFinished: vi.fn(),
+  commandClearAll: vi.fn(),
 }));
 
 const { resetStores } = await import("@/store");
@@ -19,12 +21,9 @@ describe("SPA smoke", () => {
         <strong>Scribd downloader</strong>
         <div class="mount-header"></div>
       </div>
+      <div class="mount-status-zone"></div>
       <div class="terminal-content">
-        <div class="mount-banner"></div>
         <div class="mount-queue"></div>
-      </div>
-      <div class="terminal-footer">
-        <div class="mount-statusbar"></div>
       </div>
       <div class="mount-modal"></div>
     `;
@@ -36,9 +35,8 @@ describe("SPA smoke", () => {
 
   it("scaffold has all mount containers", () => {
     expect(document.querySelector(".mount-header")).not.toBeNull();
-    expect(document.querySelector(".mount-banner")).not.toBeNull();
+    expect(document.querySelector(".mount-status-zone")).not.toBeNull();
     expect(document.querySelector(".mount-queue")).not.toBeNull();
-    expect(document.querySelector(".mount-statusbar")).not.toBeNull();
     expect(document.querySelector(".mount-modal")).not.toBeNull();
   });
 });

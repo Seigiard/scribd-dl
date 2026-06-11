@@ -46,7 +46,7 @@ Carried from the brainstorm; see origin for full rationale.
 - **R2 — Engine sidecar lifecycle.** Spawn on app-ready, kill cleanly on window-all-closed (SIGTERM → wait → SIGKILL). No zombie Chromium after exit.
 - **R3 — Port discovery handshake.** Rust shim spawns engine binary with `--port 0`, parses stdout until `READY port=NNNN`, exposes the resolved URL via `get_backend_url` Tauri command. After `READY`, stdout/stderr go to `~/Library/Logs/scribd-dl/`.
 - **R4 — Native folder picker.** Browse button visible in the folder modal only under `window.__TAURI__`. Click → native dialog → path written to `$draftFolder` → existing save flow (`POST /folder`). Text input remains editable by hand.
-- **R5 — Native notifications.** On WS `JobCompleted` / `JobFailed` when window is not focused AND `window.__TAURI__` present → invoke `notify` command. Click on notification focuses window.
+- **R5 — Native notifications.** ~~On WS `JobCompleted` / `JobFailed` when window is not focused AND `window.__TAURI__` present → invoke `notify` command. Click on notification focuses window.~~ **Закрыто планом `2026-06-11-005-feat-queue-polish-plan.md`** — unified `$transient` status zone под header (severity info/warning/error, sticky disconnect) покрывает кейс уведомлений в обоих режимах (browser и desktop). Отдельные OS-level notifications не требуются.
 - **R6 — Quit guard.** Closing the window while there are `Queued` / `Downloading` jobs surfaces a native confirm dialog. `Close anyway` kills sidecar and exits; `Cancel` keeps window open.
 - **R7 — Packaging.** One command (`bun --filter @scribd-dl/desktop tauri build`) produces a DMG. Engine sidecar binary is built automatically via `beforeBuildCommand`.
 - **R8 — Persistence via engine, not Tauri.** Folder and queue persistence are owned by engine (`ConfigStore`, `JobStore` in `~/.config/scribd-dl/`). No Tauri-side store for these.
@@ -305,7 +305,9 @@ Not authoritative — implementer may adjust paths. Per-unit `**Files:**` lists 
 
 ---
 
-### U5. Native notifications on background `Downloaded` / `Failed`
+### U5. ~~Native notifications on background `Downloaded` / `Failed`~~ (закрыт)
+
+> **Закрыто планом `2026-06-11-005-feat-queue-polish-plan.md`.** Unified `$transient` status-zone (severity info/warning/error, sticky disconnect) принят как единый канал уведомлений и в SPA, и в desktop. OS-level notifications не реализуются. Тело unit'а ниже сохранено для контекста, но не должно исполняться.
 
 **Goal.** When a `JobCompleted` or `JobFailed` WS event arrives and the window is not focused AND `window.__TAURI__` is present, post a macOS notification. Click on notification focuses the window.
 

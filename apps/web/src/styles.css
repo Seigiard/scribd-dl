@@ -23,7 +23,7 @@ body {
 
 .terminal {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr;
   height: 100svh;
 }
 
@@ -32,6 +32,73 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: var(--s2) var(--s2) var(--s2) var(--s4);
+}
+
+.status-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s) var(--s2) var(--s) var(--s4);
+  border-bottom: 1px solid var(--secondary-color);
+}
+
+.status-zone-active {
+  background: var(--code-bg-color);
+}
+
+.status-zone-active .status-zone-actions {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.status-zone-text {
+  font-size: 0.9em;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-zone-info {
+  color: var(--font-color);
+  opacity: 0.7;
+}
+
+.status-zone-warning {
+  color: #a06000;
+  font-weight: bold;
+}
+
+.status-zone-error {
+  color: var(--error-color);
+  font-weight: bold;
+}
+
+.status-zone-actions {
+  display: flex;
+  gap: var(--s);
+  flex: none;
+}
+
+.status-zone-actions .btn {
+  padding: calc(var(--s) / 2) var(--s);
+}
+
+.btn-danger {
+  border-color: var(--error-color);
+  color: var(--error-color);
+  background-color: transparent;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: var(--error-color);
+  color: var(--invert-font-color);
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
 }
 
 .folder-row {
@@ -50,11 +117,6 @@ body {
 .terminal-content {
   scrollbar-gutter: stable;
   overflow-y: auto;
-}
-
-.terminal-footer {
-  border-top: 1px solid var(--secondary-color);
-  padding: var(--s) var(--s2) var(--s) var(--s4);
 }
 
 .queue {
@@ -133,11 +195,6 @@ body {
   to {
     transform: rotate(360deg);
   }
-}
-
-.statusbar {
-  font-size: 0.9em;
-  color: var(--secondary-color);
 }
 
 .folder-modal {

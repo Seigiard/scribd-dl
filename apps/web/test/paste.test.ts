@@ -45,14 +45,30 @@ describe("paste handler", () => {
   it("shows the transient when no URL is found", async () => {
     await handlePastedText("no links here");
     expect(enqueueTextMock).not.toHaveBeenCalled();
-    expect($transient.get()).toBe("No links found in clipboard");
+    expect($transient.get()?.message).toBe("No links found in clipboard");
   });
 
   it("shows the transient when the server accepted zero jobs", async () => {
     enqueueTextMock.mockResolvedValueOnce({ jobs: [] });
     await handlePastedText("https://unsupported.example.com/abc");
     expect(enqueueTextMock).toHaveBeenCalledTimes(1);
-    expect($transient.get()).toBe("No links found in clipboard");
+    expect($transient.get()?.message).toBe("No links found in clipboard");
+  });
+
+  it("shows a warning when every link is rejected as Failed retryable=false", async () => {
+    enqueueTextMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          id: "u",
+          url: "https://example.com/x",
+          status: "Failed",
+          failure: { reason: "Unsupported domain", retryable: false },
+        },
+      ] as never,
+    });
+    await handlePastedText("https://example.com/x");
+    expect($transient.get()?.severity).toBe("warning");
+    expect($transient.get()?.message).toBe("Unsupported domain");
   });
 
   const makePasteEvent = (text: string): ClipboardEvent => {

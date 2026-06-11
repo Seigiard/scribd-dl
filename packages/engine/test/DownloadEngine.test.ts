@@ -1,5 +1,8 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Cause, Chunk, Effect, Exit, Layer, Stream } from "effect";
+import * as fs from "node:fs/promises";
+import * as os from "node:os";
+import * as path from "node:path";
 import type { EngineSnapshot, Job, JobEvent } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService, type Settings } from "../src/service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive } from "../src/service/DownloadEngine";
@@ -562,6 +565,124 @@ describe("DownloadEngine", () => {
       // #then
       expect(tags).toEqual(["JobRemoved", "JobRemoved"]);
     });
+
+    test("clearAll on empty queue returns 0", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const removed = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          return yield* engine.clearAll;
+        }),
+      );
+
+      // #then
+      expect(removed).toBe(0);
+    });
+
+    test("clearAll on Queued-only queue removes all and returns count", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue(
+            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b\nhttps://www.scribd.com/document/3/c",
+          );
+          const removed = yield* engine.clearAll;
+          const snap = yield* engine.snapshot;
+          return { removed, snap };
+        }),
+      );
+
+      // #then
+      expect(result.removed).toBe(3);
+      expect(result.snap.jobs).toHaveLength(0);
+    });
+
+    test("clearAll with mixed statuses removes all", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+      state.restoredJobs = [
+        { id: "a" as Job["id"], url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "1", status: "Queued" },
+        { id: "b" as Job["id"], url: "https://www.scribd.com/document/2/y", domain: "scribd", displayTitle: "2", status: "Downloaded" },
+        {
+          id: "c" as Job["id"],
+          url: "https://www.scribd.com/document/3/z",
+          domain: "scribd",
+          displayTitle: "3",
+          status: "Failed",
+          failure: { reason: "x", retryable: true },
+        },
+      ];
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const removed = yield* engine.clearAll;
+          const snap = yield* engine.snapshot;
+          return { removed, snap };
+        }),
+      );
+
+      // #then
+      expect(result.removed).toBe(3);
+      expect(result.snap.jobs).toHaveLength(0);
+    });
+
+    test("clearAll interrupts active Downloading and prevents Failed status from being written", async () => {
+      // #given — execute hangs until interrupted
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/active");
+          // wait until worker has picked up and started downloading
+          for (let i = 0; i < 200; i++) {
+            const snap = yield* engine.snapshot;
+            if (snap.jobs.some((j) => j.status === "Downloading")) break;
+            yield* Effect.sleep("5 millis");
+          }
+          const removed = yield* engine.clearAll;
+          // give worker time to settle if anything else fires
+          yield* Effect.sleep("50 millis");
+          const snap = yield* engine.snapshot;
+          return { removed, snap };
+        }),
+      );
+
+      // #then — job removed, no zombie Failed status written
+      expect(result.removed).toBe(1);
+      expect(result.snap.jobs).toHaveLength(0);
+    });
+
+    test("clearAll followed by enqueue keeps the worker functional", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.void);
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          yield* engine.clearAll;
+          yield* engine.enqueue("https://www.scribd.com/document/2/b");
+          yield* waitForQuiet(engine);
+          return yield* engine.snapshot;
+        }),
+      );
+
+      // #then — second enqueue progressed to Downloaded normally
+      expect(result.jobs).toHaveLength(1);
+      expect(result.jobs[0]!.status).toBe("Downloaded");
+    });
   });
 
   describe("retry", () => {
@@ -660,8 +781,40 @@ describe("DownloadEngine", () => {
       expect(result.snap.jobs).toHaveLength(1);
     });
 
-    test("re-enqueue after Downloaded → same id reused, no second download triggered", async () => {
-      // #given
+    test("re-enqueue after Downloaded with file present → same id, no re-download", async () => {
+      // #given — real tmp folder + pre-created PDF at the path resolvePdfPath would produce
+      const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "engine-dedup-"));
+      state.initialSettings = { outputFolder: tmp };
+      state.scribdExecute = mock(() => Effect.void);
+      const url = "https://www.scribd.com/document/1/a";
+
+      try {
+        // #when
+        const result = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            const [first] = yield* engine.enqueue(url);
+            yield* waitForQuiet(engine);
+            // displayTitle defaults to "Scribd document 1" → sanitize keeps it
+            const expectedPath = path.join(tmp, "Scribd document 1.pdf");
+            yield* Effect.promise(() => fs.writeFile(expectedPath, "fake-pdf"));
+            const second = yield* engine.enqueue(url);
+            yield* waitForQuiet(engine);
+            return { first, second, snap: yield* engine.snapshot };
+          }),
+        );
+
+        // #then — file present, no second download triggered
+        expect(result.second[0]!.id).toBe(result.first!.id);
+        expect(result.snap.jobs).toHaveLength(1);
+        expect(state.scribdExecute).toHaveBeenCalledTimes(1);
+      } finally {
+        await fs.rm(tmp, { recursive: true, force: true });
+      }
+    });
+
+    test("re-enqueue after Downloaded with missing file → same id reused, re-queued for re-download", async () => {
+      // #given — mock execute succeeds but writes nothing, so file-existence check fails
       state.scribdExecute = mock(() => Effect.void);
       const url = "https://www.scribd.com/document/1/a";
 
@@ -677,14 +830,14 @@ describe("DownloadEngine", () => {
         }),
       );
 
-      // #then
+      // #then — same id, second download triggered because file missing
       expect(result.second).toHaveLength(1);
       expect(result.second[0]!.id).toBe(result.first!.id);
       expect(result.snap.jobs).toHaveLength(1);
-      expect(state.scribdExecute).toHaveBeenCalledTimes(1);
+      expect(state.scribdExecute).toHaveBeenCalledTimes(2);
     });
 
-    test("re-enqueue after Failed → new Job (different id)", async () => {
+    test("re-enqueue after Failed retryable=true → same id, implicit retry", async () => {
       // #given
       state.scribdExecute = mock((u: string) => Effect.fail(new PageLoadFailed({ url: u, cause: "boom" })));
       const url = "https://www.scribd.com/document/1/a";
@@ -701,8 +854,9 @@ describe("DownloadEngine", () => {
         }),
       );
 
-      // #then
-      expect(result.second!.id).not.toBe(result.first!.id);
+      // #then — implicit retry keeps the same job id
+      expect(result.second!.id).toBe(result.first!.id);
+      expect(state.scribdExecute).toHaveBeenCalledTimes(2);
     });
 
     test("re-enqueue after Remove → new Job", async () => {
@@ -744,6 +898,117 @@ describe("DownloadEngine", () => {
       // #then
       expect(result.second).toHaveLength(1);
       expect(result.second[0]!.id).toBe(result.first[1]!.id);
+    });
+
+    test("normalized URL dedup: trailing slash and case treated as same job", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          yield* engine.enqueue("https://WWW.scribd.com/document/1/a/");
+          return yield* engine.snapshot;
+        }),
+      );
+
+      // #then
+      expect(snap.jobs).toHaveLength(1);
+    });
+
+    test("re-paste Failed retryable=false (unsupported) → status preserved, no implicit retry", async () => {
+      // #given
+      const url = "https://not-scribd.example/doc/1";
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const [first] = yield* engine.enqueue(url);
+          const [second] = yield* engine.enqueue(url);
+          return { first, second, snap: yield* engine.snapshot };
+        }),
+      );
+
+      // #then
+      expect(result.second!.id).toBe(result.first!.id);
+      expect(result.second!.status).toBe("Failed");
+      expect(result.second!.failure?.retryable).toBe(false);
+      expect(result.snap.jobs).toHaveLength(1);
+    });
+  });
+
+  describe("enqueue: order", () => {
+    test("newest-first: latest enqueued URL appears at index 0", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          yield* engine.enqueue("https://www.scribd.com/document/2/b");
+          return yield* engine.snapshot;
+        }),
+      );
+
+      // #then
+      expect(snap.jobs[0]!.url).toBe("https://www.scribd.com/document/2/b");
+      expect(snap.jobs[1]!.url).toBe("https://www.scribd.com/document/1/a");
+    });
+
+    test("batch paste: first URL in text ends up at top, others follow in paste order", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue(
+            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b\nhttps://www.scribd.com/document/3/c",
+          );
+          return yield* engine.snapshot;
+        }),
+      );
+
+      // #then
+      expect(snap.jobs.map((j) => j.url)).toEqual([
+        "https://www.scribd.com/document/1/a",
+        "https://www.scribd.com/document/2/b",
+        "https://www.scribd.com/document/3/c",
+      ]);
+    });
+
+    test("mixed batch [new1, dup, new2]: snapshot order [new1, new2, dup, ...rest]", async () => {
+      // #given
+      state.scribdExecute = mock(() => Effect.never);
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          // seed: dup will be the older one, plus an untouched "rest"
+          yield* engine.enqueue("https://www.scribd.com/document/dup/x");
+          yield* engine.enqueue("https://www.scribd.com/document/rest/y");
+          // now mixed paste
+          yield* engine.enqueue(
+            "https://www.scribd.com/document/new1/a\nhttps://www.scribd.com/document/dup/x\nhttps://www.scribd.com/document/new2/b",
+          );
+          return yield* engine.snapshot;
+        }),
+      );
+
+      // #then — new1, new2 first (paste order among new), then dup, then untouched rest
+      expect(snap.jobs.map((j) => j.url)).toEqual([
+        "https://www.scribd.com/document/new1/a",
+        "https://www.scribd.com/document/new2/b",
+        "https://www.scribd.com/document/dup/x",
+        "https://www.scribd.com/document/rest/y",
+      ]);
     });
   });
 
@@ -1187,7 +1452,7 @@ describe("DownloadEngine", () => {
       const tags = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          const collector = yield* engine.events.pipe(Stream.take(3), Stream.runCollect, Effect.fork);
+          const collector = yield* engine.events.pipe(Stream.take(4), Stream.runCollect, Effect.fork);
           // yield to let the subscription register before publishing
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
@@ -1197,7 +1462,7 @@ describe("DownloadEngine", () => {
       );
 
       // #then
-      expect(tags).toEqual(["JobAdded", "JobStarted", "JobCompleted"]);
+      expect(tags).toEqual(["JobAdded", "SnapshotReplaced", "JobStarted", "JobCompleted"]);
     });
 
     test("unsupported URL emits JobAdded + JobFailed without JobStarted", async () => {

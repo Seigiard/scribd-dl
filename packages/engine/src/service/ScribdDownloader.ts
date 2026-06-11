@@ -4,6 +4,7 @@ import sanitize from "sanitize-filename";
 import { ConfigLoader } from "../utils/io/ConfigLoader";
 import { DirectoryIo } from "../utils/io/DirectoryIo";
 import { PdfGenerator } from "../utils/io/PdfGenerator";
+import { resolvePdfPath } from "../utils/io/pdfPath";
 import { PuppeteerSg } from "../utils/request/PuppeteerSg";
 import { TitleResolver } from "../utils/request/TitleResolver";
 import {
@@ -233,7 +234,7 @@ export const ScribdDownloaderLive: Layer.Layer<
           const identifier = sanitize(meta.title);
           const safeIdentifier = identifier === "" ? id : identifier;
           yield* directoryIo.create(folder);
-          const pdfPath = `${folder}/${safeIdentifier}.pdf`;
+          const pdfPath = resolvePdfPath({ folder, displayTitle: meta.title, fallbackId: id });
 
           if (allSameDimensions(meta.pages)) {
             const dims = meta.pages[0];

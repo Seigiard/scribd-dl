@@ -40,4 +40,5 @@ export type JobEvent =
   | { readonly _tag: "JobRequeued"; readonly id: JobId }
   | { readonly _tag: "JobTitleUpdated"; readonly id: JobId; readonly title: string }
   | { readonly _tag: "JobProgress"; readonly id: JobId; readonly done: number; readonly total: number; readonly stage: ProgressStage }
-  | { readonly _tag: "OutputFolderChanged"; readonly path: string };
+  | { readonly _tag: "OutputFolderChanged"; readonly path: string }
+  | { readonly _tag: "SnapshotReplaced"; readonly snapshot: EngineSnapshot };
