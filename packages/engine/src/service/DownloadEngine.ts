@@ -1,8 +1,11 @@
 import { Cause, Context, Effect, Exit, Layer, Option, PubSub, Queue, Ref, Stream } from "effect";
+import * as fs from "node:fs/promises";
 import type { EngineSnapshot, Job, JobDomain, JobEvent, JobFailure, JobId, JobProgress } from "@scribd-dl/shared";
 import { JobNotFound, NotRemovable, NotRetryable } from "../errors/DomainErrors";
 import { ConfigLoader } from "../utils/io/ConfigLoader";
 import { expandHome } from "../utils/io/path";
+import { resolvePdfPath, scribdIdFromUrl } from "../utils/io/pdfPath";
+import { normalizeUrl } from "../utils/url";
 import { ConfigStore } from "./ConfigStore";
 import { JobStore } from "./JobStore";
 import { ScribdDownloader, type OnEvent } from "./ScribdDownloader";
@@ -124,50 +127,116 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
           return next;
         });
 
+      const currentSnapshot: Effect.Effect<EngineSnapshot, never, never> = Ref.get(stateRef).pipe(
+        Effect.map((m) => ({ jobs: Array.from(m.values()) })),
+      );
+
+      const publishSnapshot: Effect.Effect<void, never, never> = Effect.gen(function* () {
+        const snap = yield* currentSnapshot;
+        yield* publish({ _tag: "SnapshotReplaced", snapshot: snap });
+      });
+
+      const fileExists = (path: string): Effect.Effect<boolean, never, never> =>
+        Effect.tryPromise({
+          try: () => fs.stat(path).then(() => true),
+          catch: () => false as const,
+        }).pipe(Effect.catchAll(() => Effect.succeed(false)));
+
+      const prependTouched = (touched: ReadonlyArray<Job>): Effect.Effect<void, never, never> =>
+        Ref.update(stateRef, (m) => {
+          const next = new Map<JobId, Job>();
+          const touchedIds = new Set(touched.map((j) => j.id));
+          for (const job of touched) next.set(job.id, job);
+          for (const [k, v] of m) {
+            if (!touchedIds.has(k)) next.set(k, v);
+          }
+          return next;
+        });
+
       const enqueue = (text: string): Effect.Effect<ReadonlyArray<Job>, never, never> =>
         Effect.gen(function* () {
           const urls = extractUrls(text);
+          if (urls.length === 0) return [];
+
           const map = yield* Ref.get(stateRef);
-          const byUrl = new Map<string, Job>();
+          const byNormalizedUrl = new Map<string, Job>();
           for (const job of map.values()) {
-            if (job.status !== "Failed") {
-              byUrl.set(job.url, job);
-            }
+            byNormalizedUrl.set(normalizeUrl(job.url), job);
           }
-          const created: Job[] = [];
-          let added = false;
+
+          const folder = yield* Ref.get(folderRef);
+          const newJobs: Job[] = [];
+          const movedJobs: Job[] = [];
+          const result: Job[] = [];
+          const pendingEvents: JobEvent[] = [];
+          const queueOffers: JobId[] = [];
+
           for (const url of urls) {
-            const existing = byUrl.get(url);
-            if (existing) {
-              created.push(existing);
+            const normalized = normalizeUrl(url);
+            const existing = byNormalizedUrl.get(normalized);
+
+            if (!existing) {
+              const domain = classify(url);
+              const id = newId();
+              const displayTitle = deriveTitle(url, domain);
+              if (domain === "scribd") {
+                const job: Job = { id, url, domain, displayTitle, status: "Queued" };
+                newJobs.push(job);
+                result.push(job);
+                byNormalizedUrl.set(normalized, job);
+                pendingEvents.push({ _tag: "JobAdded", job });
+                queueOffers.push(id);
+              } else {
+                const failure: JobFailure = { reason: "Unsupported domain", retryable: false };
+                const job: Job = { id, url, domain, displayTitle, status: "Failed", failure };
+                newJobs.push(job);
+                result.push(job);
+                byNormalizedUrl.set(normalized, job);
+                pendingEvents.push({ _tag: "JobAdded", job });
+                pendingEvents.push({ _tag: "JobFailed", id, reason: failure.reason, retryable: failure.retryable });
+              }
               continue;
             }
-            const domain = classify(url);
-            const id = newId();
-            const displayTitle = deriveTitle(url, domain);
-            if (domain === "scribd") {
-              const job: Job = { id, url, domain, displayTitle, status: "Queued" };
-              yield* setJob(job);
-              yield* publish({ _tag: "JobAdded", job });
-              yield* Queue.offer(queue, id);
-              created.push(job);
-              byUrl.set(url, job);
-              added = true;
-            } else {
-              const failure: JobFailure = { reason: "Unsupported domain", retryable: false };
-              const job: Job = { id, url, domain, displayTitle, status: "Failed", failure };
-              yield* setJob(job);
-              yield* publish({ _tag: "JobAdded", job });
-              yield* publish({ _tag: "JobFailed", id, reason: failure.reason, retryable: failure.retryable });
-              created.push(job);
-              byUrl.set(url, job);
-              added = true;
+
+            // duplicate — branch by current status
+            let nextJob: Job = existing;
+            const fallbackId = scribdIdFromUrl(existing.url) ?? existing.id;
+
+            if (existing.status === "Downloaded") {
+              const path = resolvePdfPath({ folder, displayTitle: existing.displayTitle, fallbackId });
+              const present = yield* fileExists(path);
+              if (!present) {
+                const { progress: _drop, failure: _f, ...rest } = existing;
+                nextJob = { ...rest, status: "Queued" };
+                queueOffers.push(existing.id);
+                pendingEvents.push({ _tag: "JobRequeued", id: existing.id });
+              }
+            } else if (existing.status === "Failed" && existing.failure?.retryable === true) {
+              const { progress: _drop, failure: _f, ...rest } = existing;
+              nextJob = { ...rest, status: "Queued" };
+              queueOffers.push(existing.id);
+              pendingEvents.push({ _tag: "JobRequeued", id: existing.id });
             }
+
+            movedJobs.push(nextJob);
+            result.push(nextJob);
+            byNormalizedUrl.set(normalized, nextJob);
           }
-          if (added) {
+
+          const touched = [...newJobs, ...movedJobs];
+          if (touched.length > 0) {
+            yield* prependTouched(touched);
+            for (const event of pendingEvents) {
+              yield* publish(event);
+            }
+            yield* publishSnapshot;
+            for (const id of queueOffers) {
+              yield* Queue.offer(queue, id);
+            }
             yield* persistJobs;
           }
-          return created;
+
+          return result;
         });
 
       const remove = (id: JobId): Effect.Effect<void, JobNotFound | NotRemovable, never> =>
@@ -186,6 +255,7 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
             return next;
           });
           yield* publish({ _tag: "JobRemoved", id });
+          yield* publishSnapshot;
           yield* persistJobs;
         });
 
@@ -205,6 +275,7 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
           for (const id of toRemove) {
             yield* publish({ _tag: "JobRemoved", id });
           }
+          yield* publishSnapshot;
           yield* persistJobs;
           return toRemove.length;
         });
@@ -226,12 +297,11 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownlo
           yield* setJob(requeued);
           yield* Queue.offer(queue, id);
           yield* publish({ _tag: "JobRequeued", id });
+          yield* publishSnapshot;
           yield* persistJobs;
         });
 
-      const snapshot: Effect.Effect<EngineSnapshot, never, never> = Ref.get(stateRef).pipe(
-        Effect.map((m) => ({ jobs: Array.from(m.values()) })),
-      );
+      const snapshot = currentSnapshot;
 
       const events: Stream.Stream<JobEvent, never, never> = Stream.fromPubSub(pubsub);
 

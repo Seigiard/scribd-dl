@@ -179,6 +179,8 @@ const collectFrames = (url: string, opts: { after?: () => Promise<void>; timeout
     }, opts.timeoutMs ?? 1500);
     ws.onopen = async () => {
       try {
+        // give the server-side stream subscription a beat to settle before publishing
+        await new Promise((r) => setTimeout(r, 50));
         if (opts.after) await opts.after();
       } catch (e) {
         clearTimeout(timeout);
@@ -209,7 +211,11 @@ describe("WebSocket /events", () => {
     const wsUrl = `${baseUrl.replace("http", "ws")}/events`;
     const frames = await collectFrames(wsUrl, {
       after: async () => {
-        await fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body: j({ text: "https://example.com/x" }) });
+        await fetch(`${baseUrl}/enqueue`, {
+          method: "POST",
+          headers: ct,
+          body: j({ text: "https://example.com/ws-unique-frame-test" }),
+        });
       },
       minFrames: 2,
     });
