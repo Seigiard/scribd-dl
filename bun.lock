@@ -37,7 +37,6 @@
       "dependencies": {
         "@scribd-dl/shared": "workspace:*",
         "nanostores": "^1.3.0",
-        "nanotags": "^0.15.2",
         "terminal.css": "^0.7.5",
         "uhtml": "^4",
       },
@@ -641,8 +640,6 @@
     "nanoid": ["nanoid@3.3.12", "", { "bin": { "nanoid": "bin/nanoid.cjs" } }, "sha512-ZB9RH/39qpq5Vu6Y+NmUaFhQR6pp+M2Xt76XBnEwDaGcVAqhlvxrl3B2bKS5D3NH3QR76v3aSrKaF/Kiy7lEtQ=="],
 
     "nanostores": ["nanostores@1.3.0", "", {}, "sha512-XPUa/jz+P1oJvN9VBxw4L9MtdFfaH3DAryqPssqhb2kXjmb9npz0dly6rCsgFWOPr4Yg9mTfM3MDZgZZ+7A3lA=="],
-
-    "nanotags": ["nanotags@0.15.2", "", { "dependencies": { "@standard-schema/spec": "^1.1.0" }, "peerDependencies": { "nanostores": "^1.1.1" } }, "sha512-CGWafcNQ5aV/ghZmOvWkWGByzMiEGIioGzL/05et8krDzQIJBxUnA48TD1rbdcRtVx3xyLwMk9iNfM6touT1/g=="],
 
     "node-addon-api": ["node-addon-api@7.1.1", "", {}, "sha512-5m3bsyrjFWE1xf7nz7YXdN4udnVtXK6/Yfgn5qnahL6bCkf2yKt4k3nuTKAtT4r3IG8JNR2ncsIMdZuAzJjHQQ=="],
 

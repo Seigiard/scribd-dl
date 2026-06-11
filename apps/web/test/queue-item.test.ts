@@ -50,9 +50,7 @@ describe("queueItem()", () => {
   });
 
   it("Downloading with progress: shows progress text, no action", () => {
-    const el = mountJob(
-      makeJob("Downloading", { progress: { done: 5, total: 10, stage: "render" } }),
-    );
+    const el = mountJob(makeJob("Downloading", { progress: { done: 5, total: 10, stage: "render" } }));
     expect(el.querySelector(".item-progress")?.textContent).toBe("5 / 10 (render)");
     expect(el.querySelector("button")).toBeNull();
   });
@@ -72,9 +70,7 @@ describe("queueItem()", () => {
   });
 
   it("Failed + non-retryable: shows reason and Remove action", () => {
-    const el = mountJob(
-      makeJob("Failed", { failure: { reason: "Unsupported domain", retryable: false } }),
-    );
+    const el = mountJob(makeJob("Failed", { failure: { reason: "Unsupported domain", retryable: false } }));
     expect(el.querySelector(".item-reason")?.textContent).toBe("Reason: Unsupported domain");
     expect(el.querySelector('button[data-action="remove"]')).not.toBeNull();
     expect(el.querySelector('button[data-action="retry"]')).toBeNull();

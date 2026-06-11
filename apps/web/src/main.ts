@@ -1,7 +1,6 @@
 import { render, type Hole } from "uhtml";
 import "./styles.css";
 import "./store";
-import "./components/sd-app";
 import { $connected, $folder, $jobs, $modal, $transient } from "./store";
 import { statusbar } from "./views/statusbar";
 import { disconnectBanner } from "./views/disconnect-banner";
@@ -33,9 +32,7 @@ const renderQueue = mount(".mount-queue", () => queue({ jobs: $jobs.get() }));
 $jobs.listen(renderQueue);
 renderQueue();
 
-const renderModal = mount(".mount-modal", () =>
-  folderModal({ mode: $modal.get(), folder: $folder.get(), error: $modalError.get() }),
-);
+const renderModal = mount(".mount-modal", () => folderModal({ mode: $modal.get(), folder: $folder.get(), error: $modalError.get() }));
 $modal.listen(renderModal);
 $folder.listen(renderModal);
 $modalError.listen(renderModal);

@@ -9,7 +9,6 @@ vi.mock("@/engineClient", () => ({
   retryJobById: vi.fn(),
 }));
 
-await import("@/components/sd-app");
 const { resetStores } = await import("@/store");
 
 describe("SPA smoke", () => {

@@ -9,9 +9,7 @@ vi.mock("@/engineClient", () => ({
 const { folderModal, $modalError } = await import("@/views/folder-modal");
 const { $modal, resetStores } = await import("@/store");
 
-const mountModal = (
-  props: { mode: "none" | "folder"; folder: string | null; error: string | null },
-): HTMLElement => {
+const mountModal = (props: { mode: "none" | "folder"; folder: string | null; error: string | null }): HTMLElement => {
   const container = document.createElement("div");
   document.body.appendChild(container);
   render(container, folderModal(props));

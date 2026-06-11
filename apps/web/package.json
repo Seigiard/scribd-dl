@@ -13,7 +13,6 @@
   "dependencies": {
     "@scribd-dl/shared": "workspace:*",
     "nanostores": "^1.3.0",
-    "nanotags": "^0.15.2",
     "terminal.css": "^0.7.5",
     "uhtml": "^4"
   },

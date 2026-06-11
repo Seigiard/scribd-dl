@@ -1,7 +1,8 @@
 ---
 title: "refactor: Rewrite apps/web to uhtml + islands"
-status: active
+status: completed
 created: 2026-06-11
+completed: 2026-06-11
 origin: docs/brainstorms/2026-06-11-uhtml-islands-rewrite-requirements.md
 type: refactor
 depth: standard
