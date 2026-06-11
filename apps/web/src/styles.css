@@ -23,7 +23,7 @@ body {
 
 .terminal {
   display: grid;
-  grid-template-rows: auto 1fr auto;
+  grid-template-rows: auto auto 1fr;
   height: 100svh;
 }
 
@@ -32,6 +32,56 @@ body {
   align-items: center;
   justify-content: space-between;
   padding: var(--s2) var(--s2) var(--s2) var(--s4);
+}
+
+.status-zone {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  padding: var(--s) var(--s2) var(--s) var(--s4);
+  border-bottom: 1px solid var(--secondary-color);
+}
+
+.status-zone-text {
+  font-size: 0.9em;
+  color: var(--secondary-color);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.status-zone-info {
+  color: var(--secondary-color);
+}
+
+.status-zone-warning {
+  color: var(--primary-color);
+}
+
+.status-zone-error {
+  color: var(--error-color);
+}
+
+.status-zone-actions {
+  display: flex;
+  gap: var(--s);
+  flex: none;
+}
+
+.status-zone-actions .btn {
+  padding: calc(var(--s) / 2) var(--s);
+}
+
+.btn-error {
+  color: var(--error-color);
+  border-color: var(--error-color);
+}
+
+.btn-error:disabled {
+  opacity: 0.5;
 }
 
 .folder-row {
@@ -50,11 +100,6 @@ body {
 .terminal-content {
   scrollbar-gutter: stable;
   overflow-y: auto;
-}
-
-.terminal-footer {
-  border-top: 1px solid var(--secondary-color);
-  padding: var(--s) var(--s2) var(--s) var(--s4);
 }
 
 .queue {
@@ -133,11 +178,6 @@ body {
   to {
     transform: rotate(360deg);
   }
-}
-
-.statusbar {
-  font-size: 0.9em;
-  color: var(--secondary-color);
 }
 
 .folder-modal {

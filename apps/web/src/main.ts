@@ -1,9 +1,8 @@
 import { render, type Hole } from "uhtml";
 import "./styles.css";
 import "./store";
-import { $connected, $folder, $jobs, $modal, $transient } from "./store";
-import { statusbar } from "./views/statusbar";
-import { disconnectBanner } from "./views/disconnect-banner";
+import { $folder, $jobs, $modal, $transient } from "./store";
+import { statusZone } from "./views/status-zone";
 import { header } from "./views/header";
 import { queue } from "./views/queue";
 import { folderModal, $modalError, $draftFolder } from "./views/folder-modal";
@@ -16,13 +15,10 @@ const mount = (selector: string, view: () => Hole | null): (() => void) => {
   return () => render(el, view());
 };
 
-const renderStatusbar = mount(".mount-statusbar", () => statusbar({ transient: $transient.get() }));
-$transient.listen(renderStatusbar);
-renderStatusbar();
-
-const renderBanner = mount(".mount-banner", () => disconnectBanner({ connected: $connected.get() }));
-$connected.listen(renderBanner);
-renderBanner();
+const renderStatusZone = mount(".mount-status-zone", () => statusZone({ transient: $transient.get(), jobs: $jobs.get() }));
+$transient.listen(renderStatusZone);
+$jobs.listen(renderStatusZone);
+renderStatusZone();
 
 const renderHeader = mount(".mount-header", () => header({ folder: $folder.get() }));
 $folder.listen(renderHeader);
