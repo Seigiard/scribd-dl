@@ -159,6 +159,27 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
     }
   });
 
+  test("DELETE /jobs (clearAll) wipes the queue and returns removed count", async () => {
+    // #given — mock execute hangs so the job stays Downloading
+    state.scribdExecute = mock(() => Effect.never);
+    await fetch(`${baseUrl}/enqueue`, {
+      method: "POST",
+      headers: ct,
+      body: j({ text: "https://www.scribd.com/document/clear-all-1/x\nhttps://www.scribd.com/document/clear-all-2/y" }),
+    });
+
+    // #when
+    const res = await fetch(`${baseUrl}/jobs`, { method: "DELETE" });
+
+    // #then
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { removed: number };
+    expect(body.removed).toBeGreaterThan(0);
+
+    const snap = await fetch(`${baseUrl}/snapshot`).then((r) => r.json() as Promise<{ jobs: unknown[] }>);
+    expect(snap.jobs).toHaveLength(0);
+  });
+
   test("POST /jobs/:id/retry on non-retryable Failed returns 409 NotRetryable", async () => {
     const enq = await fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body: j({ text: "https://example.com/x" }) });
     const body = (await enq.json()) as { jobs: Array<{ id: string }> };

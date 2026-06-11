@@ -49,6 +49,15 @@ const clearFailedRoute = HttpRouter.del(
   }),
 );
 
+const clearAllRoute = HttpRouter.del(
+  "/jobs",
+  Effect.gen(function* () {
+    const engine = yield* DownloadEngine;
+    const removed = yield* engine.clearAll;
+    return yield* HttpServerResponse.json({ removed });
+  }),
+);
+
 const removeRoute = HttpRouter.del(
   "/jobs/:id",
   Effect.gen(function* () {
@@ -118,6 +127,7 @@ export const router = HttpRouter.empty.pipe(
   enqueueRoute,
   clearCompletedRoute,
   clearFailedRoute,
+  clearAllRoute,
   removeRoute,
   retryRoute,
   folderGetRoute,
