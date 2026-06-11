@@ -1,38 +1,56 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render } from "uhtml";
 
 const reconnectMock = vi.fn();
 vi.mock("@/engineClient", () => ({
   reconnect: reconnectMock,
 }));
 
-await import("@/components/sd-disconnect-banner");
-const { $connected, resetStores } = await import("@/store");
+const { disconnectBanner } = await import("@/views/disconnect-banner");
 
-describe("<sd-disconnect-banner>", () => {
+describe("disconnectBanner()", () => {
   beforeEach(() => {
-    resetStores();
     reconnectMock.mockReset();
-    document.body.innerHTML = "<sd-disconnect-banner></sd-disconnect-banner>";
   });
 
   afterEach(() => {
     document.body.innerHTML = "";
   });
 
-  it("is visible when $connected is false", () => {
-    const banner = document.querySelector("sd-disconnect-banner") as HTMLElement;
-    expect(banner.hidden).toBe(false);
+  it("renders nothing when connected", () => {
+    // #given
+    const container = document.createElement("div");
+
+    // #when
+    render(container, disconnectBanner({ connected: true }));
+
+    // #then
+    expect(container.querySelector("button")).toBeNull();
+    expect(container.textContent?.trim()).toBe("");
   });
 
-  it("hides when $connected becomes true", () => {
-    $connected.set(true);
-    const banner = document.querySelector("sd-disconnect-banner") as HTMLElement;
-    expect(banner.hidden).toBe(true);
+  it("shows Disconnected text and Reconnect button when disconnected", () => {
+    // #given
+    const container = document.createElement("div");
+
+    // #when
+    render(container, disconnectBanner({ connected: false }));
+
+    // #then
+    expect(container.textContent).toContain("Disconnected");
+    expect(container.querySelector("button")?.textContent?.trim()).toBe("Reconnect");
   });
 
   it("clicking Reconnect calls engineClient.reconnect", () => {
-    const button = document.querySelector('sd-disconnect-banner button[data-ref="reconnect"]') as HTMLButtonElement;
+    // #given
+    const container = document.createElement("div");
+    render(container, disconnectBanner({ connected: false }));
+    const button = container.querySelector("button")!;
+
+    // #when
     button.click();
+
+    // #then
     expect(reconnectMock).toHaveBeenCalledTimes(1);
   });
 });

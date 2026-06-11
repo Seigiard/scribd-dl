@@ -11,7 +11,6 @@ vi.mock("@/engineClient", () => ({
 
 await import("@/components/sd-app");
 await import("@/components/sd-header");
-await import("@/components/sd-disconnect-banner");
 await import("@/components/sd-queue");
 await import("@/components/sd-queue-item");
 await import("@/components/sd-folder-modal");

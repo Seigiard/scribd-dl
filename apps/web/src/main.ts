@@ -3,12 +3,12 @@ import "./styles.css";
 import "./store";
 import "./components/sd-app";
 import "./components/sd-header";
-import "./components/sd-disconnect-banner";
 import "./components/sd-queue";
 import "./components/sd-queue-item";
 import "./components/sd-folder-modal";
-import { $transient } from "./store";
+import { $connected, $transient } from "./store";
 import { statusbar } from "./views/statusbar";
+import { disconnectBanner } from "./views/disconnect-banner";
 import { installFakeJobs } from "./devFixtures";
 import { attachPasteHandler, startEngineClient } from "./engineClient";
 
@@ -21,6 +21,10 @@ const mount = (selector: string, view: () => Hole | null): (() => void) => {
 const renderStatusbar = mount(".mount-statusbar", () => statusbar({ transient: $transient.get() }));
 $transient.listen(renderStatusbar);
 renderStatusbar();
+
+const renderBanner = mount(".mount-banner", () => disconnectBanner({ connected: $connected.get() }));
+$connected.listen(renderBanner);
+renderBanner();
 
 if (import.meta.env.DEV) installFakeJobs();
 void startEngineClient();
