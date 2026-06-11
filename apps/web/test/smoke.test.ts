@@ -14,11 +14,8 @@ await import("@/components/sd-header");
 await import("@/components/sd-disconnect-banner");
 await import("@/components/sd-queue");
 await import("@/components/sd-queue-item");
-await import("@/components/sd-statusbar");
 await import("@/components/sd-folder-modal");
 const { resetStores } = await import("@/store");
-
-const DEFAULT_HINT = "Press Ctrl/Cmd+V to download links";
 
 describe("SPA smoke", () => {
   beforeEach(() => {
@@ -30,7 +27,6 @@ describe("SPA smoke", () => {
           <sd-header></sd-header>
           <sd-disconnect-banner hidden></sd-disconnect-banner>
           <sd-queue></sd-queue>
-          <sd-statusbar></sd-statusbar>
         </article>
         <sd-folder-modal hidden></sd-folder-modal>
       </sd-app>
@@ -45,14 +41,8 @@ describe("SPA smoke", () => {
     expect(document.querySelector("sd-app")).not.toBeNull();
     expect(document.querySelector("sd-header")).not.toBeNull();
     expect(document.querySelector("sd-queue")).not.toBeNull();
-    expect(document.querySelector("sd-statusbar")).not.toBeNull();
     expect(document.querySelector("sd-disconnect-banner")).not.toBeNull();
     expect(document.querySelector("sd-folder-modal")).not.toBeNull();
-  });
-
-  it("statusbar shows the default hint at startup", () => {
-    const bar = document.querySelector("sd-statusbar")!;
-    expect(bar.textContent).toBe(DEFAULT_HINT);
   });
 
   it("queue starts empty", () => {

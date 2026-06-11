@@ -1,34 +1,40 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import "@/components/sd-statusbar";
-import { $transient, resetStores } from "@/store";
+import { describe, expect, it } from "vitest";
+import { render } from "uhtml";
+import { statusbar } from "@/views/statusbar";
 
 const DEFAULT_HINT = "Press Ctrl/Cmd+V to download links";
 
-describe("<sd-statusbar>", () => {
-  beforeEach(() => {
-    resetStores();
-    document.body.innerHTML = "<sd-statusbar></sd-statusbar>";
+describe("statusbar()", () => {
+  it("shows the default hint when transient is null", () => {
+    // #given
+    const container = document.createElement("div");
+
+    // #when
+    render(container, statusbar({ transient: null }));
+
+    // #then
+    expect(container.textContent).toBe(DEFAULT_HINT);
   });
 
-  afterEach(() => {
-    document.body.innerHTML = "";
+  it("shows the transient message when provided", () => {
+    // #given
+    const container = document.createElement("div");
+
+    // #when
+    render(container, statusbar({ transient: "No links found in clipboard" }));
+
+    // #then
+    expect(container.textContent).toBe("No links found in clipboard");
   });
 
-  it("shows the default hint when $transient is null", () => {
-    const bar = document.querySelector("sd-statusbar")!;
-    expect(bar.textContent).toBe(DEFAULT_HINT);
-  });
+  it("treats an empty string as a valid transient (no fallback)", () => {
+    // #given
+    const container = document.createElement("div");
 
-  it("swaps to the transient message", () => {
-    $transient.set("No links found in clipboard");
-    const bar = document.querySelector("sd-statusbar")!;
-    expect(bar.textContent).toBe("No links found in clipboard");
-  });
+    // #when
+    render(container, statusbar({ transient: "" }));
 
-  it("falls back to the default when transient clears", () => {
-    $transient.set("nope");
-    $transient.set(null);
-    const bar = document.querySelector("sd-statusbar")!;
-    expect(bar.textContent).toBe(DEFAULT_HINT);
+    // #then
+    expect(container.textContent).toBe("");
   });
 });
