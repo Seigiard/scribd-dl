@@ -1,31 +1,27 @@
 import { atom } from "nanostores";
 import { html, type Hole } from "uhtml";
 import { saveFolder } from "@/engineClient";
-import { $modal, type ModalMode } from "@/store";
+import { $folder, $modal, type ModalMode } from "@/store";
 
 const EMPTY_ERROR = "Path cannot be empty";
 const SAVE_ERROR = "Failed to save";
 
 export const $modalError = atom<string | null>(null);
+export const $draftFolder = atom<string>("");
 
 export type FolderModalProps = {
   mode: ModalMode;
   folder: string | null;
   error: string | null;
+  draft: string;
 };
 
 const close = (): void => {
   $modal.set("none");
 };
 
-const findInput = (target: EventTarget | null): HTMLInputElement | null => {
-  if (!(target instanceof HTMLElement)) return null;
-  const root = target.closest(".folder-modal");
-  return root?.querySelector<HTMLInputElement>(".folder-modal-input") ?? null;
-};
-
-const trySave = async (input: HTMLInputElement): Promise<void> => {
-  const val = input.value.trim();
+const trySave = async (): Promise<void> => {
+  const val = $draftFolder.get().trim();
   if (!val) {
     $modalError.set(EMPTY_ERROR);
     return;
@@ -39,15 +35,18 @@ const trySave = async (input: HTMLInputElement): Promise<void> => {
   }
 };
 
-const onSaveClick = (e: MouseEvent): void => {
-  const input = findInput(e.currentTarget);
-  if (input) void trySave(input);
+const onInput = (e: Event): void => {
+  $draftFolder.set((e.target as HTMLInputElement).value);
+};
+
+const onSaveClick = (): void => {
+  void trySave();
 };
 
 const onInputKeydown = (e: KeyboardEvent): void => {
   if (e.key === "Enter") {
     e.preventDefault();
-    void trySave(e.currentTarget as HTMLInputElement);
+    void trySave();
     return;
   }
   if (e.key === "Escape") {
@@ -82,13 +81,16 @@ const detachEscape = (): void => {
 $modal.listen((mode) => {
   if (mode === "folder") {
     $modalError.set(null);
+    $draftFolder.set($folder.get() ?? "");
     attachEscape();
   } else {
+    $modalError.set(null);
+    $draftFolder.set("");
     detachEscape();
   }
 });
 
-export const folderModal = ({ mode, folder, error }: FolderModalProps): Hole => {
+export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
   if (mode !== "folder") return html``;
   return html`<div class="folder-modal" @click=${onBackdropClick}>
     <article class="terminal-card">
@@ -100,7 +102,8 @@ export const folderModal = ({ mode, folder, error }: FolderModalProps): Hole => 
             type="text"
             autocomplete="off"
             spellcheck="false"
-            .value=${folder ?? ""}
+            .value=${draft}
+            @input=${onInput}
             @keydown=${onInputKeydown}
           />
         </div>
