@@ -4,13 +4,15 @@ Tauri 2.x desktop wrapper for scribd-dl. Bundles the [`apps/web`](../web) SPA
 inside a native window and spawns [`packages/engine`](../../packages/engine)
 as a self-contained Bun sidecar.
 
-The native shell adds three affordances over the browser experience:
+The native shell adds two affordances over the browser experience:
 
 - a native folder picker (Browse… button in the folder modal);
-- macOS notifications when a download finishes while the window is in the
-  background;
 - a quit guard that refuses to close the window while there are still
   `Queued` or `Downloading` jobs, after asking the user.
+
+(System notifications were removed — they require a signed `.app` bundle to
+deliver reliably on macOS, and we'd rather show "downloaded" / "failed"
+inside the SPA itself. Tracked as follow-up.)
 
 Engine persistence is unchanged — `~/.config/scribd-dl/{settings.json,jobs.jsonl}`
 are still authoritative for the folder selection and queue state. Nothing
