@@ -1,7 +1,10 @@
 mod commands;
+mod quit_guard;
 mod sidecar;
 
-use tauri::{Manager, RunEvent};
+use std::sync::atomic::Ordering;
+
+use tauri::{Manager, RunEvent, WindowEvent};
 
 use commands::{get_backend_url, notify, pick_folder};
 use sidecar::{kill_sidecar, spawn_sidecar, SidecarState};
@@ -20,6 +23,20 @@ pub fn run() {
                 log::error!("failed to spawn engine sidecar: {e}");
             }
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            if let WindowEvent::CloseRequested { api, .. } = event {
+                let state = window.state::<SidecarState>();
+                if state.quit_confirmed.load(Ordering::SeqCst) {
+                    return;
+                }
+                api.prevent_close();
+                let app = window.app_handle().clone();
+                let window_clone = window.clone();
+                tauri::async_runtime::spawn(async move {
+                    quit_guard::handle_close_request(app, window_clone).await;
+                });
+            }
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

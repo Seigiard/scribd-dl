@@ -1,6 +1,7 @@
 use std::fs::{create_dir_all, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -11,6 +12,7 @@ use tauri_plugin_shell::ShellExt;
 pub struct SidecarState {
     pub backend_url: Mutex<Option<String>>,
     pub child: Mutex<Option<CommandChild>>,
+    pub quit_confirmed: AtomicBool,
 }
 
 impl SidecarState {
@@ -18,6 +20,7 @@ impl SidecarState {
         Self {
             backend_url: Mutex::new(None),
             child: Mutex::new(None),
+            quit_confirmed: AtomicBool::new(false),
         }
     }
 }
