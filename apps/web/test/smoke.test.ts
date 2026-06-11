@@ -10,7 +10,6 @@ vi.mock("@/engineClient", () => ({
 }));
 
 await import("@/components/sd-app");
-await import("@/components/sd-folder-modal");
 const { resetStores } = await import("@/store");
 
 describe("SPA smoke", () => {

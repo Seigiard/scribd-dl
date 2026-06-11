@@ -2,12 +2,12 @@ import { render, type Hole } from "uhtml";
 import "./styles.css";
 import "./store";
 import "./components/sd-app";
-import "./components/sd-folder-modal";
-import { $connected, $folder, $jobs, $transient } from "./store";
+import { $connected, $folder, $jobs, $modal, $transient } from "./store";
 import { statusbar } from "./views/statusbar";
 import { disconnectBanner } from "./views/disconnect-banner";
 import { header } from "./views/header";
 import { queue } from "./views/queue";
+import { folderModal, $modalError } from "./views/folder-modal";
 import { installFakeJobs } from "./devFixtures";
 import { attachPasteHandler, startEngineClient } from "./engineClient";
 
@@ -32,6 +32,14 @@ renderHeader();
 const renderQueue = mount(".mount-queue", () => queue({ jobs: $jobs.get() }));
 $jobs.listen(renderQueue);
 renderQueue();
+
+const renderModal = mount(".mount-modal", () =>
+  folderModal({ mode: $modal.get(), folder: $folder.get(), error: $modalError.get() }),
+);
+$modal.listen(renderModal);
+$folder.listen(renderModal);
+$modalError.listen(renderModal);
+renderModal();
 
 if (import.meta.env.DEV) installFakeJobs();
 void startEngineClient();
