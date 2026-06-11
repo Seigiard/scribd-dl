@@ -19,6 +19,8 @@
     "app:dev": "bun --filter @scribd-dl/web dev",
     "app:build": "bun --filter @scribd-dl/web build",
     "app:test": "bun --filter @scribd-dl/web test",
+    "desktop:dev": "bun --filter @scribd-dl/desktop tauri dev",
+    "desktop:build": "bun --filter @scribd-dl/desktop tauri build",
     "dev:spa": "bun scripts/dev-spa.ts",
     "dev:tui": "bun scripts/dev-tui.ts",
     "test": "bun --filter '*' test",
