@@ -11,6 +11,7 @@
     "@effect/cli": "^0.75.2",
     "@effect/platform": "^0.96.1",
     "@effect/platform-bun": "^0.90.0",
+    "@scribd-dl/engine": "workspace:*",
     "@scribd-dl/shared": "workspace:*",
     "effect": "^3.21.3",
     "ink": "^7.0.5",

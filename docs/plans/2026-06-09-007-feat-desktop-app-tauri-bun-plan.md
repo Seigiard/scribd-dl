@@ -1,6 +1,7 @@
 ---
 title: "feat: macOS desktop app — Tauri webview + Bun engine sidecar"
-status: active
+status: superseded
+superseded_by: docs/plans/2026-06-11-004-feat-tauri-desktop-app-plan.md
 date: 2026-06-09
 type: feat
 depth: deep

@@ -12,9 +12,12 @@ Repository is a **Bun workspaces monorepo** — one root `bun.lock`, one hoisted
 bun install               # install deps for all workspaces (single root bun.lock)
 bun run engine            # launch HTTP/WS sidecar (default port 4747) — only entry point
 bun run tui               # launch Ink terminal UI (apps/tui client of engine)
-bun run app:dev           # Vite dev server for the SPA (apps/web)
-bun run dev:spa           # engine + Vite together
+bun run dev:spa           # engine + Vite together (apps/web)
 bun run dev:tui           # engine (backgrounded, logs to .dev-tui-engine.log) + TUI in foreground
+bun run dev:app           # Tauri desktop dev (apps/desktop, sidecar engine bundled)
+bun run build:spa         # Vite production build for the SPA
+bun run build:tui         # bun build --compile → dist/scribd-dl-tui standalone binary
+bun run build:app         # Tauri production build (apps/desktop)
 bun run test              # all workspace tests (engine bun:test + web Vitest)
 bun --filter @scribd-dl/engine test                  # one workspace's tests
 bun --cwd packages/engine test path/to.test.ts       # single test file

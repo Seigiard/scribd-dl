@@ -212,6 +212,105 @@ describe("folderModal()", () => {
     expect($modalError.get()).toBe("Failed to save");
   });
 
+  describe("native Browse button (Tauri runtime)", () => {
+    const invokeMock = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>();
+
+    beforeEach(() => {
+      invokeMock.mockReset();
+      // @ts-expect-error — installing the Tauri global for the duration of these tests
+      window.__TAURI__ = { core: { invoke: invokeMock } };
+    });
+
+    afterEach(() => {
+      // @ts-expect-error — clean up the global between scopes
+      delete window.__TAURI__;
+    });
+
+    it("does not render Browse button without __TAURI__", () => {
+      // #given — clear the Tauri global installed by this describe's beforeEach
+      // @ts-expect-error
+      delete window.__TAURI__;
+
+      // #when
+      $modal.set("folder");
+      const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/x" });
+
+      // #then
+      expect(root.querySelector('[data-action="browse"]')).toBeNull();
+    });
+
+    it("renders Browse button with __TAURI__", () => {
+      // #when
+      $modal.set("folder");
+      const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/x" });
+
+      // #then
+      expect(root.querySelector('[data-action="browse"]')).not.toBeNull();
+    });
+
+    it("Browse click invokes pick_folder and writes selection into $draftFolder", async () => {
+      // #given
+      invokeMock.mockResolvedValueOnce("/Users/me/Downloads");
+      $modal.set("folder");
+      $draftFolder.set("/seed");
+      const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/seed" });
+
+      // #when
+      root.querySelector<HTMLButtonElement>('[data-action="browse"]')!.click();
+      await flush();
+
+      // #then
+      expect(invokeMock).toHaveBeenCalledWith("pick_folder", { defaultPath: "/seed" });
+      expect($draftFolder.get()).toBe("/Users/me/Downloads");
+    });
+
+    it("Browse cancel (invoke resolves null) leaves $draftFolder untouched", async () => {
+      // #given
+      invokeMock.mockResolvedValueOnce(null);
+      $modal.set("folder");
+      $draftFolder.set("/seed");
+      const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/seed" });
+
+      // #when
+      root.querySelector<HTMLButtonElement>('[data-action="browse"]')!.click();
+      await flush();
+
+      // #then
+      expect(invokeMock).toHaveBeenCalledOnce();
+      expect($draftFolder.get()).toBe("/seed");
+    });
+
+    it("Browse rejection leaves $draftFolder untouched and does not throw", async () => {
+      // #given
+      invokeMock.mockRejectedValueOnce(new Error("plugin failure"));
+      $modal.set("folder");
+      $draftFolder.set("/seed");
+      const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/seed" });
+
+      // #when
+      root.querySelector<HTMLButtonElement>('[data-action="browse"]')!.click();
+      await flush();
+
+      // #then
+      expect($draftFolder.get()).toBe("/seed");
+    });
+
+    it("Browse passes null defaultPath when draft is empty", async () => {
+      // #given
+      invokeMock.mockResolvedValueOnce("/Users/me/picked");
+      $modal.set("folder");
+      $draftFolder.set("");
+      const root = mountModal({ mode: "folder", folder: null, error: null, draft: "" });
+
+      // #when
+      root.querySelector<HTMLButtonElement>('[data-action="browse"]')!.click();
+      await flush();
+
+      // #then
+      expect(invokeMock).toHaveBeenCalledWith("pick_folder", { defaultPath: null });
+    });
+  });
+
   it("external $folder change during typing does not overwrite draft", () => {
     // #given — user opened modal and typed "/my-draft"
     $folder.set("/old");
