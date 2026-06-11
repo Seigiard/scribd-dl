@@ -32,7 +32,7 @@ body {
 }
 
 sd-header .folder-row,
-.header .folder-row {
+.folder-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -41,7 +41,7 @@ sd-header .folder-row,
 }
 
 sd-header .folder-row .btn,
-.header .folder-row .btn {
+.folder-row .btn {
   color: var(--invert-font-color);
   border-color: var(--invert-font-color);
 }
