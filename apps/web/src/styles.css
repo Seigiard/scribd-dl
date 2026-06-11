@@ -48,61 +48,52 @@ body {
 }
 
 .terminal-content {
-  padding: var(--s2) var(--s);
   scrollbar-gutter: stable;
   overflow-y: auto;
 }
 
 .terminal-footer {
-  border-top: 1px dashed var(--font-color);
+  border-top: 1px solid var(--secondary-color);
   padding: var(--s) var(--s2) var(--s) var(--s4);
 }
 
 .queue {
   display: grid;
-  gap: var(--s2);
 }
 
 .queue-item {
   display: block;
-  --item-icon-size: 1rem;
-  --item-icon-gap: var(--s);
-  --item-indent: var(--s3);
+  padding: var(--s);
+  &:hover {
+    background: var(--code-bg-color);
+  }
 }
 
 .queue-item .item-head {
-  display: flex;
+  display: grid;
+  grid-template-columns: var(--s2) 1fr auto;
   align-items: start;
-  gap: var(--item-icon-gap);
+  gap: var(--s);
   font-weight: bold;
 }
 
 .queue-item .item-icon {
   margin-top: 0.167em;
   width: var(--s2);
-  height: var(--item-icon-size);
+  height: 1rem;
   flex: none;
 }
 
 .queue-item .item-action {
-  background: none;
-  border: 0;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  color: var(--primary-color);
-  display: inline-flex;
-  align-items: center;
-}
-
-.queue-item .item-action:hover {
-  opacity: 0.7;
+  padding: calc(var(--s) / 2) var(--s);
+  margin-block: calc(var(--s) / 2 * -1);
+  translate: 0 var(--s);
 }
 
 .queue-item .item-url,
 .queue-item .item-progress,
 .queue-item .item-reason {
-  padding-left: var(--item-indent);
+  padding-left: var(--s3);
   font-size: 0.9em;
 }
 
@@ -122,7 +113,7 @@ body {
 }
 
 .queue-item[data-status="Queued"] .item-icon-status {
-  opacity: 0.6;
+  color: var(--secondary-color);
 }
 
 .queue-item[data-status="Downloading"] .item-icon-status,
@@ -146,7 +137,7 @@ body {
 
 .statusbar {
   font-size: 0.9em;
-  opacity: 0.85;
+  color: var(--secondary-color);
 }
 
 .folder-modal {

@@ -24,8 +24,14 @@ const actionButton = (job: Job): Hole | null => {
     if (action.kind === "retry") void retryJobById(job.id);
     else void removeJobById(job.id);
   };
-  return html`<button type="button" class="item-action" data-action=${action.kind} aria-label=${action.label} @click=${onClick}>
-    ${icon(action.href)}
+  return html`<button
+    type="button"
+    class="btn btn-default btn-ghost item-action"
+    data-action=${action.kind}
+    aria-label=${action.label}
+    @click=${onClick}
+  >
+    ${action.kind === "retry" ? "Retry" : "Delete"}
   </button>`;
 };
 
