@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { render } from "uhtml";
 import type { Job, JobId, JobStatus } from "@scribd-dl/shared";
 
 const removeJobByIdMock = vi.fn(async () => {});
@@ -8,28 +9,27 @@ vi.mock("@/engineClient", () => ({
   retryJobById: retryJobByIdMock,
 }));
 
-await import("@/components/sd-queue-item");
-const { $jobs, resetStores } = await import("@/store");
+const { queueItem } = await import("@/views/queue-item");
 
 const ID = "j1" as JobId;
 
-const mountWithJob = (status: JobStatus, overrides: Partial<Job> = {}): HTMLElement => {
-  const job: Job = {
-    id: ID,
-    url: "https://scribd.com/doc/abc",
-    domain: "scribd",
-    displayTitle: "Doc abc",
-    status,
-    ...overrides,
-  };
-  $jobs.setKey(ID, job);
-  document.body.innerHTML = `<sd-queue-item job-id="${ID}"></sd-queue-item>`;
-  return document.querySelector("sd-queue-item") as HTMLElement;
+const makeJob = (status: JobStatus, overrides: Partial<Job> = {}): Job => ({
+  id: ID,
+  url: "https://scribd.com/doc/abc",
+  domain: "scribd",
+  displayTitle: "Doc abc",
+  status,
+  ...overrides,
+});
+
+const mountJob = (job: Job): HTMLElement => {
+  const container = document.createElement("div");
+  render(container, queueItem(job));
+  return container.querySelector(".queue-item") as HTMLElement;
 };
 
-describe("<sd-queue-item>", () => {
+describe("queueItem()", () => {
   beforeEach(() => {
-    resetStores();
     removeJobByIdMock.mockReset();
     retryJobByIdMock.mockReset();
   });
@@ -38,74 +38,64 @@ describe("<sd-queue-item>", () => {
     document.body.innerHTML = "";
   });
 
-  it("renders title, url, status and Remove button when Queued", () => {
-    const el = mountWithJob("Queued");
-    expect(el.querySelector('[data-ref="title"]')!.textContent).toBe("Doc abc");
-    expect(el.querySelector('[data-ref="url"]')!.textContent).toBe("https://scribd.com/doc/abc");
-    expect(el.querySelector('[data-ref="status"]')!.textContent).toBe("Queued");
-    expect(el.querySelector('[data-ref="progress"]')!.hasAttribute("hidden")).toBe(true);
-    expect(el.querySelector('[data-ref="reason"]')!.hasAttribute("hidden")).toBe(true);
+  it("Queued: title, url, default icon, Remove action", () => {
+    const el = mountJob(makeJob("Queued"));
+    expect(el.dataset.status).toBe("Queued");
+    expect(el.textContent).toContain("Doc abc");
+    expect(el.textContent).toContain("https://scribd.com/doc/abc");
+    expect(el.querySelector('button[data-action="remove"]')).not.toBeNull();
+    expect(el.querySelector('button[data-action="retry"]')).toBeNull();
+    expect(el.querySelector(".item-progress")).toBeNull();
+    expect(el.querySelector(".item-reason")).toBeNull();
+  });
+
+  it("Downloading with progress: shows progress text, no action", () => {
+    const el = mountJob(
+      makeJob("Downloading", { progress: { done: 5, total: 10, stage: "render" } }),
+    );
+    expect(el.querySelector(".item-progress")?.textContent).toBe("5 / 10 (render)");
+    expect(el.querySelector("button")).toBeNull();
+  });
+
+  it("Downloaded: no action, no progress, no reason", () => {
+    const el = mountJob(makeJob("Downloaded"));
+    expect(el.querySelector("button")).toBeNull();
+    expect(el.querySelector(".item-progress")).toBeNull();
+    expect(el.querySelector(".item-reason")).toBeNull();
+  });
+
+  it("Failed + retryable: shows reason and Retry action", () => {
+    const el = mountJob(makeJob("Failed", { failure: { reason: "Timed out", retryable: true } }));
+    expect(el.querySelector(".item-reason")?.textContent).toBe("Reason: Timed out");
+    expect(el.querySelector('button[data-action="retry"]')).not.toBeNull();
+    expect(el.querySelector('button[data-action="remove"]')).toBeNull();
+  });
+
+  it("Failed + non-retryable: shows reason and Remove action", () => {
+    const el = mountJob(
+      makeJob("Failed", { failure: { reason: "Unsupported domain", retryable: false } }),
+    );
+    expect(el.querySelector(".item-reason")?.textContent).toBe("Reason: Unsupported domain");
     expect(el.querySelector('button[data-action="remove"]')).not.toBeNull();
     expect(el.querySelector('button[data-action="retry"]')).toBeNull();
   });
 
-  it("shows progress text when Downloading with progress", () => {
-    const el = mountWithJob("Downloading", { progress: { done: 5, total: 10, stage: "render" } });
-    expect(el.querySelector('[data-ref="progress"]')!.textContent).toBe("5 / 10 (render)");
-    expect(el.querySelector('[data-ref="progress"]')!.hasAttribute("hidden")).toBe(false);
-    expect(el.querySelector('[data-ref="status"]')!.textContent).toBe("Downloading...");
-  });
-
-  it("Downloaded shows no action buttons", () => {
-    const el = mountWithJob("Downloaded");
-    expect(el.querySelector("button")).toBeNull();
-    expect(el.querySelector('[data-ref="status"]')!.textContent).toBe("Downloaded");
-  });
-
-  it("Failed + retryable renders Reason and Retry", () => {
-    const el = mountWithJob("Failed", {
-      failure: { reason: "Timed out", retryable: true },
-    });
-    expect(el.querySelector('[data-ref="reason"]')!.textContent).toBe("Reason: Timed out");
-    expect(el.querySelector('[data-ref="reason"]')!.hasAttribute("hidden")).toBe(false);
-    expect(el.querySelector('button[data-action="retry"]')).not.toBeNull();
-  });
-
-  it("Failed + non-retryable renders Reason but no Retry", () => {
-    const el = mountWithJob("Failed", {
-      failure: { reason: "Unsupported domain", retryable: false },
-    });
-    expect(el.querySelector('[data-ref="reason"]')!.textContent).toBe("Reason: Unsupported domain");
-    expect(el.querySelector('button[data-action="retry"]')).toBeNull();
-  });
-
-  it("clicking Remove calls removeJobById with the job id", () => {
-    const el = mountWithJob("Queued");
+  it("clicking Remove calls removeJobById with id", () => {
+    const el = mountJob(makeJob("Queued"));
     const btn = el.querySelector('button[data-action="remove"]') as HTMLButtonElement;
     btn.click();
     expect(removeJobByIdMock).toHaveBeenCalledWith(ID);
   });
 
-  it("clicking Retry calls retryJobById with the job id", () => {
-    const el = mountWithJob("Failed", { failure: { reason: "x", retryable: true } });
+  it("clicking Retry calls retryJobById with id", () => {
+    const el = mountJob(makeJob("Failed", { failure: { reason: "x", retryable: true } }));
     const btn = el.querySelector('button[data-action="retry"]') as HTMLButtonElement;
     btn.click();
     expect(retryJobByIdMock).toHaveBeenCalledWith(ID);
   });
 
-  it("status change to Downloading updates the same DOM element without remount", () => {
-    const el = mountWithJob("Queued");
-    const titleNode = el.querySelector('[data-ref="title"]');
-    $jobs.setKey(ID, {
-      id: ID,
-      url: "https://scribd.com/doc/abc",
-      domain: "scribd",
-      displayTitle: "Doc abc",
-      status: "Downloading",
-      progress: { done: 1, total: 4, stage: "scrape" },
-    });
-    expect(el.querySelector('[data-ref="title"]')).toBe(titleNode);
-    expect(el.querySelector('[data-ref="status"]')!.textContent).toBe("Downloading...");
-    expect(el.dataset.status).toBe("Downloading");
+  it("renders placeholder when displayTitle is empty", () => {
+    const el = mountJob(makeJob("Queued", { displayTitle: "" }));
+    expect(el.querySelector(".item-title")?.textContent).toBe("—");
   });
 });
