@@ -1,4 +1,4 @@
-import type { EngineSnapshot, EnqueueResponse, FolderResponse } from "@scribd-dl/shared";
+import type { ClearResponse, EngineSnapshot, EnqueueResponse, FolderResponse } from "@scribd-dl/shared";
 
 const json = { "Content-Type": "application/json" };
 
@@ -37,4 +37,21 @@ export const fetchFolder = async (baseUrl: string): Promise<string> => {
 export const setFolder = async (baseUrl: string, path: string): Promise<void> => {
   const res = await fetch(`${baseUrl}/folder`, { method: "POST", headers: json, body: JSON.stringify({ path }) });
   if (!res.ok) throw new Error(`POST /folder failed: ${res.status}`);
+};
+
+const clearByScope = async (baseUrl: string, scope: "completed" | "failed"): Promise<number> => {
+  const res = await fetch(`${baseUrl}/jobs/${scope}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`DELETE /jobs/${scope} failed: ${res.status}`);
+  return ((await res.json()) as ClearResponse).removed;
+};
+
+export const clearFinished = async (baseUrl: string): Promise<number> => {
+  const [completed, failed] = await Promise.all([clearByScope(baseUrl, "completed"), clearByScope(baseUrl, "failed")]);
+  return completed + failed;
+};
+
+export const clearAll = async (baseUrl: string): Promise<number> => {
+  const res = await fetch(`${baseUrl}/jobs`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`DELETE /jobs failed: ${res.status}`);
+  return ((await res.json()) as ClearResponse).removed;
 };

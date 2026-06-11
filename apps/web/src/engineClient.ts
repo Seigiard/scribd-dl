@@ -1,7 +1,7 @@
 import type { JobEvent } from "@scribd-dl/shared";
-import { enqueueText, fetchFolder, fetchSnapshot, removeJob, retryJob, setFolder } from "@/lib/api";
+import { clearAll, clearFinished, enqueueText, fetchFolder, fetchSnapshot, removeJob, retryJob, setFolder } from "@/lib/api";
 import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
-import { $connected, $folder, applySnapshot, showTransient } from "@/store";
+import { $connected, $folder, $jobs, applySnapshot, dismissSticky, showTransient } from "@/store";
 
 const NO_LINKS_MESSAGE = "No links found in clipboard";
 const URL_REGEX = /(https?:\/\/\S+)/g;
@@ -34,6 +34,10 @@ const handleWsEvent = (event: JobEvent): void => {
     $folder.set(event.path);
     return;
   }
+  if (event._tag === "SnapshotReplaced") {
+    applySnapshot(event.snapshot);
+    return;
+  }
   void refresh();
 };
 
@@ -54,6 +58,7 @@ const openSocket = (): void => {
   next.onopen = () => {
     if (ws !== next) return;
     $connected.set(true);
+    dismissSticky();
     void refresh();
     void loadFolder();
   };
@@ -66,10 +71,12 @@ const openSocket = (): void => {
   next.onclose = () => {
     if (ws !== next) return;
     $connected.set(false);
+    showTransient("error", "Disconnected from engine", { sticky: true });
   };
   next.onerror = () => {
     if (ws !== next) return;
     $connected.set(false);
+    showTransient("error", "Disconnected from engine", { sticky: true });
   };
 };
 
@@ -107,6 +114,30 @@ export const removeJobById = async (id: string): Promise<void> => {
 export const retryJobById = async (id: string): Promise<void> => {
   if (!baseUrl) return;
   await retryJob(baseUrl, id);
+};
+
+export const commandClearFinished = async (): Promise<void> => {
+  if (!baseUrl) return;
+  try {
+    await clearFinished(baseUrl);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to clear finished jobs";
+    showTransient("error", msg);
+  }
+};
+
+export const commandClearAll = async (): Promise<void> => {
+  if (!baseUrl) return;
+  const total = Object.values($jobs.get()).filter((j): j is NonNullable<typeof j> => j !== undefined).length;
+  if (total === 0) return;
+  const confirmed = window.confirm(`Remove all ${total} jobs and cancel any active downloads? Files on disk are kept.`);
+  if (!confirmed) return;
+  try {
+    await clearAll(baseUrl);
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Failed to clear all jobs";
+    showTransient("error", msg);
+  }
 };
 
 const extractUrls = (text: string): string[] => text.match(URL_REGEX) ?? [];

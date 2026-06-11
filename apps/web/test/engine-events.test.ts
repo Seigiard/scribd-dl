@@ -77,4 +77,30 @@ describe("engineClient WS event handling", () => {
     __testing.handleWsEvent({ _tag: "OutputFolderChanged", path: "" });
     expect($folder.get()).toBe("");
   });
+
+  it("SnapshotReplaced applies snapshot inline without HTTP refresh", async () => {
+    // #given
+    const { $jobs } = await import("@/store");
+
+    // #when
+    __testing.handleWsEvent({
+      _tag: "SnapshotReplaced",
+      snapshot: {
+        jobs: [
+          {
+            id: "ws-snap" as never,
+            url: "https://scribd.com/y",
+            domain: "scribd",
+            displayTitle: "y",
+            status: "Queued",
+          },
+        ],
+      } as never,
+    });
+    await new Promise((r) => setTimeout(r, 0));
+
+    // #then
+    expect($jobs.get()["ws-snap"]).toBeDefined();
+    expect(fetchSnapshotMock).not.toHaveBeenCalled();
+  });
 });
