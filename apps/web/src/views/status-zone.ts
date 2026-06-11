@@ -20,6 +20,12 @@ export const statusZone = ({ transient, jobs }: StatusZoneProps): Hole => {
   const messageText = transient?.message ?? DEFAULT_HINT;
   const messageCls = transient ? `status-zone-text status-zone-${transient.severity}` : "status-zone-text";
 
+  if (transient !== null) {
+    return html`<div class="status-zone">
+      <div class=${messageCls}>${messageText}</div>
+    </div>`;
+  }
+
   return html`<div class="status-zone">
     <div class=${messageCls}>${messageText}</div>
     <div class="status-zone-actions">

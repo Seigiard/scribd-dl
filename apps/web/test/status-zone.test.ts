@@ -114,4 +114,16 @@ describe("statusZone view", () => {
     // #then
     expect(clearAllMock).toHaveBeenCalledTimes(1);
   });
+
+  it("hides Clear buttons when a transient message is showing", () => {
+    // #when
+    const c = renderTo({
+      transient: { severity: "warning", message: "Unsupported domain", sticky: false },
+      jobs: { a: job("a", "Downloaded"), b: job("b", "Queued") },
+    });
+
+    // #then — message visible, no buttons rendered
+    expect(c.querySelector(".status-zone-text")?.textContent).toBe("Unsupported domain");
+    expect(c.querySelectorAll("button").length).toBe(0);
+  });
 });
