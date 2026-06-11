@@ -1,6 +1,7 @@
 ---
 title: "refactor: Idiomatic nanotags for apps/web (Phase A)"
-status: active
+status: superseded
+superseded_by: docs/plans/2026-06-11-002-refactor-uhtml-islands-rewrite-plan.md
 created: 2026-06-11
 origin: docs/brainstorms/2026-06-11-nanotags-idiomatic-refactor-requirements.md
 type: refactor
@@ -8,6 +9,8 @@ depth: standard
 ---
 
 # refactor: Idiomatic nanotags for `apps/web` (Phase A)
+
+> **Superseded** by [`2026-06-11-002-refactor-uhtml-islands-rewrite-plan.md`](./2026-06-11-002-refactor-uhtml-islands-rewrite-plan.md). Подход к idiomatic nanotags разбился о hard инвариант — `withRefs` резолв в `connectedCallback()` до `setup()`. Бранч `refactor/nanotags-idiomatic-phase-a` брошен без merge. См. новый brainstorm: [`docs/brainstorms/2026-06-11-uhtml-islands-rewrite-requirements.md`](../brainstorms/2026-06-11-uhtml-islands-rewrite-requirements.md).
 
 ## Summary
 

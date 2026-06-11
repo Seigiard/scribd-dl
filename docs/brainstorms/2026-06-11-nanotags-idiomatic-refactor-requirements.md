@@ -1,8 +1,10 @@
 # Idiomatic nanotags refactor for `apps/web`
 
 **Date:** 2026-06-11
-**Status:** Requirements draft
+**Status:** Superseded by [`2026-06-11-uhtml-islands-rewrite-requirements.md`](./2026-06-11-uhtml-islands-rewrite-requirements.md)
 **Scope:** Standard (refactor, single workspace)
+
+> **Superseded.** Подход разбился об hard инвариант nanotags — `withRefs` резолвится в `connectedCallback()` до `setup()`, что несовместимо с `ctx.host.innerHTML` в `setup()`. Если markup всё равно живёт в TS, nanotags даёт трение без пользы. Замещён на uhtml + islands rewrite — см. ссылку выше.
 
 ## Problem
 
