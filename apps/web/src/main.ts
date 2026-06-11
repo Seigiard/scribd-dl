@@ -6,7 +6,7 @@ import { statusbar } from "./views/statusbar";
 import { disconnectBanner } from "./views/disconnect-banner";
 import { header } from "./views/header";
 import { queue } from "./views/queue";
-import { folderModal, $modalError } from "./views/folder-modal";
+import { folderModal, $modalError, $draftFolder } from "./views/folder-modal";
 import { installFakeJobs } from "./devFixtures";
 import { attachPasteHandler, startEngineClient } from "./engineClient";
 
@@ -32,10 +32,18 @@ const renderQueue = mount(".mount-queue", () => queue({ jobs: $jobs.get() }));
 $jobs.listen(renderQueue);
 renderQueue();
 
-const renderModal = mount(".mount-modal", () => folderModal({ mode: $modal.get(), folder: $folder.get(), error: $modalError.get() }));
+const renderModal = mount(".mount-modal", () =>
+  folderModal({
+    mode: $modal.get(),
+    folder: $folder.get(),
+    error: $modalError.get(),
+    draft: $draftFolder.get(),
+  }),
+);
 $modal.listen(renderModal);
 $folder.listen(renderModal);
 $modalError.listen(renderModal);
+$draftFolder.listen(renderModal);
 renderModal();
 
 if (import.meta.env.DEV) installFakeJobs();

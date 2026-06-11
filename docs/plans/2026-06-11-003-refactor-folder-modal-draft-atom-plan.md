@@ -1,7 +1,8 @@
 ---
 title: "refactor: $draftFolder atom for folder-modal input state"
-status: active
+status: completed
 created: 2026-06-11
+completed: 2026-06-11
 type: refactor
 depth: shallow
 ---
