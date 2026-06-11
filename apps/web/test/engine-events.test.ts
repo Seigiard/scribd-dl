@@ -88,12 +88,20 @@ describe("engineClient WS event handling", () => {
       });
     };
 
+    const setHasFocus = (focused: boolean): void => {
+      Object.defineProperty(document, "hasFocus", {
+        configurable: true,
+        value: () => focused,
+      });
+    };
+
     beforeEach(() => {
       invokeMock.mockReset();
       invokeMock.mockResolvedValue(undefined);
       // @ts-expect-error — install Tauri global for this scope
       window.__TAURI__ = { core: { invoke: invokeMock } };
       setVisibility("hidden");
+      setHasFocus(false);
       $jobs.set({
         j1: {
           id: "j1" as never,
@@ -109,6 +117,7 @@ describe("engineClient WS event handling", () => {
       // @ts-expect-error — clean global between tests
       delete window.__TAURI__;
       setVisibility("visible");
+      setHasFocus(true);
     });
 
     it("does not notify when Tauri runtime is absent", async () => {
@@ -127,6 +136,7 @@ describe("engineClient WS event handling", () => {
     it("does not notify while window is focused (visible)", async () => {
       // #given
       setVisibility("visible");
+      setHasFocus(true);
 
       // #when
       __testing.handleWsEvent({ _tag: "JobCompleted", id: "j1" as never });

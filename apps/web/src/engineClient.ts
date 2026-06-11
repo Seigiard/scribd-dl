@@ -29,10 +29,15 @@ const loadFolder = async (): Promise<void> => {
   }
 };
 
-const isWindowHidden = (): boolean => typeof document !== "undefined" && document.visibilityState === "hidden";
+const isWindowInBackground = (): boolean => {
+  if (typeof document === "undefined") return false;
+  // hasFocus() flips false as soon as another app/window comes to the front;
+  // visibilityState on WKWebView only flips when the window is minimised to the dock.
+  return !document.hasFocus() || document.visibilityState === "hidden";
+};
 
 const fireDesktopNotification = (event: JobEvent): void => {
-  if (!isTauri() || !isWindowHidden()) return;
+  if (!isTauri() || !isWindowInBackground()) return;
 
   let title: string;
   let body: string;
