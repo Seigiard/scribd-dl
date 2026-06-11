@@ -1,6 +1,6 @@
 ---
 title: "feat: Tauri desktop app (apps/desktop) wrapping engine + web SPA"
-status: active
+status: completed
 created: 2026-06-11
 depth: Standard
 origin: docs/brainstorms/2026-06-09-desktop-app-tauri-bun-requirements.md
