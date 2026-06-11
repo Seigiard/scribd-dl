@@ -31,7 +31,8 @@ body {
   padding: var(--s2) var(--s2) var(--s2) var(--s4);
 }
 
-sd-header .folder-row {
+sd-header .folder-row,
+.header .folder-row {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -39,7 +40,8 @@ sd-header .folder-row {
   margin-block: calc(var(--s) * -1);
 }
 
-sd-header .folder-row .btn {
+sd-header .folder-row .btn,
+.header .folder-row .btn {
   color: var(--invert-font-color);
   border-color: var(--invert-font-color);
 }
@@ -55,36 +57,42 @@ sd-header .folder-row .btn {
   padding: var(--s) var(--s2) var(--s) var(--s4);
 }
 
-sd-queue {
+sd-queue,
+.queue {
   display: grid;
   gap: var(--s2);
 }
 
-sd-queue-item {
+sd-queue-item,
+.queue-item {
   display: block;
 }
 
-sd-queue-item {
+sd-queue-item,
+.queue-item {
   --item-icon-size: 1rem;
   --item-icon-gap: var(--s);
   --item-indent: var(--s3);
 }
 
-sd-queue-item .item-head {
+sd-queue-item .item-head,
+.queue-item .item-head {
   display: flex;
   align-items: start;
   gap: var(--item-icon-gap);
   font-weight: bold;
 }
 
-sd-queue-item .item-icon {
+sd-queue-item .item-icon,
+.queue-item .item-icon {
   margin-top: 0.167em;
   width: var(--s2);
   height: var(--item-icon-size);
   flex: none;
 }
 
-sd-queue-item .item-action {
+sd-queue-item .item-action,
+.queue-item .item-action {
   background: none;
   border: 0;
   padding: 0;
@@ -95,46 +103,58 @@ sd-queue-item .item-action {
   align-items: center;
 }
 
-sd-queue-item .item-action:hover {
+sd-queue-item .item-action:hover,
+.queue-item .item-action:hover {
   opacity: 0.7;
 }
 
 sd-queue-item .item-url,
 sd-queue-item .item-progress,
-sd-queue-item .item-reason {
+sd-queue-item .item-reason,
+.queue-item .item-url,
+.queue-item .item-progress,
+.queue-item .item-reason {
   padding-left: var(--item-indent);
   font-size: 0.9em;
 }
 
-sd-queue-item .item-url {
+sd-queue-item .item-url,
+.queue-item .item-url {
   opacity: 0.7;
   word-break: break-all;
 }
 
-sd-queue-item .item-progress {
+sd-queue-item .item-progress,
+.queue-item .item-progress {
   opacity: 0.85;
   margin-top: 0.2rem;
 }
 
-sd-queue-item .item-reason {
+sd-queue-item .item-reason,
+.queue-item .item-reason {
   color: var(--error-color);
   margin-top: 0.2rem;
 }
 
-sd-queue-item[data-status="Queued"] .item-icon-status {
+sd-queue-item[data-status="Queued"] .item-icon-status,
+.queue-item[data-status="Queued"] .item-icon-status {
   opacity: 0.6;
 }
 
 sd-queue-item[data-status="Downloading"] .item-icon-status,
-sd-queue-item[data-status="Downloaded"] .item-icon-status {
+sd-queue-item[data-status="Downloaded"] .item-icon-status,
+.queue-item[data-status="Downloading"] .item-icon-status,
+.queue-item[data-status="Downloaded"] .item-icon-status {
   color: var(--primary-color);
 }
 
-sd-queue-item[data-status="Failed"] .item-icon-status {
+sd-queue-item[data-status="Failed"] .item-icon-status,
+.queue-item[data-status="Failed"] .item-icon-status {
   color: var(--error-color);
 }
 
-sd-queue-item[data-status="Downloading"] .item-icon-status {
+sd-queue-item[data-status="Downloading"] .item-icon-status,
+.queue-item[data-status="Downloading"] .item-icon-status {
   animation: sd-spin 1s linear infinite;
 }
 
@@ -144,16 +164,19 @@ sd-queue-item[data-status="Downloading"] .item-icon-status {
   }
 }
 
-sd-statusbar {
+sd-statusbar,
+.statusbar {
   font-size: 0.9em;
   opacity: 0.85;
 }
 
-sd-folder-modal[hidden] {
+sd-folder-modal[hidden],
+.folder-modal[hidden] {
   display: none;
 }
 
-sd-folder-modal {
+sd-folder-modal,
+.folder-modal {
   position: fixed;
   inset: 0;
   background-color: rgba(0, 0, 0, 0.8);
@@ -163,20 +186,23 @@ sd-folder-modal {
   z-index: 100;
 }
 
-sd-folder-modal .terminal-card {
+sd-folder-modal .terminal-card,
+.folder-modal .terminal-card {
   width: calc(var(--s) * 45);
   max-width: calc(100vw - var(--s2));
   background-color: var(--background-color);
 }
 
-sd-folder-modal .modal-actions {
+sd-folder-modal .modal-actions,
+.folder-modal .modal-actions {
   display: flex;
   justify-content: space-between;
   margin-top: 1rem;
   gap: 1rem;
 }
 
-sd-folder-modal .terminal-alert[hidden] {
+sd-folder-modal .terminal-alert[hidden],
+.folder-modal .terminal-alert[hidden] {
   display: none;
 }
 
