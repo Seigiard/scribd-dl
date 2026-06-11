@@ -115,15 +115,16 @@ describe("statusZone view", () => {
     expect(clearAllMock).toHaveBeenCalledTimes(1);
   });
 
-  it("hides Clear buttons when a transient message is showing", () => {
+  it("hides Clear buttons via CSS when a transient message is showing (preserves height)", () => {
     // #when
     const c = renderTo({
       transient: { severity: "warning", message: "Unsupported domain", sticky: false },
       jobs: { a: job("a", "Downloaded"), b: job("b", "Queued") },
     });
 
-    // #then — message visible, no buttons rendered
+    // #then — message visible, status-zone marked active so CSS hides actions; buttons still in DOM
     expect(c.querySelector(".status-zone-text")?.textContent).toBe("Unsupported domain");
-    expect(c.querySelectorAll("button").length).toBe(0);
+    expect(c.querySelector(".status-zone-active")).not.toBeNull();
+    expect(c.querySelectorAll("button").length).toBe(2);
   });
 });

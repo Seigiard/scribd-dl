@@ -40,8 +40,16 @@ body {
   justify-content: space-between;
   gap: var(--s2);
   padding: var(--s) var(--s2) var(--s) var(--s4);
-  background: var(--code-bg-color);
   border-bottom: 1px solid var(--secondary-color);
+}
+
+.status-zone-active {
+  background: var(--code-bg-color);
+}
+
+.status-zone-active .status-zone-actions {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .status-zone-text {

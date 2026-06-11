@@ -18,15 +18,10 @@ export const statusZone = ({ transient, jobs }: StatusZoneProps): Hole => {
   const terminalCount = present.filter((j) => isTerminal(j.status)).length;
 
   const messageText = transient?.message ?? DEFAULT_HINT;
+  const zoneCls = transient ? "status-zone status-zone-active" : "status-zone";
   const messageCls = transient ? `status-zone-text status-zone-${transient.severity}` : "status-zone-text";
 
-  if (transient !== null) {
-    return html`<div class="status-zone">
-      <div class=${messageCls}>${messageText}</div>
-    </div>`;
-  }
-
-  return html`<div class="status-zone">
+  return html`<div class=${zoneCls}>
     <div class=${messageCls}>${messageText}</div>
     <div class="status-zone-actions">
       <button
