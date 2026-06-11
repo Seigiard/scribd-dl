@@ -1,7 +1,7 @@
 {
   "name": "@scribd-dl/web",
-  "private": true,
   "version": "0.1.0",
+  "private": true,
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -13,8 +13,8 @@
   "dependencies": {
     "@scribd-dl/shared": "workspace:*",
     "nanostores": "^1.3.0",
-    "nanotags": "^0.15.2",
-    "terminal.css": "^0.7.5"
+    "terminal.css": "^0.7.5",
+    "uhtml": "^4"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.1",
