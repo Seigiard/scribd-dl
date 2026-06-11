@@ -1,0 +1,3 @@
+src-tauri/target/
+src-tauri/binaries/scribd-dl-engine-*
+.*.bun-build

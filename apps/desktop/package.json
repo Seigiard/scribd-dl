@@ -4,6 +4,6 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "//": "Placeholder: real Tauri scripts land when the desktop client is implemented."
+    "build:engine-binary": "mkdir -p src-tauri/binaries && bun build --compile --target=bun-darwin-arm64 ../../packages/engine/engine.ts --outfile src-tauri/binaries/scribd-dl-engine-aarch64-apple-darwin"
   }
 }
