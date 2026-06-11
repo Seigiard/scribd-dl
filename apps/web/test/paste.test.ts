@@ -55,6 +55,22 @@ describe("paste handler", () => {
     expect($transient.get()?.message).toBe("No links found in clipboard");
   });
 
+  it("shows a warning when every link is rejected as Failed retryable=false", async () => {
+    enqueueTextMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          id: "u",
+          url: "https://example.com/x",
+          status: "Failed",
+          failure: { reason: "Unsupported domain", retryable: false },
+        },
+      ] as never,
+    });
+    await handlePastedText("https://example.com/x");
+    expect($transient.get()?.severity).toBe("warning");
+    expect($transient.get()?.message).toBe("Unsupported domain");
+  });
+
   const makePasteEvent = (text: string): ClipboardEvent => {
     const evt = new Event("paste", { bubbles: true }) as ClipboardEvent;
     Object.defineProperty(evt, "clipboardData", {

@@ -151,7 +151,18 @@ export const handlePastedText = async (text: string): Promise<void> => {
   }
   try {
     const { jobs } = await enqueueText(baseUrl, text);
-    if (jobs.length === 0) showTransient("info", NO_LINKS_MESSAGE);
+    if (jobs.length === 0) {
+      showTransient("info", NO_LINKS_MESSAGE);
+      return;
+    }
+    const rejected = jobs.filter((j) => j.status === "Failed" && j.failure?.retryable === false);
+    if (rejected.length === jobs.length) {
+      const reason = rejected[0]!.failure?.reason ?? "Unsupported link";
+      const msg = rejected.length === 1 ? reason : `${reason} (${rejected.length} links)`;
+      showTransient("warning", msg);
+    } else if (rejected.length > 0) {
+      showTransient("warning", `${rejected.length} of ${jobs.length} links rejected`);
+    }
   } catch {
     // transport errors surface via the disconnect banner
   }

@@ -94,20 +94,26 @@ const jobsShallowEqual = (a: Job, b: Job): boolean => {
 };
 
 export const applySnapshot = (snap: EngineSnapshot): void => {
-  const next = new Map<JobId, Job>();
-  for (const job of snap.jobs) next.set(job.id, job);
-
+  // Rebuild the whole map so the object key order matches the snapshot's
+  // newest-first order. setKey on existing keys preserves their original
+  // insertion slot, which would render new jobs at the bottom of the queue.
   const prev = $jobs.get();
-  for (const id of Object.keys(prev) as JobId[]) {
-    if (!next.has(id)) $jobs.setKey(id, undefined);
-  }
-
-  for (const [id, job] of next) {
-    const current = prev[id];
+  const next: JobsMap = {};
+  let changed = false;
+  for (const job of snap.jobs) {
+    next[job.id] = job;
+    const current = prev[job.id];
     if (current === undefined || !jobsShallowEqual(current, job)) {
-      $jobs.setKey(id, job);
+      changed = true;
     }
   }
+  if (!changed) {
+    const prevIds = Object.keys(prev);
+    const sameLength = prevIds.length === snap.jobs.length;
+    const sameOrder = sameLength && prevIds.every((id, i) => id === snap.jobs[i]!.id);
+    if (sameOrder) return;
+  }
+  $jobs.set(next);
 };
 
 export const resetStores = (): void => {

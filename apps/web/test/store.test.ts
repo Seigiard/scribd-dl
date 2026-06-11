@@ -30,20 +30,30 @@ describe("store", () => {
     expect($jobs.get().a).toEqual(a);
   });
 
-  it("setKey is called only for changed jobs on update", () => {
+  it("snapshot preserves newest-first order (engine-authoritative)", () => {
+    // #given — first snapshot adds A, B
+    const a = job({ id: "a" as JobId });
+    const b = job({ id: "b" as JobId });
+    applySnapshot(snapshot([a, b]));
+    expect(Object.keys($jobs.get())).toEqual(["a", "b"]);
+
+    // #when — engine moves B to top
+    applySnapshot(snapshot([b, a]));
+
+    // #then — object iteration matches snapshot order
+    expect(Object.keys($jobs.get())).toEqual(["b", "a"]);
+  });
+
+  it("status change on existing job updates content", () => {
     const a = job({ id: "a" as JobId, status: "Queued" });
     const b = job({ id: "b" as JobId, status: "Queued" });
     applySnapshot(snapshot([a, b]));
 
-    const setKey = vi.spyOn($jobs, "setKey");
     const aDownloading = { ...a, status: "Downloading" as const };
     applySnapshot(snapshot([aDownloading, b]));
 
-    const keysWritten = setKey.mock.calls.map((c) => c[0]);
-    expect(keysWritten).toEqual(["a"]);
     expect($jobs.get().a).toEqual(aDownloading);
     expect($jobs.get().b).toEqual(b);
-    setKey.mockRestore();
   });
 
   it("removes a job whose id disappeared from the snapshot", () => {
