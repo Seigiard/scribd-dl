@@ -3,7 +3,7 @@ mod sidecar;
 
 use tauri::{Manager, RunEvent};
 
-use commands::{get_backend_url, pick_folder};
+use commands::{get_backend_url, notify, pick_folder};
 use sidecar::{kill_sidecar, spawn_sidecar, SidecarState};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -13,7 +13,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .manage(SidecarState::new())
-        .invoke_handler(tauri::generate_handler![get_backend_url, pick_folder])
+        .invoke_handler(tauri::generate_handler![get_backend_url, pick_folder, notify])
         .setup(|app| {
             let handle = app.handle().clone();
             if let Err(e) = spawn_sidecar(&handle) {

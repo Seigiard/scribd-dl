@@ -1,7 +1,7 @@
 import type { JobEvent } from "@scribd-dl/shared";
 import { enqueueText, fetchFolder, fetchSnapshot, removeJob, retryJob, setFolder } from "@/lib/api";
-import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
-import { $connected, $folder, applySnapshot, showTransient } from "@/store";
+import { getBackendUrl, invokeTauri, isTauri, toWsUrl } from "@/lib/backendUrl";
+import { $connected, $folder, $jobs, applySnapshot, showTransient } from "@/store";
 
 const NO_LINKS_MESSAGE = "No links found in clipboard";
 const URL_REGEX = /(https?:\/\/\S+)/g;
@@ -29,11 +29,37 @@ const loadFolder = async (): Promise<void> => {
   }
 };
 
+const isWindowHidden = (): boolean => typeof document !== "undefined" && document.visibilityState === "hidden";
+
+const fireDesktopNotification = (event: JobEvent): void => {
+  if (!isTauri() || !isWindowHidden()) return;
+
+  let title: string;
+  let body: string;
+  if (event._tag === "JobCompleted") {
+    const job = $jobs.get()[event.id];
+    title = "Downloaded";
+    body = job?.displayTitle || job?.url || event.id;
+  } else if (event._tag === "JobFailed") {
+    const job = $jobs.get()[event.id];
+    const name = job?.displayTitle || job?.url || event.id;
+    title = "Download failed";
+    body = `${name} — ${event.reason}`;
+  } else {
+    return;
+  }
+
+  void invokeTauri("notify", { title, body }).catch(() => {
+    // notification failures are non-fatal; queue UI is the primary surface
+  });
+};
+
 const handleWsEvent = (event: JobEvent): void => {
   if (event._tag === "OutputFolderChanged") {
     $folder.set(event.path);
     return;
   }
+  fireDesktopNotification(event);
   void refresh();
 };
 

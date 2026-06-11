@@ -2,6 +2,7 @@ use std::time::{Duration, Instant};
 
 use tauri::{AppHandle, State};
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_notification::NotificationExt;
 
 use crate::sidecar::SidecarState;
 
@@ -42,4 +43,15 @@ pub async fn pick_folder(
 
     rx.await
         .map_err(|e| format!("folder picker dropped without response: {e}"))
+}
+
+#[tauri::command]
+pub async fn notify(app: AppHandle, title: String, body: String) -> Result<(), String> {
+    app.notification()
+        .builder()
+        .title(title)
+        .body(body)
+        .show()
+        .map_err(|e| format!("notification failed: {e}"))?;
+    Ok(())
 }
