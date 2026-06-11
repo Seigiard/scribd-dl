@@ -66,6 +66,20 @@ Configuration: there are no CLI flags for `outputFolder` / `filename` / `rendert
 
 **`output/` location:** when nothing has been persisted yet, the engine uses `DEFAULT_CONFIG.directory.output` (`"output"`), resolved against `process.cwd()`. `bun run engine` runs from the repo root so `output/` lands there.
 
+## Web SPA architecture
+
+`apps/web` is **uhtml v4 + vanilla nanostores islands**. There are no Custom Elements, no `nanotags`, no `customElements.define` calls.
+
+- `index.html` carries the page layout with empty `.mount-*` containers (`.mount-header`, `.mount-banner`, `.mount-queue`, `.mount-statusbar`, `.mount-modal`). Each mount is the island boundary.
+- `src/views/*.ts` exports a **pure render function** per view (`statusbar`, `disconnectBanner`, `header`, `queueItem`, `queue`, `folderModal`) that returns `Hole` from `uhtml`. Views take props, never read stores directly.
+- `src/main.ts` wires each mount: `store.listen(render)` + an explicit initial `render()` call. Multi-store views subscribe to every dependency they consume.
+- Event handlers are inline closures inside the view template via `@event=${fn}`. They may import command functions from `engineClient` and may set stores (e.g., `$modal.set("folder")`) — that is business logic, not store wiring.
+- List rendering uses uhtml's auto-keyed diff — just `list.map(item => view(item))`. Do **not** add `key=` attributes; uhtml keys on template identity.
+- Per-view local state (e.g., modal error) lives in a module-level nanostore atom inside the view file, exported for `main.ts` to subscribe to alongside the other stores.
+- CSS classes have no `sd-` prefix (that was only required because Custom Element names must contain a dash). Class names match the view's root (`.queue`, `.queue-item`, `.folder-modal`, `.statusbar`).
+
+When adding a new view, follow the existing files — do not reintroduce `nanotags`, `define`, `ctx.host.innerHTML`, `ctx.getElement`, or `data-ref=` selectors.
+
 ## Wire contract
 
 `packages/shared` is the **single source of truth** for the job/HTTP/WS contract — `Job`, `JobId`, `JobStatus`, `JobDomain`, `JobFailure`, `JobProgress`, `EngineSnapshot`, `JobEvent`, `ProgressStage` in `jobs.ts`; HTTP request/response body shapes in `http.ts`. Both `packages/engine` and `apps/web` import from `@scribd-dl/shared`. Duplicating these types in any consumer is forbidden — if the contract changes, edit `packages/shared/src/jobs.ts` or `http.ts` and let TypeScript surface the consumer breaks.
