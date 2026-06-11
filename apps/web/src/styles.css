@@ -45,7 +45,6 @@ body {
 
 .status-zone-text {
   font-size: 0.9em;
-  color: var(--secondary-color);
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -54,15 +53,18 @@ body {
 }
 
 .status-zone-info {
-  color: var(--secondary-color);
+  color: var(--font-color);
+  opacity: 0.7;
 }
 
 .status-zone-warning {
-  color: var(--primary-color);
+  color: #a06000;
+  font-weight: bold;
 }
 
 .status-zone-error {
   color: var(--error-color);
+  font-weight: bold;
 }
 
 .status-zone-actions {
@@ -75,12 +77,18 @@ body {
   padding: calc(var(--s) / 2) var(--s);
 }
 
-.btn-error {
-  color: var(--error-color);
+.btn-danger {
   border-color: var(--error-color);
+  color: var(--error-color);
+  background-color: transparent;
 }
 
-.btn-error:disabled {
+.btn-danger:hover:not(:disabled) {
+  background-color: var(--error-color);
+  color: var(--invert-font-color);
+}
+
+.btn-danger:disabled {
   opacity: 0.5;
 }
 

@@ -33,7 +33,7 @@ export const statusZone = ({ transient, jobs }: StatusZoneProps): Hole => {
       </button>
       <button
         type="button"
-        class="btn btn-error"
+        class="btn btn-danger"
         ?disabled=${total === 0}
         @click=${() => void commandClearAll()}
       >
