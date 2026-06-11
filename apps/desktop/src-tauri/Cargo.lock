@@ -3212,7 +3212,6 @@ name = "scribd-dl-desktop"
 version = "0.0.0"
 dependencies = [
  "libc",
- "log",
  "regex",
  "reqwest 0.12.28",
  "serde",

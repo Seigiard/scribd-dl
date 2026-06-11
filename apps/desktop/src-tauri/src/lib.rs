@@ -20,7 +20,7 @@ pub fn run() {
         .setup(|app| {
             let handle = app.handle().clone();
             if let Err(e) = spawn_sidecar(&handle) {
-                log::error!("failed to spawn engine sidecar: {e}");
+                eprintln!("[scribd-dl-desktop] failed to spawn engine sidecar: {e}");
             }
             Ok(())
         })

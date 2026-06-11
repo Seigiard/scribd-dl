@@ -41,15 +41,17 @@ fn engine_log_path() -> Option<PathBuf> {
 }
 
 pub fn spawn_sidecar(app: &AppHandle) -> Result<(), String> {
-    let sidecar = app
-        .shell()
-        .sidecar("scribd-dl-engine")
-        .map_err(|e| format!("sidecar lookup failed: {e}"))?;
+    eprintln!("[scribd-dl-desktop] spawning engine sidecar...");
+    let sidecar = app.shell().sidecar("scribd-dl-engine").map_err(|e| {
+        eprintln!("[scribd-dl-desktop] sidecar lookup failed: {e}");
+        format!("sidecar lookup failed: {e}")
+    })?;
 
-    let (mut rx, child) = sidecar
-        .args(["--port", "0"])
-        .spawn()
-        .map_err(|e| format!("sidecar spawn failed: {e}"))?;
+    let (mut rx, child) = sidecar.args(["--port", "0"]).spawn().map_err(|e| {
+        eprintln!("[scribd-dl-desktop] sidecar spawn failed: {e}");
+        format!("sidecar spawn failed: {e}")
+    })?;
+    eprintln!("[scribd-dl-desktop] engine sidecar spawned, waiting for READY line...");
 
     let state = app.state::<SidecarState>();
     *state.child.lock().unwrap() = Some(child);
@@ -78,7 +80,7 @@ pub fn spawn_sidecar(app: &AppHandle) -> Result<(), String> {
                             let url = format!("http://127.0.0.1:{port}");
                             *state.backend_url.lock().unwrap() = Some(url.clone());
                             ready = true;
-                            log::info!("engine sidecar ready at {url}");
+                            eprintln!("engine sidecar ready at {url}");
                             continue;
                         }
                     }
@@ -95,7 +97,7 @@ pub fn spawn_sidecar(app: &AppHandle) -> Result<(), String> {
                     }
                 }
                 CommandEvent::Terminated(payload) => {
-                    log::warn!("engine sidecar terminated: {payload:?}");
+                    eprintln!("engine sidecar terminated: {payload:?}");
                     if let Some(f) = log_file.as_mut() {
                         let _ = writeln!(f, "[terminated] {payload:?}");
                     }
