@@ -77,7 +77,6 @@ const processPage = (
                 .text_layer, .text_layer span, .text_layer div, .text_layer p {
                     opacity: 1 !important;
                     text-shadow: none !important;
-                    color: #000000 !important;
                     -webkit-font-smoothing: antialiased !important;
                 }
             `;
