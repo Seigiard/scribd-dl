@@ -21,6 +21,7 @@ pub fn run() {
             if let Err(e) = spawn_sidecar(&handle) {
                 eprintln!("[scribd-dl-desktop] failed to spawn engine sidecar: {e}");
             }
+            install_signal_handler(handle.clone());
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -39,10 +40,50 @@ pub fn run() {
         })
         .build(tauri::generate_context!())
         .expect("error while building tauri application")
-        .run(|app_handle, event| {
-            if let RunEvent::ExitRequested { .. } = event {
+        .run(|app_handle, event| match event {
+            RunEvent::ExitRequested { .. } | RunEvent::Exit => {
                 let state = app_handle.state::<SidecarState>();
                 kill_sidecar(&state);
             }
+            _ => {}
         });
 }
+
+#[cfg(unix)]
+fn install_signal_handler(app: tauri::AppHandle) {
+    tauri::async_runtime::spawn(async move {
+        use tokio::signal::unix::{signal, SignalKind};
+        let mut sigint = match signal(SignalKind::interrupt()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[scribd-dl-desktop] SIGINT hook failed: {e}");
+                return;
+            }
+        };
+        let mut sigterm = match signal(SignalKind::terminate()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[scribd-dl-desktop] SIGTERM hook failed: {e}");
+                return;
+            }
+        };
+        let mut sighup = match signal(SignalKind::hangup()) {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("[scribd-dl-desktop] SIGHUP hook failed: {e}");
+                return;
+            }
+        };
+        tokio::select! {
+            _ = sigint.recv() => eprintln!("[scribd-dl-desktop] SIGINT received, killing sidecar"),
+            _ = sigterm.recv() => eprintln!("[scribd-dl-desktop] SIGTERM received, killing sidecar"),
+            _ = sighup.recv() => eprintln!("[scribd-dl-desktop] SIGHUP received, killing sidecar"),
+        }
+        let state = app.state::<SidecarState>();
+        kill_sidecar(&state);
+        app.exit(0);
+    });
+}
+
+#[cfg(not(unix))]
+fn install_signal_handler(_app: tauri::AppHandle) {}

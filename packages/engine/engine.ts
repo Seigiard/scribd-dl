@@ -29,6 +29,15 @@ const cli = Command.run(command, {
   version: "1.0.0",
 });
 
+const installParentDeathWatchdog = (): void => {
+  if (process.stdin.isTTY) return;
+  const exit = () => process.exit(0);
+  process.stdin.on("end", exit);
+  process.stdin.on("close", exit);
+  process.stdin.resume();
+};
+
 if (import.meta.main) {
+  installParentDeathWatchdog();
   BunRuntime.runMain(cli(process.argv).pipe(Effect.provide(BunContext.layer)));
 }
