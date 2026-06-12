@@ -1,7 +1,7 @@
 {
   "name": "@scribd-dl/desktop",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "scripts": {
     "build:engine-binary": "mkdir -p src-tauri/binaries && bun build --compile --target=bun-darwin-arm64 ../../packages/engine/engine.ts --outfile src-tauri/binaries/scribd-dl-engine-aarch64-apple-darwin",
