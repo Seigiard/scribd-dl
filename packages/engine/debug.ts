@@ -9,7 +9,7 @@ import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
 import { makePuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
 import { TitleResolverLive } from "./src/utils/request/TitleResolver";
 
-const DEBUG_RENDERTIME_MS = 5000;
+const DEBUG_RENDERTIME_MS = 500;
 const DEBUG_OUTPUT_FOLDER = "./output";
 
 const urlArg = Args.text({ name: "url" }).pipe(Args.withDescription("Scraper URL to debug (e.g. Scribd document URL)."));

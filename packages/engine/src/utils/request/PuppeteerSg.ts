@@ -81,6 +81,7 @@ const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
     defaultViewport: null,
     args,
     timeout: 0,
+    protocolTimeout: 0,
   };
   if (executablePath) {
     return { ...options, executablePath };
