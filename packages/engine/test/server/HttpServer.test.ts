@@ -27,6 +27,7 @@ const defaultConfig: ConfigData = {
 const scribdMockScraper: Scraper = {
   id: "scribd",
   canHandle: (url) => /scribd\.com/.test(url),
+  deriveDisplayTitle: (url) => `Scribd ${url}`,
   execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
 };
 

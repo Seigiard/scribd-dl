@@ -9,7 +9,7 @@ import { DownloadEngine, DownloadEngineLive } from "../src/service/DownloadEngin
 import { JobStore, type JobStoreService } from "../src/service/JobStore";
 import { Scrapers, type Scraper } from "../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
-import { PageLoadFailed } from "../src/errors/DomainErrors";
+import { PageLoadFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
 
 interface MockState {
   scribdExecute: ReturnType<typeof mock>;
@@ -44,6 +44,13 @@ const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyA
   const scribdScraper: Scraper = {
     id: "scribd",
     canHandle: (url) => /scribd\.com/.test(url),
+    deriveDisplayTitle: (url) => {
+      const doc = /scribd\.com\/document\/(\d+)/.exec(url);
+      if (doc) return `Scribd document ${doc[1]}`;
+      const embed = /scribd\.com\/embeds\/(\d+)/.exec(url);
+      if (embed) return `Scribd document ${embed[1]}`;
+      return "Scribd document";
+    },
     execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
   };
   const configStoreSvc: ConfigStoreService = {
@@ -69,6 +76,7 @@ const makeCustomScraper = (customExecute: ReturnType<typeof mock>): Scraper => (
   // @ts-expect-error custom id outside current JobDomain union for test purposes
   id: "custom",
   canHandle: (url) => url.includes("example.com"),
+  deriveDisplayTitle: (url) => `Custom ${url}`,
   execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
 });
 
@@ -271,7 +279,7 @@ describe("DownloadEngine", () => {
       // #then
       expect(snap.jobs[0]!.status).toBe("Downloaded");
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
-      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function), false);
+      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function), undefined);
     });
 
     test("ScribdDownloader failure → Failed with retryable: true", async () => {
@@ -1538,6 +1546,70 @@ describe("DownloadEngine", () => {
       expect(snap.jobs[0]!.domain).toBe("scribd");
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
       expect(customExecute).not.toHaveBeenCalled();
+    });
+
+    test("persisted job with domain no longer in registry → Failed retryable: true", async () => {
+      // #given a restored Queued job for a domain that's gone from the registry
+      const persistedJob: Job = {
+        id: "j1",
+        url: "https://gone.example.com/x",
+        // @ts-expect-error 'gone' is outside JobDomain union; simulates registry shrinkage between restarts
+        domain: "gone",
+        displayTitle: "Gone document",
+        status: "Queued",
+      };
+      state.restoredJobs = [persistedJob];
+
+      // #when worker picks it up against a registry that doesn't include 'gone'
+      const snap = await runScopedWith(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          return yield* waitForQuiet(engine);
+        }),
+        [],
+      );
+
+      // #then job fails as retryable so a future restart with the original registry recovers
+      const failed = snap.jobs.find((j) => j.id === "j1")!;
+      expect(failed.status).toBe("Failed");
+      expect(failed.failure?.retryable).toBe(true);
+      expect(failed.failure?.reason).toContain("No scraper registered for domain");
+    });
+
+    test("UnsupportedUrl scraper failure → retryable: false (non-transient)", async () => {
+      // #given scraper that fails with UnsupportedUrl (e.g. extractId failure inside execute)
+      state.scribdExecute = mock((url: string) => Effect.fail(new UnsupportedUrl({ url })));
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/something/weird");
+          return yield* waitForQuiet(engine);
+        }),
+      );
+
+      // #then
+      expect(snap.jobs[0]!.status).toBe("Failed");
+      expect(snap.jobs[0]!.failure?.retryable).toBe(false);
+    });
+
+    test("transient scraper failure (PageLoadFailed) → retryable: true", async () => {
+      // #given
+      state.scribdExecute = mock((url: string) => Effect.fail(new PageLoadFailed({ url, cause: "network blip" })));
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          return yield* waitForQuiet(engine);
+        }),
+      );
+
+      // #then
+      expect(snap.jobs[0]!.status).toBe("Failed");
+      expect(snap.jobs[0]!.failure?.retryable).toBe(true);
     });
   });
 });

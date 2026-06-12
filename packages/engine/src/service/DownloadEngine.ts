@@ -9,7 +9,6 @@ import { normalizeUrl } from "../utils/url";
 import { ConfigStore } from "./ConfigStore";
 import { JobStore } from "./JobStore";
 import { findScraperForUrl, Scrapers, type OnEvent, type Scraper } from "./Scraper";
-import * as scribdRegex from "../const/ScribdRegex";
 
 export interface DownloadEngineService {
   readonly enqueue: (text: string) => Effect.Effect<ReadonlyArray<Job>, never, never>;
@@ -50,19 +49,25 @@ const classifyWith =
     return match ? match.id : "unsupported";
   };
 
-const deriveTitle = (url: string, domain: JobDomain): string => {
-  if (domain === "unsupported") {
-    return "Unsupported link";
-  }
-  const doc = scribdRegex.DOCUMENT.exec(url);
-  if (doc) {
-    return `Scribd document ${doc[2]}`;
-  }
-  const embed = scribdRegex.EMBED.exec(url);
-  if (embed) {
-    return `Scribd document ${embed[1]}`;
-  }
-  return "Scribd document";
+const deriveTitleWith =
+  (scrapers: ReadonlyArray<Scraper>) =>
+  (url: string, domain: JobDomain): string => {
+    if (domain === "unsupported") {
+      return "Unsupported link";
+    }
+    const scraper = scrapers.find((s) => s.id === domain);
+    return scraper ? scraper.deriveDisplayTitle(url) : "Unknown document";
+  };
+
+// Non-transient failures: retrying the same URL will reproduce the same error.
+// Everything else (network, browser, IO) is treated as transient and retryable.
+const NON_RETRYABLE_TAGS = new Set(["UnsupportedUrl"]);
+
+const isRetryable = (cause: Cause.Cause<unknown>): boolean => {
+  const failure = Cause.failureOption(cause);
+  if (Option.isNone(failure)) return true;
+  const tag = (failure.value as { _tag?: string })._tag;
+  return tag ? !NON_RETRYABLE_TAGS.has(tag) : true;
 };
 
 const formatCause = (cause: Cause.Cause<unknown>): string => {
@@ -95,6 +100,7 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, Scrapers | C
   Effect.gen(function* () {
     const scrapers = yield* Scrapers;
     const classify = classifyWith(scrapers);
+    const deriveTitle = deriveTitleWith(scrapers);
     const configStore = yield* ConfigStore;
     const jobStore = yield* JobStore;
 
@@ -375,13 +381,16 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, Scrapers | C
         const folder = yield* Ref.get(folderRef);
         const scraper = scrapers.find((s) => s.id === current.domain);
         if (!scraper) {
-          const failure: JobFailure = { reason: `No scraper registered for domain '${current.domain}'`, retryable: false };
+          // Domain was supported at enqueue time but the registry no longer carries it —
+          // typically a persisted job from a previous engine build. Retryable so a
+          // subsequent restart with the original registry recovers without manual action.
+          const failure: JobFailure = { reason: `No scraper registered for domain '${current.domain}'`, retryable: true };
           yield* setJob({ ...downloading, status: "Failed", failure });
           yield* publish({ _tag: "JobFailed", id, reason: failure.reason, retryable: failure.retryable });
           yield* persistJobs;
           return;
         }
-        const fiber = yield* Effect.fork(scraper.execute(current.url, folder, makeOnEvent(id), false));
+        const fiber = yield* Effect.fork(scraper.execute(current.url, folder, makeOnEvent(id)));
         yield* Ref.set(activeFiberRef, Option.some({ id, fiber }));
         const exit = yield* Fiber.await(fiber);
         yield* Ref.set(activeFiberRef, Option.none());
@@ -399,9 +408,10 @@ export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, Scrapers | C
           return;
         } else {
           const reason = formatCause(exit.cause);
-          const failure: JobFailure = { reason, retryable: true };
+          const retryable = isRetryable(exit.cause);
+          const failure: JobFailure = { reason, retryable };
           yield* setJob({ ...withoutProgress, status: "Failed", failure });
-          yield* publish({ _tag: "JobFailed", id, reason, retryable: true });
+          yield* publish({ _tag: "JobFailed", id, reason, retryable });
         }
         yield* persistJobs;
       }),

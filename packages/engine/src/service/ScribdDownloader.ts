@@ -203,6 +203,14 @@ export const ScribdDownloaderLive: Layer.Layer<
 
     const canHandle = (url: string): boolean => scribdRegex.DOMAIN.test(url);
 
+    const deriveDisplayTitle = (url: string): string => {
+      const doc = scribdRegex.DOCUMENT.exec(url);
+      if (doc) return `Scribd document ${doc[2]}`;
+      const embed = scribdRegex.EMBED.exec(url);
+      if (embed) return `Scribd document ${embed[1]}`;
+      return "Scribd document";
+    };
+
     const execute = (url: string, folder: string, onEvent: OnEvent, debug?: boolean): Effect.Effect<void, ScraperError, never> =>
       Effect.scoped(
         Effect.gen(function* () {
@@ -226,12 +234,14 @@ export const ScribdDownloaderLive: Layer.Layer<
           const pdfPath = resolvePdfPath({ folder, displayTitle: meta.title, fallbackId: id });
 
           if (debug === true) {
-            yield* Effect.tryPromise({
-              try: async () => {
+            // Debug-only side-effect — must not fail the scrape if the dump can't be written.
+            yield* Effect.promise(async () => {
+              try {
                 const html = await page.content();
                 await Bun.write(`${folder}/${safeIdentifier}.debug.html`, html);
-              },
-              catch: (cause) => new PageProcessFailed({ url: embedUrl, cause }),
+              } catch (cause) {
+                console.warn(`[debug] HTML dump failed for ${embedUrl}:`, cause);
+              }
             });
           }
 
@@ -256,6 +266,6 @@ export const ScribdDownloaderLive: Layer.Layer<
         }),
       );
 
-    return ScribdDownloader.of({ id: "scribd", canHandle, execute });
+    return ScribdDownloader.of({ id: "scribd", canHandle, deriveDisplayTitle, execute });
   }),
 );

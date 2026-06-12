@@ -23,6 +23,7 @@ export type ScraperId = Exclude<JobDomain, "unsupported">;
 export interface Scraper {
   readonly id: ScraperId;
   readonly canHandle: (url: string) => boolean;
+  readonly deriveDisplayTitle: (url: string) => string;
   readonly execute: (url: string, folder: string, onEvent: OnEvent, debug?: boolean) => Effect.Effect<void, ScraperError, never>;
 }
 

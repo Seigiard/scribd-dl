@@ -81,7 +81,11 @@ const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
     defaultViewport: null,
     args,
     timeout: 0,
-    protocolTimeout: 0,
+    // Production keeps puppeteer's default 180s CDP timeout so a hung Scribd page
+    // surfaces as a job failure instead of wedging the single-fiber worker queue.
+    // Debug runs interactively under the developer's eye, so we disable the limit
+    // to let heavy documents finish without false timeouts.
+    ...(opts.headful ? { protocolTimeout: 0 } : {}),
   };
   if (executablePath) {
     return { ...options, executablePath };

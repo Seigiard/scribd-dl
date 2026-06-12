@@ -23,22 +23,30 @@ const logEvent: OnEvent = (event) =>
 
 const buildDebugLayer = () => makeScrapersLayer(makePuppeteerSgLive({ headful: true }));
 
+class NoScraperForUrl {
+  readonly _tag = "NoScraperForUrl";
+  constructor(readonly url: string) {}
+}
+
 const program = (url: string) =>
   Effect.gen(function* () {
     const scrapers = yield* Scrapers;
     const scraper = findScraperForUrl(scrapers, url);
     if (!scraper) {
-      console.error(`No scraper registered for URL: ${url}`);
-      yield* Effect.sync(() => process.exit(1));
-      return;
+      return yield* Effect.fail(new NoScraperForUrl(url));
     }
     console.log(`[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms`);
-    yield* scraper.execute(url, DEBUG_OUTPUT_FOLDER, logEvent, true).pipe(
-      Effect.tapError((error) => Effect.sync(() => console.error("[debug] failed:", error))),
-      Effect.catchAll(() => Effect.sync(() => process.exit(1))),
-    );
+    yield* scraper.execute(url, DEBUG_OUTPUT_FOLDER, logEvent, true);
     console.log(`[debug] done. Artifacts in ${DEBUG_OUTPUT_FOLDER}/`);
-  });
+  }).pipe(
+    Effect.tapError((error) =>
+      Effect.sync(() =>
+        error._tag === "NoScraperForUrl"
+          ? console.error(`No scraper registered for URL: ${error.url}`)
+          : console.error("[debug] failed:", error),
+      ),
+    ),
+  );
 
 const command = Command.make("scribd-dl-debug", { url: urlArg }, ({ url }) =>
   program(url).pipe(Effect.provide(buildDebugLayer()), Effect.scoped),

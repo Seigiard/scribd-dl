@@ -11,13 +11,10 @@ import { PuppeteerSgLive, type PuppeteerSg } from "./utils/request/PuppeteerSg";
 import { TitleResolverLive } from "./utils/request/TitleResolver";
 import type { BrowserLaunchFailed } from "./errors/DomainErrors";
 
-export const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
+const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
 
-export const makeScrapersLayer = (
-  puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never>,
-  configLayer: Layer.Layer<ConfigLoader, never, never> = ConfigLayer,
-) => {
-  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, configLayer, DirectoryIoLive, puppeteerLayer, TitleResolverLive);
+export const makeScrapersLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never>) => {
+  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, puppeteerLayer, TitleResolverLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
   return Layer.provide(
     Layer.effect(
