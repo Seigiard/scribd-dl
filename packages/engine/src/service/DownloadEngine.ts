@@ -8,7 +8,7 @@ import { resolvePdfPath, scribdIdFromUrl } from "../utils/io/pdfPath";
 import { normalizeUrl } from "../utils/url";
 import { ConfigStore } from "./ConfigStore";
 import { JobStore } from "./JobStore";
-import { ScribdDownloader, type OnEvent } from "./ScribdDownloader";
+import { Scrapers, type OnEvent, type Scraper } from "./Scraper";
 import * as scribdRegex from "../const/ScribdRegex";
 
 export interface DownloadEngineService {
@@ -43,7 +43,12 @@ const extractUrls = (text: string): ReadonlyArray<string> => {
   return urls;
 };
 
-const classify = (url: string): JobDomain => (scribdRegex.DOMAIN.test(url) ? "scribd" : "unsupported");
+const classifyWith =
+  (scrapers: ReadonlyArray<Scraper>) =>
+  (url: string): JobDomain => {
+    const match = scrapers.find((s) => s.canHandle(url));
+    return match ? match.id : "unsupported";
+  };
 
 const deriveTitle = (url: string, domain: JobDomain): string => {
   if (domain === "unsupported") {
@@ -85,340 +90,348 @@ const formatCause = (cause: Cause.Cause<unknown>): string => {
 
 const newId = (): JobId => crypto.randomUUID() as JobId;
 
-export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, ScribdDownloader | ConfigLoader | ConfigStore | JobStore> =
-  Layer.scoped(
-    DownloadEngine,
-    Effect.gen(function* () {
-      const scribd = yield* ScribdDownloader;
-      const configStore = yield* ConfigStore;
-      const jobStore = yield* JobStore;
+export const DownloadEngineLive: Layer.Layer<DownloadEngine, never, Scrapers | ConfigLoader | ConfigStore | JobStore> = Layer.scoped(
+  DownloadEngine,
+  Effect.gen(function* () {
+    const scrapers = yield* Scrapers;
+    const classify = classifyWith(scrapers);
+    const configStore = yield* ConfigStore;
+    const jobStore = yield* JobStore;
 
-      const restored = yield* jobStore.read;
-      const settings = yield* configStore.read;
+    const restored = yield* jobStore.read;
+    const settings = yield* configStore.read;
 
-      const stateRef = yield* Ref.make(new Map<JobId, Job>(restored.map((j) => [j.id, j])));
-      const folderRef = yield* Ref.make(settings.outputFolder);
-      const queue = yield* Queue.unbounded<JobId>();
-      const pubsub = yield* PubSub.unbounded<JobEvent>();
-      type ActiveFiber = { readonly id: JobId; readonly fiber: Fiber.RuntimeFiber<unknown, unknown> };
-      const activeFiberRef = yield* Ref.make<Option.Option<ActiveFiber>>(Option.none());
+    const stateRef = yield* Ref.make(new Map<JobId, Job>(restored.map((j) => [j.id, j])));
+    const folderRef = yield* Ref.make(settings.outputFolder);
+    const queue = yield* Queue.unbounded<JobId>();
+    const pubsub = yield* PubSub.unbounded<JobEvent>();
+    type ActiveFiber = { readonly id: JobId; readonly fiber: Fiber.RuntimeFiber<unknown, unknown> };
+    const activeFiberRef = yield* Ref.make<Option.Option<ActiveFiber>>(Option.none());
 
-      for (const job of restored) {
-        if (job.status === "Queued") {
-          yield* Queue.offer(queue, job.id);
-        }
+    for (const job of restored) {
+      if (job.status === "Queued") {
+        yield* Queue.offer(queue, job.id);
       }
+    }
 
-      const publish = (event: JobEvent): Effect.Effect<void, never, never> => PubSub.publish(pubsub, event).pipe(Effect.asVoid);
+    const publish = (event: JobEvent): Effect.Effect<void, never, never> => PubSub.publish(pubsub, event).pipe(Effect.asVoid);
 
-      const persistJobs: Effect.Effect<void, never, never> = Effect.gen(function* () {
+    const persistJobs: Effect.Effect<void, never, never> = Effect.gen(function* () {
+      const map = yield* Ref.get(stateRef);
+      yield* jobStore
+        .write(Array.from(map.values()))
+        .pipe(Effect.catchAll((cause) => Effect.sync(() => console.warn("[DownloadEngine] failed to persist jobs:", cause))));
+    });
+
+    const persistSettings = (folder: string): Effect.Effect<void, never, never> =>
+      configStore
+        .write({ outputFolder: folder })
+        .pipe(Effect.catchAll((cause) => Effect.sync(() => console.warn("[DownloadEngine] failed to persist settings:", cause))));
+
+    const setJob = (job: Job): Effect.Effect<void, never, never> =>
+      Ref.update(stateRef, (m) => {
+        const next = new Map(m);
+        next.set(job.id, job);
+        return next;
+      });
+
+    const currentSnapshot: Effect.Effect<EngineSnapshot, never, never> = Ref.get(stateRef).pipe(
+      Effect.map((m) => ({ jobs: Array.from(m.values()) })),
+    );
+
+    const publishSnapshot: Effect.Effect<void, never, never> = Effect.gen(function* () {
+      const snap = yield* currentSnapshot;
+      yield* publish({ _tag: "SnapshotReplaced", snapshot: snap });
+    });
+
+    const fileExists = (path: string): Effect.Effect<boolean, never, never> =>
+      Effect.tryPromise({
+        try: () => fs.stat(path).then(() => true),
+        catch: () => false as const,
+      }).pipe(Effect.catchAll(() => Effect.succeed(false)));
+
+    const prependTouched = (touched: ReadonlyArray<Job>): Effect.Effect<void, never, never> =>
+      Ref.update(stateRef, (m) => {
+        const next = new Map<JobId, Job>();
+        const touchedIds = new Set(touched.map((j) => j.id));
+        for (const job of touched) next.set(job.id, job);
+        for (const [k, v] of m) {
+          if (!touchedIds.has(k)) next.set(k, v);
+        }
+        return next;
+      });
+
+    const enqueue = (text: string): Effect.Effect<ReadonlyArray<Job>, never, never> =>
+      Effect.gen(function* () {
+        const urls = extractUrls(text);
+        if (urls.length === 0) return [];
+
         const map = yield* Ref.get(stateRef);
-        yield* jobStore
-          .write(Array.from(map.values()))
-          .pipe(Effect.catchAll((cause) => Effect.sync(() => console.warn("[DownloadEngine] failed to persist jobs:", cause))));
-      });
+        const byNormalizedUrl = new Map<string, Job>();
+        for (const job of map.values()) {
+          byNormalizedUrl.set(normalizeUrl(job.url), job);
+        }
 
-      const persistSettings = (folder: string): Effect.Effect<void, never, never> =>
-        configStore
-          .write({ outputFolder: folder })
-          .pipe(Effect.catchAll((cause) => Effect.sync(() => console.warn("[DownloadEngine] failed to persist settings:", cause))));
+        const folder = yield* Ref.get(folderRef);
+        const newJobs: Job[] = [];
+        const movedJobs: Job[] = [];
+        const result: Job[] = [];
+        const pendingEvents: JobEvent[] = [];
+        const queueOffers: JobId[] = [];
 
-      const setJob = (job: Job): Effect.Effect<void, never, never> =>
-        Ref.update(stateRef, (m) => {
-          const next = new Map(m);
-          next.set(job.id, job);
-          return next;
-        });
+        for (const url of urls) {
+          const normalized = normalizeUrl(url);
+          const existing = byNormalizedUrl.get(normalized);
 
-      const currentSnapshot: Effect.Effect<EngineSnapshot, never, never> = Ref.get(stateRef).pipe(
-        Effect.map((m) => ({ jobs: Array.from(m.values()) })),
-      );
-
-      const publishSnapshot: Effect.Effect<void, never, never> = Effect.gen(function* () {
-        const snap = yield* currentSnapshot;
-        yield* publish({ _tag: "SnapshotReplaced", snapshot: snap });
-      });
-
-      const fileExists = (path: string): Effect.Effect<boolean, never, never> =>
-        Effect.tryPromise({
-          try: () => fs.stat(path).then(() => true),
-          catch: () => false as const,
-        }).pipe(Effect.catchAll(() => Effect.succeed(false)));
-
-      const prependTouched = (touched: ReadonlyArray<Job>): Effect.Effect<void, never, never> =>
-        Ref.update(stateRef, (m) => {
-          const next = new Map<JobId, Job>();
-          const touchedIds = new Set(touched.map((j) => j.id));
-          for (const job of touched) next.set(job.id, job);
-          for (const [k, v] of m) {
-            if (!touchedIds.has(k)) next.set(k, v);
-          }
-          return next;
-        });
-
-      const enqueue = (text: string): Effect.Effect<ReadonlyArray<Job>, never, never> =>
-        Effect.gen(function* () {
-          const urls = extractUrls(text);
-          if (urls.length === 0) return [];
-
-          const map = yield* Ref.get(stateRef);
-          const byNormalizedUrl = new Map<string, Job>();
-          for (const job of map.values()) {
-            byNormalizedUrl.set(normalizeUrl(job.url), job);
-          }
-
-          const folder = yield* Ref.get(folderRef);
-          const newJobs: Job[] = [];
-          const movedJobs: Job[] = [];
-          const result: Job[] = [];
-          const pendingEvents: JobEvent[] = [];
-          const queueOffers: JobId[] = [];
-
-          for (const url of urls) {
-            const normalized = normalizeUrl(url);
-            const existing = byNormalizedUrl.get(normalized);
-
-            if (!existing) {
-              const domain = classify(url);
-              const id = newId();
-              const displayTitle = deriveTitle(url, domain);
-              if (domain === "scribd") {
-                const job: Job = { id, url, domain, displayTitle, status: "Queued" };
-                newJobs.push(job);
-                result.push(job);
-                byNormalizedUrl.set(normalized, job);
-                pendingEvents.push({ _tag: "JobAdded", job });
-                queueOffers.push(id);
-              } else {
-                const failure: JobFailure = { reason: "Unsupported domain", retryable: false };
-                const job: Job = { id, url, domain, displayTitle, status: "Failed", failure };
-                newJobs.push(job);
-                result.push(job);
-                byNormalizedUrl.set(normalized, job);
-                pendingEvents.push({ _tag: "JobAdded", job });
-                pendingEvents.push({ _tag: "JobFailed", id, reason: failure.reason, retryable: failure.retryable });
-              }
-              continue;
+          if (!existing) {
+            const domain = classify(url);
+            const id = newId();
+            const displayTitle = deriveTitle(url, domain);
+            if (domain !== "unsupported") {
+              const job: Job = { id, url, domain, displayTitle, status: "Queued" };
+              newJobs.push(job);
+              result.push(job);
+              byNormalizedUrl.set(normalized, job);
+              pendingEvents.push({ _tag: "JobAdded", job });
+              queueOffers.push(id);
+            } else {
+              const failure: JobFailure = { reason: "Unsupported domain", retryable: false };
+              const job: Job = { id, url, domain, displayTitle, status: "Failed", failure };
+              newJobs.push(job);
+              result.push(job);
+              byNormalizedUrl.set(normalized, job);
+              pendingEvents.push({ _tag: "JobAdded", job });
+              pendingEvents.push({ _tag: "JobFailed", id, reason: failure.reason, retryable: failure.retryable });
             }
+            continue;
+          }
 
-            // duplicate — branch by current status
-            let nextJob: Job = existing;
-            const fallbackId = scribdIdFromUrl(existing.url) ?? existing.id;
+          // duplicate — branch by current status
+          let nextJob: Job = existing;
+          const fallbackId = scribdIdFromUrl(existing.url) ?? existing.id;
 
-            if (existing.status === "Downloaded") {
-              const path = resolvePdfPath({ folder, displayTitle: existing.displayTitle, fallbackId });
-              const present = yield* fileExists(path);
-              if (!present) {
-                const { progress: _drop, failure: _f, ...rest } = existing;
-                nextJob = { ...rest, status: "Queued" };
-                queueOffers.push(existing.id);
-                pendingEvents.push({ _tag: "JobRequeued", id: existing.id });
-              }
-            } else if (existing.status === "Failed" && existing.failure?.retryable === true) {
+          if (existing.status === "Downloaded") {
+            const path = resolvePdfPath({ folder, displayTitle: existing.displayTitle, fallbackId });
+            const present = yield* fileExists(path);
+            if (!present) {
               const { progress: _drop, failure: _f, ...rest } = existing;
               nextJob = { ...rest, status: "Queued" };
               queueOffers.push(existing.id);
               pendingEvents.push({ _tag: "JobRequeued", id: existing.id });
             }
-
-            movedJobs.push(nextJob);
-            result.push(nextJob);
-            byNormalizedUrl.set(normalized, nextJob);
+          } else if (existing.status === "Failed" && existing.failure?.retryable === true) {
+            const { progress: _drop, failure: _f, ...rest } = existing;
+            nextJob = { ...rest, status: "Queued" };
+            queueOffers.push(existing.id);
+            pendingEvents.push({ _tag: "JobRequeued", id: existing.id });
           }
 
-          const touched = [...newJobs, ...movedJobs];
-          if (touched.length > 0) {
-            yield* prependTouched(touched);
-            for (const event of pendingEvents) {
-              yield* publish(event);
-            }
-            yield* publishSnapshot;
-            for (const id of queueOffers) {
-              yield* Queue.offer(queue, id);
-            }
-            yield* persistJobs;
-          }
-
-          return result;
-        });
-
-      const remove = (id: JobId): Effect.Effect<void, JobNotFound | NotRemovable, never> =>
-        Effect.gen(function* () {
-          const map = yield* Ref.get(stateRef);
-          const job = map.get(id);
-          if (!job) {
-            return yield* Effect.fail(new JobNotFound({ id }));
-          }
-          if (job.status === "Downloading") {
-            return yield* Effect.fail(new NotRemovable({ id, status: job.status }));
-          }
-          yield* Ref.update(stateRef, (m) => {
-            const next = new Map(m);
-            next.delete(id);
-            return next;
-          });
-          yield* publish({ _tag: "JobRemoved", id });
-          yield* publishSnapshot;
-          yield* persistJobs;
-        });
-
-      const clearByStatus = (target: Job["status"]): Effect.Effect<number, never, never> =>
-        Effect.gen(function* () {
-          const map = yield* Ref.get(stateRef);
-          const toRemove: JobId[] = [];
-          for (const job of map.values()) {
-            if (job.status === target) toRemove.push(job.id);
-          }
-          if (toRemove.length === 0) return 0;
-          yield* Ref.update(stateRef, (m) => {
-            const next = new Map(m);
-            for (const id of toRemove) next.delete(id);
-            return next;
-          });
-          for (const id of toRemove) {
-            yield* publish({ _tag: "JobRemoved", id });
-          }
-          yield* publishSnapshot;
-          yield* persistJobs;
-          return toRemove.length;
-        });
-
-      const clearCompleted = clearByStatus("Downloaded");
-      const clearFailed = clearByStatus("Failed");
-
-      const clearAll: Effect.Effect<number, never, never> = Effect.gen(function* () {
-        const map = yield* Ref.get(stateRef);
-        const ids = Array.from(map.keys());
-        if (ids.length === 0) return 0;
-
-        // interrupt active download fiber first; clearing state before interrupt
-        // signals the worker's exit path to skip status mutation for that id.
-        yield* Ref.set(stateRef, new Map());
-        const active = yield* Ref.get(activeFiberRef);
-        if (Option.isSome(active)) {
-          yield* Fiber.interrupt(active.value.fiber);
-          yield* Ref.set(activeFiberRef, Option.none());
+          movedJobs.push(nextJob);
+          result.push(nextJob);
+          byNormalizedUrl.set(normalized, nextJob);
         }
 
-        for (const id of ids) {
+        const touched = [...newJobs, ...movedJobs];
+        if (touched.length > 0) {
+          yield* prependTouched(touched);
+          for (const event of pendingEvents) {
+            yield* publish(event);
+          }
+          yield* publishSnapshot;
+          for (const id of queueOffers) {
+            yield* Queue.offer(queue, id);
+          }
+          yield* persistJobs;
+        }
+
+        return result;
+      });
+
+    const remove = (id: JobId): Effect.Effect<void, JobNotFound | NotRemovable, never> =>
+      Effect.gen(function* () {
+        const map = yield* Ref.get(stateRef);
+        const job = map.get(id);
+        if (!job) {
+          return yield* Effect.fail(new JobNotFound({ id }));
+        }
+        if (job.status === "Downloading") {
+          return yield* Effect.fail(new NotRemovable({ id, status: job.status }));
+        }
+        yield* Ref.update(stateRef, (m) => {
+          const next = new Map(m);
+          next.delete(id);
+          return next;
+        });
+        yield* publish({ _tag: "JobRemoved", id });
+        yield* publishSnapshot;
+        yield* persistJobs;
+      });
+
+    const clearByStatus = (target: Job["status"]): Effect.Effect<number, never, never> =>
+      Effect.gen(function* () {
+        const map = yield* Ref.get(stateRef);
+        const toRemove: JobId[] = [];
+        for (const job of map.values()) {
+          if (job.status === target) toRemove.push(job.id);
+        }
+        if (toRemove.length === 0) return 0;
+        yield* Ref.update(stateRef, (m) => {
+          const next = new Map(m);
+          for (const id of toRemove) next.delete(id);
+          return next;
+        });
+        for (const id of toRemove) {
           yield* publish({ _tag: "JobRemoved", id });
         }
         yield* publishSnapshot;
         yield* persistJobs;
-        return ids.length;
+        return toRemove.length;
       });
 
-      const retry = (id: JobId): Effect.Effect<void, JobNotFound | NotRetryable, never> =>
+    const clearCompleted = clearByStatus("Downloaded");
+    const clearFailed = clearByStatus("Failed");
+
+    const clearAll: Effect.Effect<number, never, never> = Effect.gen(function* () {
+      const map = yield* Ref.get(stateRef);
+      const ids = Array.from(map.keys());
+      if (ids.length === 0) return 0;
+
+      // interrupt active download fiber first; clearing state before interrupt
+      // signals the worker's exit path to skip status mutation for that id.
+      yield* Ref.set(stateRef, new Map());
+      const active = yield* Ref.get(activeFiberRef);
+      if (Option.isSome(active)) {
+        yield* Fiber.interrupt(active.value.fiber);
+        yield* Ref.set(activeFiberRef, Option.none());
+      }
+
+      for (const id of ids) {
+        yield* publish({ _tag: "JobRemoved", id });
+      }
+      yield* publishSnapshot;
+      yield* persistJobs;
+      return ids.length;
+    });
+
+    const retry = (id: JobId): Effect.Effect<void, JobNotFound | NotRetryable, never> =>
+      Effect.gen(function* () {
+        const map = yield* Ref.get(stateRef);
+        const job = map.get(id);
+        if (!job) {
+          return yield* Effect.fail(new JobNotFound({ id }));
+        }
+        if (job.status !== "Failed" || job.failure?.retryable !== true) {
+          return yield* Effect.fail(new NotRetryable({ id, status: job.status }));
+        }
+        const requeued: Job = { id: job.id, url: job.url, domain: job.domain, displayTitle: job.displayTitle, status: "Queued" };
+        yield* setJob(requeued);
+        yield* Queue.offer(queue, id);
+        yield* publish({ _tag: "JobRequeued", id });
+        yield* publishSnapshot;
+        yield* persistJobs;
+      });
+
+    const snapshot = currentSnapshot;
+
+    const events: Stream.Stream<JobEvent, never, never> = Stream.fromPubSub(pubsub);
+
+    const updateJob = (id: JobId, f: (j: Job) => Job): Effect.Effect<void, never, never> =>
+      Ref.update(stateRef, (m) => {
+        const j = m.get(id);
+        if (!j) return m;
+        const next = new Map(m);
+        next.set(id, f(j));
+        return next;
+      });
+
+    const makeOnEvent =
+      (id: JobId): OnEvent =>
+      (event) =>
         Effect.gen(function* () {
-          const map = yield* Ref.get(stateRef);
-          const job = map.get(id);
-          if (!job) {
-            return yield* Effect.fail(new JobNotFound({ id }));
-          }
-          if (job.status !== "Failed" || job.failure?.retryable !== true) {
-            return yield* Effect.fail(new NotRetryable({ id, status: job.status }));
-          }
-          const requeued: Job = { id: job.id, url: job.url, domain: job.domain, displayTitle: job.displayTitle, status: "Queued" };
-          yield* setJob(requeued);
-          yield* Queue.offer(queue, id);
-          yield* publish({ _tag: "JobRequeued", id });
-          yield* publishSnapshot;
-          yield* persistJobs;
-        });
-
-      const snapshot = currentSnapshot;
-
-      const events: Stream.Stream<JobEvent, never, never> = Stream.fromPubSub(pubsub);
-
-      const updateJob = (id: JobId, f: (j: Job) => Job): Effect.Effect<void, never, never> =>
-        Ref.update(stateRef, (m) => {
-          const j = m.get(id);
-          if (!j) return m;
-          const next = new Map(m);
-          next.set(id, f(j));
-          return next;
-        });
-
-      const makeOnEvent =
-        (id: JobId): OnEvent =>
-        (event) =>
-          Effect.gen(function* () {
-            if (event._tag === "TitleResolved") {
-              yield* updateJob(id, (j) => ({ ...j, displayTitle: event.title }));
-              yield* publish({ _tag: "JobTitleUpdated", id, title: event.title });
-              yield* persistJobs;
-            } else {
-              const stage = event._tag === "ScrapeProgress" ? "scrape" : "render";
-              const progress: JobProgress = { done: event.done, total: event.total, stage };
-              yield* updateJob(id, (j) => ({ ...j, progress }));
-              yield* publish({ _tag: "JobProgress", id, done: event.done, total: event.total, stage });
-            }
-          });
-
-      const worker = Effect.forever(
-        Effect.gen(function* () {
-          const id = yield* Queue.take(queue);
-          const map = yield* Ref.get(stateRef);
-          const current = map.get(id);
-          if (!current || current.status !== "Queued") {
-            return;
-          }
-          const downloading: Job = { ...current, status: "Downloading" };
-          yield* setJob(downloading);
-          yield* publish({ _tag: "JobStarted", id });
-          yield* persistJobs;
-          const folder = yield* Ref.get(folderRef);
-          const fiber = yield* Effect.fork(scribd.execute(current.url, folder, makeOnEvent(id)));
-          yield* Ref.set(activeFiberRef, Option.some({ id, fiber }));
-          const exit = yield* Fiber.await(fiber);
-          yield* Ref.set(activeFiberRef, Option.none());
-
-          // If clearAll removed the job from state mid-flight, skip status update.
-          const after = (yield* Ref.get(stateRef)).get(id);
-          if (!after) return;
-
-          const { progress: _drop, ...withoutProgress } = after;
-          if (Exit.isSuccess(exit)) {
-            yield* setJob({ ...withoutProgress, status: "Downloaded" });
-            yield* publish({ _tag: "JobCompleted", id });
-          } else if (Cause.isInterruptedOnly(exit.cause)) {
-            // External interrupt (e.g. clearAll racing); state already adjusted.
-            return;
+          if (event._tag === "TitleResolved") {
+            yield* updateJob(id, (j) => ({ ...j, displayTitle: event.title }));
+            yield* publish({ _tag: "JobTitleUpdated", id, title: event.title });
+            yield* persistJobs;
           } else {
-            const reason = formatCause(exit.cause);
-            const failure: JobFailure = { reason, retryable: true };
-            yield* setJob({ ...withoutProgress, status: "Failed", failure });
-            yield* publish({ _tag: "JobFailed", id, reason, retryable: true });
+            const stage = event._tag === "ScrapeProgress" ? "scrape" : "render";
+            const progress: JobProgress = { done: event.done, total: event.total, stage };
+            yield* updateJob(id, (j) => ({ ...j, progress }));
+            yield* publish({ _tag: "JobProgress", id, done: event.done, total: event.total, stage });
           }
-          yield* persistJobs;
-        }),
-      );
-
-      yield* Effect.forkScoped(worker);
-
-      const outputFolder: Effect.Effect<string, never, never> = Ref.get(folderRef);
-
-      const setOutputFolder = (path: string): Effect.Effect<void, never, never> =>
-        Effect.gen(function* () {
-          const trimmed = path.trim();
-          if (trimmed === "") return;
-          const expanded = expandHome(trimmed);
-          yield* Ref.set(folderRef, expanded);
-          yield* publish({ _tag: "OutputFolderChanged", path: expanded });
-          yield* persistSettings(expanded);
         });
 
-      return DownloadEngine.of({
-        enqueue,
-        remove,
-        retry,
-        clearCompleted,
-        clearFailed,
-        clearAll,
-        snapshot,
-        events,
-        outputFolder,
-        setOutputFolder,
+    const worker = Effect.forever(
+      Effect.gen(function* () {
+        const id = yield* Queue.take(queue);
+        const map = yield* Ref.get(stateRef);
+        const current = map.get(id);
+        if (!current || current.status !== "Queued") {
+          return;
+        }
+        const downloading: Job = { ...current, status: "Downloading" };
+        yield* setJob(downloading);
+        yield* publish({ _tag: "JobStarted", id });
+        yield* persistJobs;
+        const folder = yield* Ref.get(folderRef);
+        const scraper = scrapers.find((s) => s.id === current.domain);
+        if (!scraper) {
+          const failure: JobFailure = { reason: `No scraper registered for domain '${current.domain}'`, retryable: false };
+          yield* setJob({ ...downloading, status: "Failed", failure });
+          yield* publish({ _tag: "JobFailed", id, reason: failure.reason, retryable: failure.retryable });
+          yield* persistJobs;
+          return;
+        }
+        const fiber = yield* Effect.fork(scraper.execute(current.url, folder, makeOnEvent(id), false));
+        yield* Ref.set(activeFiberRef, Option.some({ id, fiber }));
+        const exit = yield* Fiber.await(fiber);
+        yield* Ref.set(activeFiberRef, Option.none());
+
+        // If clearAll removed the job from state mid-flight, skip status update.
+        const after = (yield* Ref.get(stateRef)).get(id);
+        if (!after) return;
+
+        const { progress: _drop, ...withoutProgress } = after;
+        if (Exit.isSuccess(exit)) {
+          yield* setJob({ ...withoutProgress, status: "Downloaded" });
+          yield* publish({ _tag: "JobCompleted", id });
+        } else if (Cause.isInterruptedOnly(exit.cause)) {
+          // External interrupt (e.g. clearAll racing); state already adjusted.
+          return;
+        } else {
+          const reason = formatCause(exit.cause);
+          const failure: JobFailure = { reason, retryable: true };
+          yield* setJob({ ...withoutProgress, status: "Failed", failure });
+          yield* publish({ _tag: "JobFailed", id, reason, retryable: true });
+        }
+        yield* persistJobs;
+      }),
+    );
+
+    yield* Effect.forkScoped(worker);
+
+    const outputFolder: Effect.Effect<string, never, never> = Ref.get(folderRef);
+
+    const setOutputFolder = (path: string): Effect.Effect<void, never, never> =>
+      Effect.gen(function* () {
+        const trimmed = path.trim();
+        if (trimmed === "") return;
+        const expanded = expandHome(trimmed);
+        yield* Ref.set(folderRef, expanded);
+        yield* publish({ _tag: "OutputFolderChanged", path: expanded });
+        yield* persistSettings(expanded);
       });
-    }),
-  );
+
+    return DownloadEngine.of({
+      enqueue,
+      remove,
+      retry,
+      clearCompleted,
+      clearFailed,
+      clearAll,
+      snapshot,
+      events,
+      outputFolder,
+      setOutputFolder,
+    });
+  }),
+);

@@ -7,7 +7,7 @@ import type { EngineSnapshot, Job, JobEvent } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService, type Settings } from "../src/service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive } from "../src/service/DownloadEngine";
 import { JobStore, type JobStoreService } from "../src/service/JobStore";
-import { ScribdDownloader, type ScribdDownloaderService } from "../src/service/ScribdDownloader";
+import { Scrapers, type Scraper } from "../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
 import { PageLoadFailed } from "../src/errors/DomainErrors";
 
@@ -40,9 +40,11 @@ const defaultConfig: ConfigData = {
   directory: { output: "/tmp/out", filename: "title" },
 };
 
-const buildLayer = (config: ConfigData = defaultConfig) => {
-  const scribdSvc: ScribdDownloaderService = {
-    execute: (url, folder, onEvent) => state.scribdExecute(url, folder, onEvent) as ReturnType<ScribdDownloaderService["execute"]>,
+const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyArray<Scraper> = []) => {
+  const scribdScraper: Scraper = {
+    id: "scribd",
+    canHandle: (url) => /scribd\.com/.test(url),
+    execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
   };
   const configStoreSvc: ConfigStoreService = {
     read: Effect.sync(() => state.initialSettings),
@@ -55,7 +57,7 @@ const buildLayer = (config: ConfigData = defaultConfig) => {
   return Layer.provide(
     DownloadEngineLive,
     Layer.mergeAll(
-      Layer.succeed(ScribdDownloader, scribdSvc),
+      Layer.succeed(Scrapers, [scribdScraper, ...extraScrapers]),
       Layer.succeed(ConfigLoader, config),
       Layer.succeed(ConfigStore, configStoreSvc),
       Layer.succeed(JobStore, jobStoreSvc),
@@ -262,7 +264,7 @@ describe("DownloadEngine", () => {
       // #then
       expect(snap.jobs[0]!.status).toBe("Downloaded");
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
-      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function));
+      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function), false);
     });
 
     test("ScribdDownloader failure → Failed with retryable: true", async () => {
@@ -1483,6 +1485,62 @@ describe("DownloadEngine", () => {
 
       // #then
       expect(tags).toEqual(["JobAdded", "JobFailed"]);
+    });
+  });
+
+  describe("scrapers registry extensibility", () => {
+    const runScopedWith = <A, E>(program: Effect.Effect<A, E, DownloadEngine>, extraScrapers: ReadonlyArray<Scraper>) =>
+      Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(buildLayer(defaultConfig, extraScrapers)))));
+
+    test("URL handled by extra scraper gets that scraper's id as domain", async () => {
+      // #given
+      const customExecute = mock(() => Effect.void);
+      const custom: Scraper = {
+        // @ts-expect-error custom id outside current JobDomain union for test purposes
+        id: "custom",
+        canHandle: (url) => url.includes("example.com"),
+        execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+      };
+
+      // #when
+      const created = await runScopedWith(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          return yield* engine.enqueue("https://example.com/foo");
+        }),
+        [custom],
+      );
+
+      // #then
+      expect(created[0]!.domain).toBe("custom" as never);
+      expect(created[0]!.status).toBe("Queued");
+    });
+
+    test("scribd URL still routes to scribd scraper when extra scrapers present", async () => {
+      // #given
+      const customExecute = mock(() => Effect.void);
+      const custom: Scraper = {
+        // @ts-expect-error custom id outside current JobDomain union for test purposes
+        id: "custom",
+        canHandle: (url) => url.includes("example.com"),
+        execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+      };
+      state.scribdExecute = mock(() => Effect.void);
+
+      // #when
+      const snap = await runScopedWith(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          return yield* waitForQuiet(engine);
+        }),
+        [custom],
+      );
+
+      // #then
+      expect(snap.jobs[0]!.domain).toBe("scribd");
+      expect(state.scribdExecute).toHaveBeenCalledTimes(1);
+      expect(customExecute).not.toHaveBeenCalled();
     });
   });
 });

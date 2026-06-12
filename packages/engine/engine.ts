@@ -5,7 +5,8 @@ import { Effect, Layer } from "effect";
 import { ConfigStoreLive } from "./src/service/ConfigStore";
 import { DownloadEngineLive } from "./src/service/DownloadEngine";
 import { JobStoreLive } from "./src/service/JobStore";
-import { ScribdDownloaderLive } from "./src/service/ScribdDownloader";
+import { ScribdDownloader, ScribdDownloaderLive } from "./src/service/ScribdDownloader";
+import { Scrapers } from "./src/service/Scraper";
 import { DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
 import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
 import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
@@ -30,8 +31,18 @@ const buildEngineLayer = () => {
   const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
   const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive, TitleResolverLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
+  const ScrapersLayer = Layer.provide(
+    Layer.effect(
+      Scrapers,
+      Effect.gen(function* () {
+        const scribd = yield* ScribdDownloader;
+        return [scribd];
+      }),
+    ),
+    ScribdLayer,
+  );
   const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
-  const EngineDeps = Layer.mergeAll(ScribdLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive);
+  const EngineDeps = Layer.mergeAll(ScrapersLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive);
   return Layer.provide(DownloadEngineLive, EngineDeps);
 };
 

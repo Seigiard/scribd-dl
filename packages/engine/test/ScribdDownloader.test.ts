@@ -11,6 +11,7 @@ import { TitleResolver, type TitleResolverService } from "../src/utils/request/T
 interface FakePage {
   evaluate: ReturnType<typeof mock>;
   close: ReturnType<typeof mock>;
+  content: ReturnType<typeof mock>;
 }
 
 interface MockState {
@@ -54,6 +55,7 @@ const resetState = () => {
       return state.processPageResult;
     }),
     close: mock(async () => {}),
+    content: mock(async () => "<html><body>fake content</body></html>"),
   };
   state.resolve = mock((_url: string, _id: string) => Effect.succeed(state.resolvedTitle));
   state.getPage = mock((_url: string) => Effect.succeed(state.page as unknown as Page));
@@ -96,11 +98,11 @@ const buildLayer = () => {
 
 const noopOnEvent = () => Effect.void;
 
-const runExecute = (url: string, folder = "/tmp/out") =>
+const runExecute = (url: string, folder = "/tmp/out", debug?: boolean) =>
   Effect.runPromiseExit(
     Effect.gen(function* () {
       const svc = yield* ScribdDownloader;
-      yield* svc.execute(url, folder, noopOnEvent);
+      yield* svc.execute(url, folder, noopOnEvent, debug);
     }).pipe(Effect.provide(buildLayer())),
   );
 
@@ -360,5 +362,153 @@ describe("ScribdDownloader", () => {
 
     // #then
     expect(state.generatePDF).toHaveBeenCalledTimes(1);
+  });
+
+  describe("canHandle", () => {
+    const callCanHandle = (url: string) =>
+      Effect.runPromise(
+        Effect.gen(function* () {
+          const svc = yield* ScribdDownloader;
+          return svc.canHandle(url);
+        }).pipe(Effect.provide(buildLayer())),
+      );
+
+    test("returns true for scribd document URL", async () => {
+      // #given
+      const url = "https://www.scribd.com/document/123/foo";
+
+      // #when
+      const result = await callCanHandle(url);
+
+      // #then
+      expect(result).toBe(true);
+    });
+
+    test("returns false for non-scribd URL", async () => {
+      // #given
+      const url = "https://example.com/foo";
+
+      // #when
+      const result = await callCanHandle(url);
+
+      // #then
+      expect(result).toBe(false);
+    });
+
+    test("id is 'scribd'", async () => {
+      // #when
+      const id = await Effect.runPromise(
+        Effect.gen(function* () {
+          const svc = yield* ScribdDownloader;
+          return svc.id;
+        }).pipe(Effect.provide(buildLayer())),
+      );
+
+      // #then
+      expect(id).toBe("scribd");
+    });
+  });
+
+  describe("debug=true behavior", () => {
+    let originalBunWrite: typeof Bun.write;
+    let bunWrites: Array<{ path: string; data: string }>;
+
+    const setupBunWriteSpy = () => {
+      bunWrites = [];
+      originalBunWrite = Bun.write;
+      // @ts-expect-error overriding for test capture
+      Bun.write = async (path: unknown, data: unknown) => {
+        bunWrites.push({ path: String(path), data: String(data) });
+        return String(data).length;
+      };
+    };
+
+    const restoreBunWrite = () => {
+      Bun.write = originalBunWrite;
+    };
+
+    test("dumps page HTML to <folder>/<safeIdentifier>.debug.html", async () => {
+      // #given
+      state.resolvedTitle = "doc";
+      state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
+      state.page.content = mock(async () => "<html><body>scribd page</body></html>");
+      setupBunWriteSpy();
+
+      // #when
+      try {
+        await runExecute("https://www.scribd.com/embeds/123/content", "/tmp/out", true);
+      } finally {
+        restoreBunWrite();
+      }
+
+      // #then
+      const htmlWrite = bunWrites.find((w) => w.path.endsWith(".debug.html"));
+      expect(htmlWrite).toBeDefined();
+      expect(htmlWrite!.path).toBe("/tmp/out/doc.debug.html");
+      expect(htmlWrite!.data).toBe("<html><body>scribd page</body></html>");
+    });
+
+    test("multi-dim run preserves _temp directory (no dirRemove)", async () => {
+      // #given
+      state.resolvedTitle = "doc";
+      state.processPageResult = {
+        pages: [
+          { id: "p1", width: 800, height: 600 },
+          { id: "p2", width: 1000, height: 700 },
+        ],
+      };
+      setupBunWriteSpy();
+
+      // #when
+      try {
+        await runExecute("https://www.scribd.com/embeds/123/content", "/tmp/out", true);
+      } finally {
+        restoreBunWrite();
+      }
+
+      // #then
+      expect(state.dirCreate).toHaveBeenCalledWith("/tmp/out/doc_temp");
+      expect(state.dirRemove).not.toHaveBeenCalled();
+    });
+
+    test("debug=false (default) removes _temp directory as before", async () => {
+      // #given
+      state.resolvedTitle = "doc";
+      state.processPageResult = {
+        pages: [
+          { id: "p1", width: 800, height: 600 },
+          { id: "p2", width: 1000, height: 700 },
+        ],
+      };
+      setupBunWriteSpy();
+
+      // #when
+      try {
+        await runExecute("https://www.scribd.com/embeds/123/content", "/tmp/out", false);
+      } finally {
+        restoreBunWrite();
+      }
+
+      // #then
+      expect(state.dirRemove).toHaveBeenCalledWith("/tmp/out/doc_temp");
+    });
+
+    test("debug omitted does not dump HTML", async () => {
+      // #given
+      state.resolvedTitle = "doc";
+      state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
+      setupBunWriteSpy();
+
+      // #when
+      try {
+        await runExecute("https://www.scribd.com/embeds/123/content", "/tmp/out");
+      } finally {
+        restoreBunWrite();
+      }
+
+      // #then
+      const htmlWrite = bunWrites.find((w) => w.path.endsWith(".debug.html"));
+      expect(htmlWrite).toBeUndefined();
+    });
   });
 });
