@@ -1,11 +1,21 @@
 ---
 title: "Bug: render artifacts in Shadowdark PDF"
-status: todo
+status: fixed
 created: 2026-06-11
+fixed: 2026-06-12
+fixed_in: "#23"
 type: bug
 ---
 
 # Bug: render artifacts in Shadowdark PDF
+
+## Resolution
+
+Fixed in [#23](https://github.com/Seigiard/scribd-dl/pull/23) (merged 2026-06-12).
+
+Root cause — injected CSS в `processPage` (ScribdDownloader.ts:80) форсил `color: #000000 !important` на всех `.text_layer` спанах, перекрывая инлайновые `style="color:..."` на обложках с цветным дизайном в text_layer. Конкретно на Shadowdark двухцветный логотип "ShadowDark" (`#231f20` + `#70487e` со сдвигом) коллапсировал в сплошной чёрный — позиции сохранялись, фиолетовая половина дизайна терялась.
+
+Fix — удалена строка `color: #000000 !important`. `opacity: 1` + `text-shadow: none` + font-smoothing остались, они и решают изначальный Blur/Fade.
 
 ## Repro
 URL: <https://www.scribd.com/document/976321603/Shadowdark-%D0%91%D1%8B%D1%81%D1%82%D1%80%D1%8B%D0%B9-%D0%A1%D1%82%D0%B0%D1%80%D1%82-%D0%98%D0%B3%D1%80%D0%BE%D0%BA%D0%B0>
