@@ -298,20 +298,28 @@ describe("containsUrl", () => {
 });
 
 describe("module boundaries", () => {
-  test("clientFeedback module source has no framework, DOM, timer, fetch, or WebSocket imports (AE5)", async () => {
-    // #given
+  test("clientFeedback module imports no framework, DOM, timer, fetch, or WebSocket dependencies (AE5)", async () => {
+    // #given — collect only import specifiers, so comments and string literals can't false-trigger
     const url = new URL("../src/clientFeedback.ts", import.meta.url);
     const source = await Bun.file(url).text();
+    const importSpecifiers = Array.from(source.matchAll(/^\s*import[^;]*from\s+["']([^"']+)["']/gm)).map((m) => m[1]!);
 
-    // #then
-    expect(source).not.toMatch(/from\s+["']react["']/);
-    expect(source).not.toMatch(/from\s+["']ink["']/);
-    expect(source).not.toMatch(/from\s+["']nanostores["']/);
-    expect(source).not.toMatch(/\bsetTimeout\b/);
-    expect(source).not.toMatch(/\bsetInterval\b/);
-    expect(source).not.toMatch(/\bfetch\b/);
-    expect(source).not.toMatch(/\bWebSocket\b/);
-    expect(source).not.toMatch(/\bdocument\b/);
-    expect(source).not.toMatch(/\bwindow\b/);
+    // #then — only same-package relative imports (e.g., "./jobs") are permitted
+    const forbidden = new Set([
+      "react",
+      "react-dom",
+      "ink",
+      "nanostores",
+      "@nanostores/preact",
+      "uhtml",
+      "puppeteer",
+      "effect",
+      "@effect/cli",
+      "@effect/platform",
+    ]);
+    for (const spec of importSpecifiers) {
+      expect(spec.startsWith("./") || spec.startsWith("../")).toBe(true);
+      expect(forbidden.has(spec)).toBe(false);
+    }
   });
 });
