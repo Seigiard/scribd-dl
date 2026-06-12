@@ -2,16 +2,11 @@ import { Command } from "@effect/cli";
 import { HttpServer } from "@effect/platform";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
+import { ConfigLayer, makeScrapersLayer } from "./src/composition";
 import { ConfigStoreLive } from "./src/service/ConfigStore";
 import { DownloadEngineLive } from "./src/service/DownloadEngine";
 import { JobStoreLive } from "./src/service/JobStore";
-import { ScribdDownloader, ScribdDownloaderLive } from "./src/service/ScribdDownloader";
-import { Scrapers } from "./src/service/Scraper";
-import { DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
-import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
-import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
 import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
-import { TitleResolverLive } from "./src/utils/request/TitleResolver";
 import { portOpt } from "./src/cli/options";
 import { HttpServerLive } from "./src/server/HttpServerLive";
 
@@ -28,19 +23,7 @@ const printReady = HttpServer.addressWith((address) =>
 const program = printReady.pipe(Effect.zipRight(Effect.never));
 
 const buildEngineLayer = () => {
-  const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
-  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive, TitleResolverLive);
-  const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
-  const ScrapersLayer = Layer.provide(
-    Layer.effect(
-      Scrapers,
-      Effect.gen(function* () {
-        const scribd = yield* ScribdDownloader;
-        return [scribd];
-      }),
-    ),
-    ScribdLayer,
-  );
+  const ScrapersLayer = makeScrapersLayer(PuppeteerSgLive);
   const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
   const EngineDeps = Layer.mergeAll(ScrapersLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive);
   return Layer.provide(DownloadEngineLive, EngineDeps);

@@ -1,13 +1,10 @@
 import { Args, Command } from "@effect/cli";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Effect, Layer } from "effect";
-import { ScribdDownloader, ScribdDownloaderLive } from "./src/service/ScribdDownloader";
+import { Effect } from "effect";
+import { makeScrapersLayer } from "./src/composition";
 import { Scrapers, type OnEvent } from "./src/service/Scraper";
-import { DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
-import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
-import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
+import { DEFAULT_CONFIG } from "./src/utils/io/ConfigLoader";
 import { makePuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
-import { TitleResolverLive } from "./src/utils/request/TitleResolver";
 
 const DEBUG_OUTPUT_FOLDER = "./output";
 
@@ -24,22 +21,7 @@ const logEvent: OnEvent = (event) =>
     }
   });
 
-const buildDebugLayer = () => {
-  const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
-  const PuppeteerLayer = makePuppeteerSgLive({ headful: true });
-  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerLayer, TitleResolverLive);
-  const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
-  return Layer.provide(
-    Layer.effect(
-      Scrapers,
-      Effect.gen(function* () {
-        const scribd = yield* ScribdDownloader;
-        return [scribd];
-      }),
-    ),
-    ScribdLayer,
-  );
-};
+const buildDebugLayer = () => makeScrapersLayer(makePuppeteerSgLive({ headful: true }));
 
 const program = (url: string) =>
   Effect.gen(function* () {
@@ -50,7 +32,9 @@ const program = (url: string) =>
       yield* Effect.sync(() => process.exit(1));
       return;
     }
-    console.log(`[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms (prod default)`);
+    console.log(
+      `[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms (prod default)`,
+    );
     yield* scraper.execute(url, DEBUG_OUTPUT_FOLDER, logEvent, true).pipe(
       Effect.tapError((error) => Effect.sync(() => console.error("[debug] failed:", error))),
       Effect.catchAll(() => Effect.sync(() => process.exit(1))),
