@@ -67,4 +67,21 @@ describe("useTransient", () => {
     expect(ui.lastFrame()).toContain("m=boom");
     ui.unmount();
   });
+
+  test("ignored lower-severity message does not reset the existing timer", async () => {
+    // #given
+    const ui = render(React.createElement(Probe));
+    await flush();
+    api!.showTransient("error", "boom"); // 6000ms timer
+    await flush(50);
+
+    // #when — sneak in an ignored info, then wait until just past the lower-severity duration
+    api!.showTransient("info", "should be ignored");
+    await flush(2200); // > info duration (2000ms) — if timer was reset to info, state would have cleared
+
+    // #then — error is still on screen because original error timer was not reset by the ignored message
+    expect(ui.lastFrame()).toContain("s=error");
+    expect(ui.lastFrame()).toContain("m=boom");
+    ui.unmount();
+  });
 });

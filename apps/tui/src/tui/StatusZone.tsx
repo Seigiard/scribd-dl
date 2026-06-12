@@ -1,5 +1,5 @@
 import { Box, Text } from "ink";
-import type { TransientSeverity, TransientState } from "./transient";
+import type { TransientSeverity, TransientState } from "@scribd-dl/shared";
 
 export const DEFAULT_HINT = "Press Ctrl/Cmd+V to download links • q to quit • Tab to navigate";
 

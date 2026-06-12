@@ -1,5 +1,4 @@
-import type { EngineSnapshot, JobId } from "@scribd-dl/shared";
-import type { TransientState } from "./transient";
+import type { EngineSnapshot, JobId, TransientState } from "@scribd-dl/shared";
 
 export type FocusableKind = "change" | "clearFinished" | "clearAll" | "remove" | "retry";
 

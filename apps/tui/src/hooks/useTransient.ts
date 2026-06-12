@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { applyTransient, severityTimer, type ShowOpts, type TransientSeverity, type TransientState } from "../tui/transient";
+import {
+  applyTransient,
+  type IncomingTransient,
+  type TransientSeverity,
+  type TransientState,
+} from "@scribd-dl/shared";
+
+export interface ShowOpts {
+  readonly sticky?: boolean;
+}
 
 export interface UseTransient {
   readonly transient: TransientState | null;
@@ -21,16 +30,17 @@ export const useTransient = (): UseTransient => {
   const showTransient = useCallback(
     (severity: TransientSeverity, message: string, opts?: ShowOpts) => {
       setTransient((current) => {
-        const next = applyTransient(current, severity, message, opts);
-        if (next === current) return current;
+        const incoming: IncomingTransient = { severity, message, sticky: opts?.sticky };
+        const result = applyTransient(current, incoming);
+        if (result.kind === "ignored") return current;
         clearTimer();
-        if (!next.sticky) {
+        if (result.dismissAfterMs !== null) {
           timerRef.current = setTimeout(() => {
             timerRef.current = null;
             setTransient(null);
-          }, severityTimer(next.severity));
+          }, result.dismissAfterMs);
         }
-        return next;
+        return result.state;
       });
     },
     [clearTimer],
