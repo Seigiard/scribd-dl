@@ -1,14 +1,25 @@
 import { useEffect, useState } from "react";
 import { fetchSnapshot, subscribeEvents, type EngineSnapshot, type JobEvent } from "@scribd-dl/shared";
 
+export interface UseEngineStateOptions {
+  readonly onWsOpen?: () => void;
+  readonly onWsClose?: () => void;
+}
+
 export interface UseEngineState {
   readonly snapshot: EngineSnapshot;
   readonly folder: string | null;
 }
 
-export const useEngineState = (baseUrl: string, initialFolder: string | null = null): UseEngineState => {
+export const useEngineState = (
+  baseUrl: string,
+  initialFolder: string | null = null,
+  options: UseEngineStateOptions = {},
+): UseEngineState => {
   const [snapshot, setSnapshot] = useState<EngineSnapshot>({ jobs: [] });
   const [folder, setFolder] = useState<string | null>(initialFolder);
+
+  const { onWsOpen, onWsClose } = options;
 
   useEffect(() => {
     let alive = true;
@@ -19,7 +30,7 @@ export const useEngineState = (baseUrl: string, initialFolder: string | null = n
         const snap = await fetchSnapshot(baseUrl);
         if (alive) setSnapshot(snap);
       } catch {
-        // ignore — connection errors are non-fatal at runtime
+        // ignore — connection errors surface via onWsClose
       }
     };
 
@@ -29,6 +40,10 @@ export const useEngineState = (baseUrl: string, initialFolder: string | null = n
         setFolder(event.path);
         return;
       }
+      if (event._tag === "SnapshotReplaced") {
+        setSnapshot(event.snapshot);
+        return;
+      }
       void refresh();
     };
 
@@ -36,13 +51,19 @@ export const useEngineState = (baseUrl: string, initialFolder: string | null = n
 
     const sub = subscribeEvents(baseUrl, {
       onMessage: onEvent,
+      onOpen: () => {
+        if (alive) onWsOpen?.();
+      },
+      onClose: () => {
+        if (alive) onWsClose?.();
+      },
     });
 
     return () => {
       alive = false;
       sub.close();
     };
-  }, [baseUrl]);
+  }, [baseUrl, onWsOpen, onWsClose]);
 
   return { snapshot, folder };
 };

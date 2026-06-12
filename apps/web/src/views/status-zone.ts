@@ -24,22 +24,10 @@ export const statusZone = ({ transient, jobs }: StatusZoneProps): Hole => {
   return html`<div class=${zoneCls}>
     <div class=${messageCls}>${messageText}</div>
     <div class="status-zone-actions">
-      <button
-        type="button"
-        class="btn btn-default"
-        ?disabled=${terminalCount === 0}
-        @click=${() => void commandClearFinished()}
-      >
+      <button type="button" class="btn btn-default" ?disabled=${terminalCount === 0} @click=${() => void commandClearFinished()}>
         Clear Finished
       </button>
-      <button
-        type="button"
-        class="btn btn-danger"
-        ?disabled=${total === 0}
-        @click=${() => void commandClearAll()}
-      >
-        Clear All
-      </button>
+      <button type="button" class="btn btn-danger" ?disabled=${total === 0} @click=${() => void commandClearAll()}>Clear All</button>
     </div>
   </div>`;
 };
