@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const enqueueTextMock = vi.fn(async () => ({ jobs: [] }));
+const clearAllMock = vi.fn(async () => 0);
+const clearFinishedMock = vi.fn(async () => 0);
 const fetchSnapshotMock = vi.fn(async () => ({ jobs: [] }));
 const fetchFolderMock = vi.fn(async () => "/tmp/out");
 const removeJobMock = vi.fn(async () => {});
@@ -8,6 +10,8 @@ const retryJobMock = vi.fn(async () => {});
 const setFolderMock = vi.fn(async () => {});
 
 vi.mock("@/lib/api", () => ({
+  clearAll: clearAllMock,
+  clearFinished: clearFinishedMock,
   enqueueText: enqueueTextMock,
   fetchSnapshot: fetchSnapshotMock,
   fetchFolder: fetchFolderMock,

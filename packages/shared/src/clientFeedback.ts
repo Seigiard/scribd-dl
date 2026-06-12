@@ -35,11 +35,8 @@ const SEVERITY_RANK: Readonly<Record<TransientSeverity, number>> = {
 const IGNORED: TransientApplyResult = { kind: "ignored" };
 
 const URL_PREFLIGHT_REGEX = /https?:\/\/\S+/;
-const URL_GLOBAL_REGEX = /(https?:\/\/\S+)/g;
 
 export const containsUrl = (text: string): boolean => URL_PREFLIGHT_REGEX.test(text);
-
-export const extractUrls = (text: string): ReadonlyArray<string> => text.match(URL_GLOBAL_REGEX) ?? [];
 
 export const applyTransient = (current: TransientState | null, incoming: IncomingTransient): TransientApplyResult => {
   const sticky = incoming.sticky === true;

@@ -25,7 +25,7 @@ export const useTransient = (): UseTransient => {
   const showTransient = useCallback(
     (severity: TransientSeverity, message: string, opts?: ShowOpts) => {
       setTransient((current) => {
-        const incoming: IncomingTransient = { severity, message, sticky: opts?.sticky };
+        const incoming: IncomingTransient = opts?.sticky === undefined ? { severity, message } : { severity, message, sticky: opts.sticky };
         const result = applyTransient(current, incoming);
         if (result.kind === "ignored") return current;
         clearTimer();
