@@ -1,5 +1,5 @@
 import type { EngineSnapshot, JobEvent } from "./jobs";
-import type { EnqueueResponse, FolderResponse } from "./http";
+import type { ClearResponse, EnqueueResponse, FolderResponse } from "./http";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -48,6 +48,23 @@ export const setFolder = async (baseUrl: string, path: string): Promise<void> =>
     body: JSON.stringify({ path }),
   });
   if (!res.ok) throw new Error(`POST /folder failed: ${res.status}`);
+};
+
+const clearByScope = async (baseUrl: string, scope: "completed" | "failed"): Promise<number> => {
+  const res = await fetch(`${baseUrl}/jobs/${scope}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`DELETE /jobs/${scope} failed: ${res.status}`);
+  return ((await res.json()) as ClearResponse).removed;
+};
+
+export const clearFinished = async (baseUrl: string): Promise<number> => {
+  const [completed, failed] = await Promise.all([clearByScope(baseUrl, "completed"), clearByScope(baseUrl, "failed")]);
+  return completed + failed;
+};
+
+export const clearAll = async (baseUrl: string): Promise<number> => {
+  const res = await fetch(`${baseUrl}/jobs`, { method: "DELETE" });
+  if (!res.ok) throw new Error(`DELETE /jobs failed: ${res.status}`);
+  return ((await res.json()) as ClearResponse).removed;
 };
 
 export interface EventsHandlers {
