@@ -1,29 +1,11 @@
 import { atom, map } from "nanostores";
-import type { EngineSnapshot, Job, JobId } from "@scribd-dl/shared";
+import { applyTransient, type EngineSnapshot, type Job, type JobId, type TransientSeverity, type TransientState } from "@scribd-dl/shared";
+
+export type { TransientSeverity, TransientState } from "@scribd-dl/shared";
 
 export type ModalMode = "none" | "folder";
 
-export type TransientSeverity = "info" | "warning" | "error";
-
-export interface TransientState {
-  readonly severity: TransientSeverity;
-  readonly message: string;
-  readonly sticky?: boolean;
-}
-
 type JobsMap = Record<JobId, Job | undefined>;
-
-const SEVERITY_TIMERS: Readonly<Record<TransientSeverity, number>> = {
-  info: 2000,
-  warning: 4000,
-  error: 6000,
-};
-
-const SEVERITY_RANK: Readonly<Record<TransientSeverity, number>> = {
-  info: 0,
-  warning: 1,
-  error: 2,
-};
 
 export const $jobs = map<JobsMap>({});
 export const $folder = atom<string | null>(null);
@@ -41,21 +23,15 @@ const clearTimer = (): void => {
 };
 
 export const showTransient = (severity: TransientSeverity, message: string, opts?: { readonly sticky?: boolean }): void => {
-  const current = $transient.get();
-  if (current !== null) {
-    const currentRank = SEVERITY_RANK[current.severity];
-    const incomingRank = SEVERITY_RANK[severity];
-    if (incomingRank < currentRank) return;
-    if (current.sticky && incomingRank < SEVERITY_RANK.error) return;
-  }
+  const result = applyTransient($transient.get(), { severity, message, sticky: opts?.sticky });
+  if (result.kind === "ignored") return;
   clearTimer();
-  const sticky = opts?.sticky === true;
-  $transient.set({ severity, message, sticky });
-  if (!sticky) {
+  $transient.set(result.state);
+  if (result.dismissAfterMs !== null) {
     transientTimer = setTimeout(() => {
       $transient.set(null);
       transientTimer = null;
-    }, SEVERITY_TIMERS[severity]);
+    }, result.dismissAfterMs);
   }
 };
 

@@ -3,10 +3,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   clearAll,
   clearFinished,
+  containsUrl,
   enqueueText,
   removeJob,
   retryJob,
   setFolder as apiSetFolder,
+  summarizeEnqueueFeedback,
   type EngineSnapshot,
   type EnqueueResponse,
 } from "@scribd-dl/shared";
@@ -21,10 +23,6 @@ import { Queue, type ActionableControl } from "./Queue";
 import { StatusZone } from "./StatusZone";
 
 const DISCONNECT_MESSAGE = "Disconnected from engine";
-const NO_LINKS_MESSAGE = "No links found in clipboard";
-const URL_REGEX = /https?:\/\/\S+/;
-
-const hasUrl = (text: string): boolean => URL_REGEX.test(text);
 
 const hasActiveJobs = (snap: EngineSnapshot): boolean => snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
 
@@ -85,25 +83,9 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
 
   const handleEnqueueResult = useCallback(
     (jobs: EnqueueResponse["jobs"]) => {
-      if (jobs.length === 0) {
-        showTransient("info", NO_LINKS_MESSAGE);
-        return;
-      }
-
-      let rejectedCount = 0;
-      let firstReason = "Unsupported link";
-      for (const job of jobs) {
-        if (job.status === "Failed" && job.failure?.retryable === false) {
-          rejectedCount += 1;
-          if (rejectedCount === 1) firstReason = job.failure.reason;
-        }
-      }
-
-      if (rejectedCount === jobs.length) {
-        const msg = rejectedCount === 1 ? firstReason : `${firstReason} (${rejectedCount} links)`;
-        showTransient("warning", msg);
-      } else if (rejectedCount > 0) {
-        showTransient("warning", `${rejectedCount} of ${jobs.length} links rejected`);
+      const feedback = summarizeEnqueueFeedback(jobs);
+      if (feedback !== null) {
+        showTransient(feedback.severity, feedback.message, { sticky: feedback.sticky });
       }
     },
     [showTransient],
@@ -180,8 +162,9 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
     }
 
     if (looksLikePaste(input)) {
-      if (!hasUrl(input)) {
-        showTransient("info", NO_LINKS_MESSAGE);
+      if (!containsUrl(input)) {
+        const empty = summarizeEnqueueFeedback([]);
+        if (empty !== null) showTransient(empty.severity, empty.message, { sticky: empty.sticky });
         return;
       }
       void enqueueText(baseUrl, input)
