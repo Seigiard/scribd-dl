@@ -2,15 +2,7 @@ import { Command } from "@effect/cli";
 import { HttpServer } from "@effect/platform";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect, Layer } from "effect";
-import { ConfigStoreLive } from "./src/service/ConfigStore";
-import { DownloadEngineLive } from "./src/service/DownloadEngine";
-import { JobStoreLive } from "./src/service/JobStore";
-import { ScribdDownloaderLive } from "./src/service/ScribdDownloader";
-import { DEFAULT_CONFIG, makeConfigLoader } from "./src/utils/io/ConfigLoader";
-import { DirectoryIoLive } from "./src/utils/io/DirectoryIo";
-import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
-import { PuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
-import { TitleResolverLive } from "./src/utils/request/TitleResolver";
+import { buildDownloadEngineLayer } from "./src/composition";
 import { portOpt } from "./src/cli/options";
 import { HttpServerLive } from "./src/server/HttpServerLive";
 
@@ -26,17 +18,8 @@ const printReady = HttpServer.addressWith((address) =>
 
 const program = printReady.pipe(Effect.zipRight(Effect.never));
 
-const buildEngineLayer = () => {
-  const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
-  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerSgLive, TitleResolverLive);
-  const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
-  const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
-  const EngineDeps = Layer.mergeAll(ScribdLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive);
-  return Layer.provide(DownloadEngineLive, EngineDeps);
-};
-
 const command = Command.make("scribd-dl-engine", { port: portOpt }, ({ port }) => {
-  const EngineLayer = buildEngineLayer();
+  const EngineLayer = buildDownloadEngineLayer();
   const ServerLayer = HttpServerLive(port).pipe(Layer.provide(EngineLayer));
   return Effect.scoped(program).pipe(Effect.provide(ServerLayer));
 }).pipe(Command.withDescription("Run the scribd-dl download engine as a localhost HTTP/WS server."));

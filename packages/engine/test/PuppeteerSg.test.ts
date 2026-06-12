@@ -71,7 +71,7 @@ await mock.module("puppeteer", () => ({
   launch: (opts: unknown) => state.launch(opts),
 }));
 
-const { PuppeteerSg, PuppeteerSgLive } = await import("../src/utils/request/PuppeteerSg.ts");
+const { PuppeteerSg, PuppeteerSgLive, makePuppeteerSgLive } = await import("../src/utils/request/PuppeteerSg");
 
 describe("PuppeteerSg", () => {
   const savedEnv: Record<string, string | undefined> = {};
@@ -123,7 +123,7 @@ describe("PuppeteerSg", () => {
     if (Exit.isFailure(exit)) {
       const failures = Array.from(
         (function* walk(c: { _tag: string } & Record<string, unknown>): Generator<unknown> {
-          if (c._tag === "Fail") yield (c as { error: unknown }).error;
+          if (c._tag === "Fail") yield (c as unknown as { error: unknown }).error;
           else if (c._tag === "Sequential" || c._tag === "Parallel") {
             yield* walk(c.left as never);
             yield* walk(c.right as never);
@@ -163,6 +163,41 @@ describe("PuppeteerSg", () => {
     await Effect.runPromise(program);
     const opts = state.lastLaunchOptions as { args: string[] };
     expect(opts.args).toEqual(["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]);
+  });
+
+  describe("headful parameterization", () => {
+    test("PuppeteerSgLive default uses headless: true", async () => {
+      // #given
+      const program = Effect.scoped(Effect.void.pipe(Effect.provide(PuppeteerSgLive)));
+
+      // #when
+      await Effect.runPromise(program);
+
+      // #then
+      expect((state.lastLaunchOptions as { headless: boolean }).headless).toBe(true);
+    });
+
+    test("makePuppeteerSgLive({ headful: true }) uses headless: false", async () => {
+      // #given
+      const program = Effect.scoped(Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: true }))));
+
+      // #when
+      await Effect.runPromise(program);
+
+      // #then
+      expect((state.lastLaunchOptions as { headless: boolean }).headless).toBe(false);
+    });
+
+    test("makePuppeteerSgLive({ headful: false }) uses headless: true", async () => {
+      // #given
+      const program = Effect.scoped(Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: false }))));
+
+      // #when
+      await Effect.runPromise(program);
+
+      // #then
+      expect((state.lastLaunchOptions as { headless: boolean }).headless).toBe(true);
+    });
   });
 
   test("generatePDF passes through options", async () => {

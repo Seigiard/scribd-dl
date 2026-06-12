@@ -7,29 +7,16 @@ import { PdfGenerator } from "../utils/io/PdfGenerator";
 import { resolvePdfPath } from "../utils/io/pdfPath";
 import { PuppeteerSg } from "../utils/request/PuppeteerSg";
 import { TitleResolver } from "../utils/request/TitleResolver";
-import {
-  DirectoryIoFailed,
-  PageLoadFailed,
-  PageProcessFailed,
-  PdfGenerationFailed,
-  PdfMergeFailed,
-  UnsupportedUrl,
-} from "../errors/DomainErrors";
+import { PageProcessFailed, PdfGenerationFailed, UnsupportedUrl } from "../errors/DomainErrors";
 import type { PageDimensions } from "../types/PageDimensions";
 import type { DocumentMeta } from "../types/DocumentMeta";
 import * as scribdRegex from "../const/ScribdRegex";
+import type { OnEvent, Scraper, ScraperError } from "./Scraper";
 
-export type ScribdError = UnsupportedUrl | PageLoadFailed | PageProcessFailed | PdfGenerationFailed | PdfMergeFailed | DirectoryIoFailed;
+export type { OnEvent, ScraperError as ScribdError } from "./Scraper";
 
-export type DownloaderEvent =
-  | { readonly _tag: "TitleResolved"; readonly title: string }
-  | { readonly _tag: "ScrapeProgress"; readonly done: number; readonly total: number }
-  | { readonly _tag: "RenderProgress"; readonly done: number; readonly total: number };
-
-export type OnEvent = (event: DownloaderEvent) => Effect.Effect<void, never, never>;
-
-export interface ScribdDownloaderService {
-  readonly execute: (url: string, folder: string, onEvent: OnEvent) => Effect.Effect<void, ScribdError, never>;
+export interface ScribdDownloaderService extends Scraper {
+  readonly id: "scribd";
 }
 
 export class ScribdDownloader extends Context.Tag("ScribdDownloader")<ScribdDownloader, ScribdDownloaderService>() {}
@@ -214,7 +201,17 @@ export const ScribdDownloaderLive: Layer.Layer<
     const directoryIo = yield* DirectoryIo;
     const titleResolver = yield* TitleResolver;
 
-    const execute = (url: string, folder: string, onEvent: OnEvent): Effect.Effect<void, ScribdError, never> =>
+    const canHandle = (url: string): boolean => scribdRegex.DOMAIN.test(url);
+
+    const deriveDisplayTitle = (url: string): string => {
+      const doc = scribdRegex.DOCUMENT.exec(url);
+      if (doc) return `Scribd document ${doc[2]}`;
+      const embed = scribdRegex.EMBED.exec(url);
+      if (embed) return `Scribd document ${embed[1]}`;
+      return "Scribd document";
+    };
+
+    const execute = (url: string, folder: string, onEvent: OnEvent, debug?: boolean): Effect.Effect<void, ScraperError, never> =>
       Effect.scoped(
         Effect.gen(function* () {
           const embedUrl = yield* resolveEmbedUrl(url);
@@ -236,6 +233,18 @@ export const ScribdDownloaderLive: Layer.Layer<
           yield* directoryIo.create(folder);
           const pdfPath = resolvePdfPath({ folder, displayTitle: meta.title, fallbackId: id });
 
+          if (debug === true) {
+            // Debug-only side-effect — must not fail the scrape if the dump can't be written.
+            yield* Effect.promise(async () => {
+              try {
+                const html = await page.content();
+                await Bun.write(`${folder}/${safeIdentifier}.debug.html`, html);
+              } catch (cause) {
+                console.warn(`[debug] HTML dump failed for ${embedUrl}:`, cause);
+              }
+            });
+          }
+
           if (allSameDimensions(meta.pages)) {
             const dims = meta.pages[0];
             if (dims) {
@@ -250,11 +259,13 @@ export const ScribdDownloaderLive: Layer.Layer<
             const groups = yield* groupPagesByDimensions(meta.pages);
             const pdfPaths = yield* generatePDFs(page, groups, tempDir, puppeteerSg, onEvent);
             yield* pdfGenerator.merge(pdfPaths, pdfPath);
-            yield* directoryIo.remove(tempDir);
+            if (debug !== true) {
+              yield* directoryIo.remove(tempDir);
+            }
           }
         }),
       );
 
-    return ScribdDownloader.of({ execute });
+    return ScribdDownloader.of({ id: "scribd", canHandle, deriveDisplayTitle, execute });
   }),
 );

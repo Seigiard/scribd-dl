@@ -5,7 +5,7 @@ import type { Job } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService } from "../../src/service/ConfigStore";
 import { DownloadEngineLive } from "../../src/service/DownloadEngine";
 import { JobStore, type JobStoreService } from "../../src/service/JobStore";
-import { ScribdDownloader, type ScribdDownloaderService } from "../../src/service/ScribdDownloader";
+import { Scrapers, type Scraper } from "../../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../../src/utils/io/ConfigLoader";
 import { HttpServerLive } from "../../src/server/HttpServerLive";
 
@@ -24,9 +24,14 @@ const defaultConfig: ConfigData = {
   directory: { output: "/tmp/scribd-dl-test", filename: "title" },
 };
 
-const scribdMockLayer = Layer.succeed(ScribdDownloader, {
-  execute: (url, folder, onEvent) => state.scribdExecute(url, folder, onEvent) as ReturnType<ScribdDownloaderService["execute"]>,
-} satisfies ScribdDownloaderService);
+const scribdMockScraper: Scraper = {
+  id: "scribd",
+  canHandle: (url) => /scribd\.com/.test(url),
+  deriveDisplayTitle: (url) => `Scribd ${url}`,
+  execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+};
+
+const scrapersMockLayer = Layer.succeed(Scrapers, [scribdMockScraper]);
 
 const configStoreMockLayer = Layer.succeed(ConfigStore, {
   read: Effect.sync(() => ({ outputFolder: defaultConfig.directory.output })),
@@ -41,7 +46,7 @@ const jobStoreMockLayer = Layer.succeed(JobStore, {
 const buildEngineLayer = (config: ConfigData = defaultConfig) =>
   Layer.provide(
     DownloadEngineLive,
-    Layer.mergeAll(scribdMockLayer, Layer.succeed(ConfigLoader, config), configStoreMockLayer, jobStoreMockLayer),
+    Layer.mergeAll(scrapersMockLayer, Layer.succeed(ConfigLoader, config), configStoreMockLayer, jobStoreMockLayer),
   );
 
 let serverFiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;

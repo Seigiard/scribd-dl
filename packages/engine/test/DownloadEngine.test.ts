@@ -7,9 +7,9 @@ import type { EngineSnapshot, Job, JobEvent } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService, type Settings } from "../src/service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive } from "../src/service/DownloadEngine";
 import { JobStore, type JobStoreService } from "../src/service/JobStore";
-import { ScribdDownloader, type ScribdDownloaderService } from "../src/service/ScribdDownloader";
+import { Scrapers, type Scraper } from "../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
-import { PageLoadFailed } from "../src/errors/DomainErrors";
+import { PageLoadFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
 
 interface MockState {
   scribdExecute: ReturnType<typeof mock>;
@@ -40,9 +40,18 @@ const defaultConfig: ConfigData = {
   directory: { output: "/tmp/out", filename: "title" },
 };
 
-const buildLayer = (config: ConfigData = defaultConfig) => {
-  const scribdSvc: ScribdDownloaderService = {
-    execute: (url, folder, onEvent) => state.scribdExecute(url, folder, onEvent) as ReturnType<ScribdDownloaderService["execute"]>,
+const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyArray<Scraper> = []) => {
+  const scribdScraper: Scraper = {
+    id: "scribd",
+    canHandle: (url) => /scribd\.com/.test(url),
+    deriveDisplayTitle: (url) => {
+      const doc = /scribd\.com\/document\/(\d+)/.exec(url);
+      if (doc) return `Scribd document ${doc[1]}`;
+      const embed = /scribd\.com\/embeds\/(\d+)/.exec(url);
+      if (embed) return `Scribd document ${embed[1]}`;
+      return "Scribd document";
+    },
+    execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
   };
   const configStoreSvc: ConfigStoreService = {
     read: Effect.sync(() => state.initialSettings),
@@ -55,13 +64,21 @@ const buildLayer = (config: ConfigData = defaultConfig) => {
   return Layer.provide(
     DownloadEngineLive,
     Layer.mergeAll(
-      Layer.succeed(ScribdDownloader, scribdSvc),
+      Layer.succeed(Scrapers, [scribdScraper, ...extraScrapers]),
       Layer.succeed(ConfigLoader, config),
       Layer.succeed(ConfigStore, configStoreSvc),
       Layer.succeed(JobStore, jobStoreSvc),
     ),
   );
 };
+
+const makeCustomScraper = (customExecute: ReturnType<typeof mock>): Scraper => ({
+  // @ts-expect-error custom id outside current JobDomain union for test purposes
+  id: "custom",
+  canHandle: (url) => url.includes("example.com"),
+  deriveDisplayTitle: (url) => `Custom ${url}`,
+  execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+});
 
 const runScoped = <A, E>(program: Effect.Effect<A, E, DownloadEngine>) =>
   Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(buildLayer()))));
@@ -262,7 +279,7 @@ describe("DownloadEngine", () => {
       // #then
       expect(snap.jobs[0]!.status).toBe("Downloaded");
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
-      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function));
+      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function), undefined);
     });
 
     test("ScribdDownloader failure → Failed with retryable: true", async () => {
@@ -1483,6 +1500,116 @@ describe("DownloadEngine", () => {
 
       // #then
       expect(tags).toEqual(["JobAdded", "JobFailed"]);
+    });
+  });
+
+  describe("scrapers registry extensibility", () => {
+    const runScopedWith = <A, E>(program: Effect.Effect<A, E, DownloadEngine>, extraScrapers: ReadonlyArray<Scraper>) =>
+      Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(buildLayer(defaultConfig, extraScrapers)))));
+
+    test("URL handled by extra scraper gets that scraper's id as domain", async () => {
+      // #given
+      const customExecute = mock(() => Effect.void);
+      const custom = makeCustomScraper(customExecute);
+
+      // #when
+      const created = await runScopedWith(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          return yield* engine.enqueue("https://example.com/foo");
+        }),
+        [custom],
+      );
+
+      // #then
+      expect(created[0]!.domain).toBe("custom" as never);
+      expect(created[0]!.status).toBe("Queued");
+    });
+
+    test("scribd URL still routes to scribd scraper when extra scrapers present", async () => {
+      // #given
+      const customExecute = mock(() => Effect.void);
+      const custom = makeCustomScraper(customExecute);
+      state.scribdExecute = mock(() => Effect.void);
+
+      // #when
+      const snap = await runScopedWith(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          return yield* waitForQuiet(engine);
+        }),
+        [custom],
+      );
+
+      // #then
+      expect(snap.jobs[0]!.domain).toBe("scribd");
+      expect(state.scribdExecute).toHaveBeenCalledTimes(1);
+      expect(customExecute).not.toHaveBeenCalled();
+    });
+
+    test("persisted job with domain no longer in registry → Failed retryable: true", async () => {
+      // #given a restored Queued job for a domain that's gone from the registry
+      const persistedJob: Job = {
+        id: "j1",
+        url: "https://gone.example.com/x",
+        // @ts-expect-error 'gone' is outside JobDomain union; simulates registry shrinkage between restarts
+        domain: "gone",
+        displayTitle: "Gone document",
+        status: "Queued",
+      };
+      state.restoredJobs = [persistedJob];
+
+      // #when worker picks it up against a registry that doesn't include 'gone'
+      const snap = await runScopedWith(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          return yield* waitForQuiet(engine);
+        }),
+        [],
+      );
+
+      // #then job fails as retryable so a future restart with the original registry recovers
+      const failed = snap.jobs.find((j) => j.id === "j1")!;
+      expect(failed.status).toBe("Failed");
+      expect(failed.failure?.retryable).toBe(true);
+      expect(failed.failure?.reason).toContain("No scraper registered for domain");
+    });
+
+    test("UnsupportedUrl scraper failure → retryable: false (non-transient)", async () => {
+      // #given scraper that fails with UnsupportedUrl (e.g. extractId failure inside execute)
+      state.scribdExecute = mock((url: string) => Effect.fail(new UnsupportedUrl({ url })));
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/something/weird");
+          return yield* waitForQuiet(engine);
+        }),
+      );
+
+      // #then
+      expect(snap.jobs[0]!.status).toBe("Failed");
+      expect(snap.jobs[0]!.failure?.retryable).toBe(false);
+    });
+
+    test("transient scraper failure (PageLoadFailed) → retryable: true", async () => {
+      // #given
+      state.scribdExecute = mock((url: string) => Effect.fail(new PageLoadFailed({ url, cause: "network blip" })));
+
+      // #when
+      const snap = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          return yield* waitForQuiet(engine);
+        }),
+      );
+
+      // #then
+      expect(snap.jobs[0]!.status).toBe("Failed");
+      expect(snap.jobs[0]!.failure?.retryable).toBe(true);
     });
   });
 });

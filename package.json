@@ -15,6 +15,7 @@
   "type": "module",
   "scripts": {
     "engine": "bun packages/engine/engine.ts",
+    "debug": "bun packages/engine/debug.ts",
     "tui": "bun apps/tui/tui.ts",
     "dev:spa": "bun scripts/dev-spa.ts",
     "dev:tui": "bun scripts/dev-tui.ts",
@@ -26,10 +27,10 @@
     "test:smoke": "bun --filter @scribd-dl/engine test:smoke",
     "test:watch": "bun --filter @scribd-dl/engine test:watch",
     "test:cov": "bun --filter @scribd-dl/engine test:cov",
-    "lint": "oxlint packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
-    "lint:fix": "oxlint --fix packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
-    "format": "oxfmt --write package.json packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
-    "format:check": "oxfmt --check package.json packages/engine/engine.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts"
+    "lint": "oxlint packages/engine/*.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
+    "lint:fix": "oxlint --fix packages/engine/*.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
+    "format": "oxfmt --write package.json packages/engine/*.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts",
+    "format:check": "oxfmt --check package.json packages/engine/*.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts"
   },
   "devDependencies": {
     "oxfmt": "^0.54.0",

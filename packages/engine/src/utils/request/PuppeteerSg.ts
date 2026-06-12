@@ -65,7 +65,11 @@ export interface PuppeteerSgService {
 
 export class PuppeteerSg extends Context.Tag("PuppeteerSg")<PuppeteerSg, PuppeteerSgService>() {}
 
-const buildLaunchOptions = (): LaunchOptions => {
+export interface PuppeteerSgOptions {
+  readonly headful: boolean;
+}
+
+const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
   const useNoSandbox = process.env.CI === "true" || process.env.PUPPETEER_NO_SANDBOX === "true";
   const args: string[] = [];
   if (useNoSandbox) {
@@ -73,10 +77,15 @@ const buildLaunchOptions = (): LaunchOptions => {
   }
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
   const options: LaunchOptions = {
-    headless: true,
+    headless: !opts.headful,
     defaultViewport: null,
     args,
     timeout: 0,
+    // Production keeps puppeteer's default 180s CDP timeout so a hung Scribd page
+    // surfaces as a job failure instead of wedging the single-fiber worker queue.
+    // Debug runs interactively under the developer's eye, so we disable the limit
+    // to let heavy documents finish without false timeouts.
+    ...(opts.headful ? { protocolTimeout: 0 } : {}),
   };
   if (executablePath) {
     return { ...options, executablePath };
@@ -84,53 +93,56 @@ const buildLaunchOptions = (): LaunchOptions => {
   return options;
 };
 
-export const PuppeteerSgLive = Layer.scoped(
-  PuppeteerSg,
-  Effect.gen(function* () {
-    const browser = yield* Effect.acquireRelease(
-      Effect.tryPromise({
-        try: () => puppeteer.launch(buildLaunchOptions()),
-        catch: (cause) => new BrowserLaunchFailed({ cause }),
-      }),
-      (b) => Effect.promise(() => b.close()),
-    );
+export const makePuppeteerSgLive = (opts: PuppeteerSgOptions): Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> =>
+  Layer.scoped(
+    PuppeteerSg,
+    Effect.gen(function* () {
+      const browser = yield* Effect.acquireRelease(
+        Effect.tryPromise({
+          try: () => puppeteer.launch(buildLaunchOptions(opts)),
+          catch: (cause) => new BrowserLaunchFailed({ cause }),
+        }),
+        (b) => Effect.promise(() => b.close()),
+      );
 
-    const getPage = (url: string): Effect.Effect<Page, PageLoadFailed, never> =>
-      Effect.gen(function* () {
-        const page = yield* Effect.tryPromise({
-          try: () => browser.newPage(),
-          catch: (cause) => new PageLoadFailed({ url, cause }),
+      const getPage = (url: string): Effect.Effect<Page, PageLoadFailed, never> =>
+        Effect.gen(function* () {
+          const page = yield* Effect.tryPromise({
+            try: () => browser.newPage(),
+            catch: (cause) => new PageLoadFailed({ url, cause }),
+          });
+          yield* Effect.tryPromise({
+            try: () => page.goto(url, { waitUntil: "load" }),
+            catch: (cause) => new PageLoadFailed({ url, cause }),
+          });
+          yield* Effect.tryPromise({
+            try: () => page.emulateMediaType("screen"),
+            catch: (cause) => new PageLoadFailed({ url, cause }),
+          });
+          yield* Effect.tryPromise({
+            try: () => page.evaluate(BROWSER_HELPERS_SOURCE),
+            catch: (cause) => new PageLoadFailed({ url, cause }),
+          });
+          yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, PAGE_BUFFER_MS)));
+          return page;
         });
-        yield* Effect.tryPromise({
-          try: () => page.goto(url, { waitUntil: "load" }),
-          catch: (cause) => new PageLoadFailed({ url, cause }),
-        });
-        yield* Effect.tryPromise({
-          try: () => page.emulateMediaType("screen"),
-          catch: (cause) => new PageLoadFailed({ url, cause }),
-        });
-        yield* Effect.tryPromise({
-          try: () => page.evaluate(BROWSER_HELPERS_SOURCE),
-          catch: (cause) => new PageLoadFailed({ url, cause }),
-        });
-        yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, PAGE_BUFFER_MS)));
-        return page;
-      });
 
-    const generatePDF = (page: Page, pdfPath: string, options?: PuppeteerPdfOptions): Effect.Effect<void, PdfGenerationFailed, never> =>
-      Effect.tryPromise({
-        try: () => {
-          const pdfOptions: PDFOptions = {
-            path: pdfPath,
-            printBackground: true,
-            timeout: 0,
-            ...options,
-          };
-          return page.pdf(pdfOptions).then(() => undefined);
-        },
-        catch: (cause) => new PdfGenerationFailed({ path: pdfPath, cause }),
-      });
+      const generatePDF = (page: Page, pdfPath: string, options?: PuppeteerPdfOptions): Effect.Effect<void, PdfGenerationFailed, never> =>
+        Effect.tryPromise({
+          try: () => {
+            const pdfOptions: PDFOptions = {
+              path: pdfPath,
+              printBackground: true,
+              timeout: 0,
+              ...options,
+            };
+            return page.pdf(pdfOptions).then(() => undefined);
+          },
+          catch: (cause) => new PdfGenerationFailed({ path: pdfPath, cause }),
+        });
 
-    return PuppeteerSg.of({ getPage, generatePDF });
-  }),
-);
+      return PuppeteerSg.of({ getPage, generatePDF });
+    }),
+  );
+
+export const PuppeteerSgLive = makePuppeteerSgLive({ headful: false });
