@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "bun --filter @scribd-dl/desktop build:engine-binary && bun --filter @scribd-dl/web dev",
     "devUrl": "http://localhost:5173",
-    "beforeBuildCommand": "bun --filter @scribd-dl/web build && bun --filter @scribd-dl/desktop build:engine-binary",
+    "beforeBuildCommand": "bun --filter @scribd-dl/web build && bun --filter @scribd-dl/desktop build:engine-binaries",
     "frontendDist": "../../../apps/web/dist"
   },
   "app": {

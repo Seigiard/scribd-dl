@@ -23,6 +23,8 @@
     "build:spa": "bun --filter @scribd-dl/web build",
     "build:tui": "bun scripts/build-tui.ts",
     "build:app": "bun --filter @scribd-dl/desktop tauri build",
+    "build:app:x64": "bun --filter @scribd-dl/desktop tauri build --target x86_64-apple-darwin",
+    "build:app:universal": "bun --filter @scribd-dl/desktop tauri build --target universal-apple-darwin",
     "test": "bun --filter '*' test",
     "test:smoke": "bun --filter @scribd-dl/engine test:smoke",
     "test:watch": "bun --filter @scribd-dl/engine test:watch",

@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "build:engine-binary": "mkdir -p src-tauri/binaries && bun build --compile --target=bun-darwin-arm64 ../../packages/engine/engine.ts --outfile src-tauri/binaries/scribd-dl-engine-aarch64-apple-darwin",
+    "build:engine-binary:x64": "mkdir -p src-tauri/binaries && bun build --compile --target=bun-darwin-x64 ../../packages/engine/engine.ts --outfile src-tauri/binaries/scribd-dl-engine-x86_64-apple-darwin",
+    "build:engine-binaries": "bun run build:engine-binary && bun run build:engine-binary:x64 && lipo -create src-tauri/binaries/scribd-dl-engine-aarch64-apple-darwin src-tauri/binaries/scribd-dl-engine-x86_64-apple-darwin -output src-tauri/binaries/scribd-dl-engine-universal-apple-darwin",
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build"
