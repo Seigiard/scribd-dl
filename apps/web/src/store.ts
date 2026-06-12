@@ -40,11 +40,7 @@ const clearTimer = (): void => {
   }
 };
 
-export const showTransient = (
-  severity: TransientSeverity,
-  message: string,
-  opts?: { readonly sticky?: boolean },
-): void => {
+export const showTransient = (severity: TransientSeverity, message: string, opts?: { readonly sticky?: boolean }): void => {
   const current = $transient.get();
   if (current !== null) {
     const currentRank = SEVERITY_RANK[current.severity];

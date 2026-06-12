@@ -125,6 +125,53 @@ describe("useEngineState (HTTP/WS client)", () => {
     ui.unmount();
   });
 
+  test("SnapshotReplaced event applies snapshot inline without HTTP refetch", async () => {
+    // #given
+    installFetchStub({ jobs: [] });
+    const ui = render(React.createElement(Probe, { baseUrl: BASE }));
+    await flush();
+    const callsBefore = snapshotCalls;
+
+    // #when
+    const next: EngineSnapshot = {
+      jobs: [
+        { id: "x", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" },
+        { id: "y", url: "u2", domain: "scribd", displayTitle: "t2", status: "Downloaded" },
+      ],
+    };
+    const event: JobEvent = { _tag: "SnapshotReplaced", snapshot: next };
+    FakeWebSocket.last!.onmessage!({ data: JSON.stringify(event) });
+    await flush();
+
+    // #then
+    expect(snapshotCalls).toBe(callsBefore);
+    expect(ui.lastFrame()).toContain("count=2");
+    ui.unmount();
+  });
+
+  test("WS open and close trigger optional callbacks", async () => {
+    // #given
+    installFetchStub({ jobs: [] });
+    const events: string[] = [];
+    const Host = () => {
+      useEngineState(BASE, "/initial", {
+        onWsOpen: () => events.push("open"),
+        onWsClose: () => events.push("close"),
+      });
+      return React.createElement(Text, null, "host");
+    };
+
+    // #when
+    const ui = render(React.createElement(Host));
+    await flush();
+    FakeWebSocket.last!.onopen!({});
+    FakeWebSocket.last!.onclose!({});
+
+    // #then
+    expect(events).toEqual(["open", "close"]);
+    ui.unmount();
+  });
+
   test("unmount closes the WS subscription", async () => {
     // #given
     installFetchStub({ jobs: [] });
