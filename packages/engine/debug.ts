@@ -9,7 +9,6 @@ import { PdfGeneratorLive } from "./src/utils/io/PdfGenerator";
 import { makePuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
 import { TitleResolverLive } from "./src/utils/request/TitleResolver";
 
-const DEBUG_RENDERTIME_MS = 500;
 const DEBUG_OUTPUT_FOLDER = "./output";
 
 const urlArg = Args.text({ name: "url" }).pipe(Args.withDescription("Scraper URL to debug (e.g. Scribd document URL)."));
@@ -26,10 +25,7 @@ const logEvent: OnEvent = (event) =>
   });
 
 const buildDebugLayer = () => {
-  const ConfigLayer = makeConfigLoader({
-    ...DEFAULT_CONFIG,
-    scribd: { rendertime: DEBUG_RENDERTIME_MS },
-  });
+  const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
   const PuppeteerLayer = makePuppeteerSgLive({ headful: true });
   const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, PuppeteerLayer, TitleResolverLive);
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
@@ -54,7 +50,7 @@ const program = (url: string) =>
       yield* Effect.sync(() => process.exit(1));
       return;
     }
-    console.log(`[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEBUG_RENDERTIME_MS}ms`);
+    console.log(`[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms (prod default)`);
     yield* scraper.execute(url, DEBUG_OUTPUT_FOLDER, logEvent, true).pipe(
       Effect.tapError((error) => Effect.sync(() => console.error("[debug] failed:", error))),
       Effect.catchAll(() => Effect.sync(() => process.exit(1))),
