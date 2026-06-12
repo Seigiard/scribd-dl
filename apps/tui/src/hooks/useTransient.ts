@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import {
-  applyTransient,
-  type IncomingTransient,
-  type TransientSeverity,
-  type TransientState,
-} from "@scribd-dl/shared";
+import { applyTransient, type IncomingTransient, type TransientSeverity, type TransientState } from "@scribd-dl/shared";
 
 export interface ShowOpts {
   readonly sticky?: boolean;
