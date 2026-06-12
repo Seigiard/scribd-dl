@@ -1,7 +1,9 @@
 ---
 title: "refactor: Migrate SPA from React to nanotags + terminal.css"
-status: active
+status: superseded
 date: 2026-06-10
+superseded-by: docs/plans/2026-06-11-002-refactor-uhtml-islands-rewrite-plan.md
+superseded-reason: nanotags подход переписан на uhtml v4 + nanostores islands (без Custom Elements).
 origin: docs/brainstorms/2026-06-10-spa-nanotags-terminalcss-requirements.md
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: Persistent config and job state via ~/.config/scribd-dl/
-status: active
+status: completed
 created: 2026-06-10
+completed: 2026-06-10
 origin: docs/brainstorms/2026-06-10-persistence-config-and-jobs-requirements.md
 type: refactor
 ---

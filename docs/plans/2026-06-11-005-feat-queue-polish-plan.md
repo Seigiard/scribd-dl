@@ -1,7 +1,8 @@
 ---
 title: "feat: Queue polish — layout flip, dedup, clear actions"
-status: ready-for-work
+status: completed
 created: 2026-06-11
+completed: 2026-06-12
 origin: docs/brainstorms/2026-06-11-queue-polish-requirements.md
 type: feat
 depth: standard

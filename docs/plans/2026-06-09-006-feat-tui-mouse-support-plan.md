@@ -1,7 +1,9 @@
 ---
 title: "feat: TUI mouse click support for buttons"
-status: active
+status: cancelled
 date: 2026-06-09
+cancelled: 2026-06-12
+cancelled-reason: План писался для старого TUI до выноса в apps/tui и parity-рефакторов; десктоп и SPA уже дают кликабельный UX, отдельная поддержка мыши в Ink TUI больше не нужна.
 type: feat
 depth: standard
 ---

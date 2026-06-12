@@ -1,7 +1,8 @@
 ---
 title: "refactor: Extract TUI into apps/tui workspace with shared HTTP/WS client"
-status: active
+status: completed
 date: 2026-06-10
+completed: 2026-06-10
 origin: docs/brainstorms/2026-06-10-tui-app-extraction-requirements.md
 ---
 

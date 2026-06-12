@@ -1,7 +1,8 @@
 ---
 title: "refactor: Extract DownloadEngine from CLI into a reusable Effect service"
-status: active
+status: completed
 date: 2026-06-09
+completed: 2026-06-09
 type: refactor
 depth: standard
 origin: docs/brainstorms/2026-06-09-download-engine-extraction-requirements.md

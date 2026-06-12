@@ -1,8 +1,9 @@
 ---
 title: refactor: Extract shared client feedback helpers
 type: refactor
-status: active
+status: completed
 date: 2026-06-12
+completed: 2026-06-12
 origin: docs/brainstorms/2026-06-12-shared-client-feedback-helpers-requirements.md
 ---
 

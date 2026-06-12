@@ -1,7 +1,8 @@
 ---
 title: "feat: TUI UI parity with SPA — status zone, clear actions, severity transients"
-status: ready-for-work
+status: completed
 created: 2026-06-11
+completed: 2026-06-12
 origin: docs/brainstorms/2026-06-11-queue-polish-requirements.md
 related-plan: docs/plans/2026-06-11-005-feat-queue-polish-plan.md
 type: feat

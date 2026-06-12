@@ -1,7 +1,8 @@
 ---
 title: "refactor: Effect.ts structural rewrite — Scribd vertical"
-status: active
+status: completed
 date: 2026-06-09
+completed: 2026-06-09
 type: refactor
 depth: deep
 origin: docs/brainstorms/2026-06-09-effect-ts-rewrite-requirements.md

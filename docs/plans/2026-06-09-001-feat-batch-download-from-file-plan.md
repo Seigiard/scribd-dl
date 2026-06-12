@@ -1,7 +1,9 @@
 ---
 title: "feat: Batch download from file"
-status: active
+status: superseded
 created: 2026-06-09
+superseded-by: docs/plans/2026-06-10-002-refactor-persistence-config-and-jobs-plan.md
+superseded-reason: CLI-режим `bun start <url>` удалён; единственный entry point теперь engine sidecar, batch enqueue реализован через POST /jobs с многострочным текстом.
 type: feat
 ---
 

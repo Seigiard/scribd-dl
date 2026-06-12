@@ -1,7 +1,9 @@
 ---
 title: "feat: Bun executable with Chromium auto-installer for friend-shareable distribution"
-status: active
+status: superseded
 date: 2026-06-09
+superseded-by: docs/plans/2026-06-11-004-feat-tauri-desktop-app-plan.md
+superseded-reason: Дистрибуция для нетехнических друзей решена через Tauri desktop .app (DMG) вместо single-file Bun executable + Chromium-installer.
 type: feat
 depth: standard
 ---

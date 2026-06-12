@@ -1,7 +1,8 @@
 ---
 title: "refactor: Migrate scribd-dl to Bun workspaces monorepo"
-status: active
+status: completed
 date: 2026-06-10
+completed: 2026-06-10
 type: refactor
 origin: docs/brainstorms/2026-06-10-monorepo-migration-requirements.md
 ---

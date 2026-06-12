@@ -1,8 +1,9 @@
 ---
 title: "Queue polish: layout flip, dedup, clear actions"
-status: ready-for-plan
+status: completed
 created: 2026-06-11
 updated: 2026-06-11
+completed: 2026-06-12
 supersedes_seed: chat-prompt
 ---
 

@@ -1,7 +1,8 @@
 ---
 title: "Extract DownloadEngine from CLI into a reusable Effect service"
-status: active
+status: completed
 date: 2026-06-09
+completed: 2026-06-09
 type: feat
 depth: standard
 ---
