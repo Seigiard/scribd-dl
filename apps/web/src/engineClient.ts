@@ -1,10 +1,7 @@
-import type { JobEvent } from "@scribd-dl/shared";
+import { containsUrl, summarizeEnqueueFeedback, type JobEvent } from "@scribd-dl/shared";
 import { clearAll, clearFinished, enqueueText, fetchFolder, fetchSnapshot, removeJob, retryJob, setFolder } from "@/lib/api";
 import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
 import { $connected, $folder, $jobs, applySnapshot, dismissSticky, showTransient } from "@/store";
-
-const NO_LINKS_MESSAGE = "No links found in clipboard";
-const URL_REGEX = /(https?:\/\/\S+)/g;
 
 let ws: WebSocket | null = null;
 let baseUrl: string | null = null;
@@ -140,29 +137,20 @@ export const commandClearAll = async (): Promise<void> => {
   }
 };
 
-const extractUrls = (text: string): string[] => text.match(URL_REGEX) ?? [];
+const showFeedback = (feedback: ReturnType<typeof summarizeEnqueueFeedback>): void => {
+  if (feedback === null) return;
+  showTransient(feedback.severity, feedback.message, { sticky: feedback.sticky });
+};
 
 export const handlePastedText = async (text: string): Promise<void> => {
   if (!baseUrl) return;
-  const links = extractUrls(text);
-  if (links.length === 0) {
-    showTransient("info", NO_LINKS_MESSAGE);
+  if (!containsUrl(text)) {
+    showFeedback(summarizeEnqueueFeedback([]));
     return;
   }
   try {
     const { jobs } = await enqueueText(baseUrl, text);
-    if (jobs.length === 0) {
-      showTransient("info", NO_LINKS_MESSAGE);
-      return;
-    }
-    const rejected = jobs.filter((j) => j.status === "Failed" && j.failure?.retryable === false);
-    if (rejected.length === jobs.length) {
-      const reason = rejected[0]!.failure?.reason ?? "Unsupported link";
-      const msg = rejected.length === 1 ? reason : `${reason} (${rejected.length} links)`;
-      showTransient("warning", msg);
-    } else if (rejected.length > 0) {
-      showTransient("warning", `${rejected.length} of ${jobs.length} links rejected`);
-    }
+    showFeedback(summarizeEnqueueFeedback(jobs));
   } catch {
     // transport errors surface via the disconnect banner
   }

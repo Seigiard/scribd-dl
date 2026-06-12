@@ -163,6 +163,19 @@ describe("store", () => {
       expect($transient.get()?.sticky).toBe(false);
     });
 
+    it("ignored lower-severity feedback does not reset the existing timer", () => {
+      // #given — error timer is 6000ms
+      showTransient("error", "boom");
+
+      // #when — ignored info arrives partway through, then we wait past info's 2000ms duration
+      vi.advanceTimersByTime(1500);
+      showTransient("info", "noise");
+      vi.advanceTimersByTime(2500);
+
+      // #then — error still visible because original 6000ms timer was not reset to info's 2000ms
+      expect($transient.get()?.message).toBe("boom");
+    });
+
     it("dismissSticky clears state unconditionally", () => {
       // #given
       showTransient("error", "disconnected", { sticky: true });
