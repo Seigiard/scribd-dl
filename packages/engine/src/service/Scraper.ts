@@ -26,4 +26,7 @@ export interface Scraper {
   readonly execute: (url: string, folder: string, onEvent: OnEvent, debug?: boolean) => Effect.Effect<void, ScraperError, never>;
 }
 
+export const findScraperForUrl = (scrapers: ReadonlyArray<Scraper>, url: string): Scraper | undefined =>
+  scrapers.find((scraper) => scraper.canHandle(url));
+
 export class Scrapers extends Context.Tag("Scrapers")<Scrapers, ReadonlyArray<Scraper>>() {}

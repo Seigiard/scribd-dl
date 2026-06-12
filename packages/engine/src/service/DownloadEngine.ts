@@ -8,7 +8,7 @@ import { resolvePdfPath, scribdIdFromUrl } from "../utils/io/pdfPath";
 import { normalizeUrl } from "../utils/url";
 import { ConfigStore } from "./ConfigStore";
 import { JobStore } from "./JobStore";
-import { Scrapers, type OnEvent, type Scraper } from "./Scraper";
+import { findScraperForUrl, Scrapers, type OnEvent, type Scraper } from "./Scraper";
 import * as scribdRegex from "../const/ScribdRegex";
 
 export interface DownloadEngineService {
@@ -46,7 +46,7 @@ const extractUrls = (text: string): ReadonlyArray<string> => {
 const classifyWith =
   (scrapers: ReadonlyArray<Scraper>) =>
   (url: string): JobDomain => {
-    const match = scrapers.find((s) => s.canHandle(url));
+    const match = findScraperForUrl(scrapers, url);
     return match ? match.id : "unsupported";
   };
 

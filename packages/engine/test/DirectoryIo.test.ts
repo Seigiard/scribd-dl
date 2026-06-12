@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -31,12 +31,12 @@ const isDirectoryIoFailed = (exit: Exit.Exit<unknown, unknown>, op: "create" | "
   if (!Exit.isFailure(exit)) {
     return false;
   }
-  const failures = Array.from(exit.cause.failures ?? []);
-  const candidates = failures.length > 0 ? failures : [(exit.cause as { error?: unknown }).error];
-  return candidates.some((f) => {
-    const err = f as { _tag?: string; op?: string; path?: string } | undefined;
-    return err?._tag === "DirectoryIoFailed" && err?.op === op && typeof err?.path === "string";
-  });
+  const failure = Cause.failureOption(exit.cause);
+  if (failure._tag === "None") {
+    return false;
+  }
+  const err = failure.value as { _tag?: string; op?: string; path?: string };
+  return err._tag === "DirectoryIoFailed" && err.op === op && typeof err.path === "string";
 };
 
 describe("DirectoryIo", () => {

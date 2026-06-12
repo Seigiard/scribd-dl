@@ -7,7 +7,7 @@ import { PdfGenerator } from "../utils/io/PdfGenerator";
 import { resolvePdfPath } from "../utils/io/pdfPath";
 import { PuppeteerSg } from "../utils/request/PuppeteerSg";
 import { TitleResolver } from "../utils/request/TitleResolver";
-import { PageProcessFailed, UnsupportedUrl } from "../errors/DomainErrors";
+import { PageProcessFailed, PdfGenerationFailed, UnsupportedUrl } from "../errors/DomainErrors";
 import type { PageDimensions } from "../types/PageDimensions";
 import type { DocumentMeta } from "../types/DocumentMeta";
 import * as scribdRegex from "../const/ScribdRegex";

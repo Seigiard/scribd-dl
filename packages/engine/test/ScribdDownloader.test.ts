@@ -29,7 +29,7 @@ interface MockState {
 }
 
 const state: MockState = {
-  page: { evaluate: mock(), close: mock() },
+  page: { evaluate: mock(), close: mock(), content: mock() },
   processPageResult: { pages: [] },
   processPageThrows: false,
   resolvedTitle: "doc",
@@ -146,7 +146,7 @@ describe("ScribdDownloader", () => {
     if (Exit.isFailure(exit)) {
       const failures: Array<{ _tag: string }> = [];
       const walk = (c: { _tag: string } & Record<string, unknown>): void => {
-        if (c._tag === "Fail") failures.push((c as { error: { _tag: string } }).error);
+        if (c._tag === "Fail") failures.push((c as unknown as { error: { _tag: string } }).error);
         else if (c._tag === "Sequential" || c._tag === "Parallel") {
           walk(c.left as never);
           walk(c.right as never);
@@ -325,11 +325,10 @@ describe("ScribdDownloader", () => {
     };
     const originalWrite = process.stdout.write.bind(process.stdout);
     const writes: string[] = [];
-    // @ts-expect-error overriding for test
-    process.stdout.write = (chunk: string | Uint8Array) => {
+    process.stdout.write = ((chunk: string | Uint8Array) => {
       writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
       return true;
-    };
+    }) as typeof process.stdout.write;
 
     // #when
     try {
@@ -410,21 +409,19 @@ describe("ScribdDownloader", () => {
   });
 
   describe("debug=true behavior", () => {
-    let originalBunWrite: typeof Bun.write;
-    let bunWrites: Array<{ path: string; data: string }>;
-
-    const setupBunWriteSpy = () => {
-      bunWrites = [];
-      originalBunWrite = Bun.write;
-      // @ts-expect-error overriding for test capture
-      Bun.write = async (path: unknown, data: unknown) => {
-        bunWrites.push({ path: String(path), data: String(data) });
+    const withBunWriteSpy = async (run: (writes: Array<{ path: string; data: string }>) => Promise<void>) => {
+      const writes: Array<{ path: string; data: string }> = [];
+      const originalBunWrite = Bun.write;
+      Bun.write = (async (path: unknown, data: unknown) => {
+        writes.push({ path: String(path), data: String(data) });
         return String(data).length;
-      };
-    };
+      }) as typeof Bun.write;
 
-    const restoreBunWrite = () => {
-      Bun.write = originalBunWrite;
+      try {
+        await run(writes);
+      } finally {
+        Bun.write = originalBunWrite;
+      }
     };
 
     test("dumps page HTML to <folder>/<safeIdentifier>.debug.html", async () => {
@@ -432,20 +429,17 @@ describe("ScribdDownloader", () => {
       state.resolvedTitle = "doc";
       state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
       state.page.content = mock(async () => "<html><body>scribd page</body></html>");
-      setupBunWriteSpy();
 
       // #when
-      try {
+      await withBunWriteSpy(async (bunWrites) => {
         await runExecute("https://www.scribd.com/embeds/123/content", "/tmp/out", true);
-      } finally {
-        restoreBunWrite();
-      }
 
-      // #then
-      const htmlWrite = bunWrites.find((w) => w.path.endsWith(".debug.html"));
-      expect(htmlWrite).toBeDefined();
-      expect(htmlWrite!.path).toBe("/tmp/out/doc.debug.html");
-      expect(htmlWrite!.data).toBe("<html><body>scribd page</body></html>");
+        // #then
+        const htmlWrite = bunWrites.find((w) => w.path.endsWith(".debug.html"));
+        expect(htmlWrite).toBeDefined();
+        expect(htmlWrite!.path).toBe("/tmp/out/doc.debug.html");
+        expect(htmlWrite!.data).toBe("<html><body>scribd page</body></html>");
+      });
     });
 
     test("multi-dim run preserves _temp directory (no dirRemove)", async () => {
@@ -457,14 +451,11 @@ describe("ScribdDownloader", () => {
           { id: "p2", width: 1000, height: 700 },
         ],
       };
-      setupBunWriteSpy();
 
       // #when
-      try {
+      await withBunWriteSpy(async () => {
         await runExecute("https://www.scribd.com/embeds/123/content", "/tmp/out", true);
-      } finally {
-        restoreBunWrite();
-      }
+      });
 
       // #then
       expect(state.dirCreate).toHaveBeenCalledWith("/tmp/out/doc_temp");
@@ -480,14 +471,11 @@ describe("ScribdDownloader", () => {
           { id: "p2", width: 1000, height: 700 },
         ],
       };
-      setupBunWriteSpy();
 
       // #when
-      try {
+      await withBunWriteSpy(async () => {
         await runExecute("https://www.scribd.com/embeds/123/content", "/tmp/out", false);
-      } finally {
-        restoreBunWrite();
-      }
+      });
 
       // #then
       expect(state.dirRemove).toHaveBeenCalledWith("/tmp/out/doc_temp");
@@ -497,18 +485,15 @@ describe("ScribdDownloader", () => {
       // #given
       state.resolvedTitle = "doc";
       state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
-      setupBunWriteSpy();
 
       // #when
-      try {
+      await withBunWriteSpy(async (bunWrites) => {
         await runExecute("https://www.scribd.com/embeds/123/content", "/tmp/out");
-      } finally {
-        restoreBunWrite();
-      }
 
-      // #then
-      const htmlWrite = bunWrites.find((w) => w.path.endsWith(".debug.html"));
-      expect(htmlWrite).toBeUndefined();
+        // #then
+        const htmlWrite = bunWrites.find((w) => w.path.endsWith(".debug.html"));
+        expect(htmlWrite).toBeUndefined();
+      });
     });
   });
 });

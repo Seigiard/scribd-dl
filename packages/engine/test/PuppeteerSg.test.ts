@@ -71,7 +71,7 @@ await mock.module("puppeteer", () => ({
   launch: (opts: unknown) => state.launch(opts),
 }));
 
-const { PuppeteerSg, PuppeteerSgLive, makePuppeteerSgLive } = await import("../src/utils/request/PuppeteerSg.ts");
+const { PuppeteerSg, PuppeteerSgLive, makePuppeteerSgLive } = await import("../src/utils/request/PuppeteerSg");
 
 describe("PuppeteerSg", () => {
   const savedEnv: Record<string, string | undefined> = {};
@@ -123,7 +123,7 @@ describe("PuppeteerSg", () => {
     if (Exit.isFailure(exit)) {
       const failures = Array.from(
         (function* walk(c: { _tag: string } & Record<string, unknown>): Generator<unknown> {
-          if (c._tag === "Fail") yield (c as { error: unknown }).error;
+          if (c._tag === "Fail") yield (c as unknown as { error: unknown }).error;
           else if (c._tag === "Sequential" || c._tag === "Parallel") {
             yield* walk(c.left as never);
             yield* walk(c.right as never);

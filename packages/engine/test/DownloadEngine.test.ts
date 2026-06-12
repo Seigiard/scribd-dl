@@ -65,6 +65,13 @@ const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyA
   );
 };
 
+const makeCustomScraper = (customExecute: ReturnType<typeof mock>): Scraper => ({
+  // @ts-expect-error custom id outside current JobDomain union for test purposes
+  id: "custom",
+  canHandle: (url) => url.includes("example.com"),
+  execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+});
+
 const runScoped = <A, E>(program: Effect.Effect<A, E, DownloadEngine>) =>
   Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(buildLayer()))));
 
@@ -1495,12 +1502,7 @@ describe("DownloadEngine", () => {
     test("URL handled by extra scraper gets that scraper's id as domain", async () => {
       // #given
       const customExecute = mock(() => Effect.void);
-      const custom: Scraper = {
-        // @ts-expect-error custom id outside current JobDomain union for test purposes
-        id: "custom",
-        canHandle: (url) => url.includes("example.com"),
-        execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
-      };
+      const custom = makeCustomScraper(customExecute);
 
       // #when
       const created = await runScopedWith(
@@ -1519,12 +1521,7 @@ describe("DownloadEngine", () => {
     test("scribd URL still routes to scribd scraper when extra scrapers present", async () => {
       // #given
       const customExecute = mock(() => Effect.void);
-      const custom: Scraper = {
-        // @ts-expect-error custom id outside current JobDomain union for test purposes
-        id: "custom",
-        canHandle: (url) => url.includes("example.com"),
-        execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
-      };
+      const custom = makeCustomScraper(customExecute);
       state.scribdExecute = mock(() => Effect.void);
 
       // #when

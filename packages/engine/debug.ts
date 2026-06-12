@@ -2,11 +2,11 @@ import { Args, Command } from "@effect/cli";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
 import { Effect } from "effect";
 import { makeScrapersLayer } from "./src/composition";
-import { Scrapers, type OnEvent } from "./src/service/Scraper";
+import { findScraperForUrl, Scrapers, type OnEvent } from "./src/service/Scraper";
 import { DEFAULT_CONFIG } from "./src/utils/io/ConfigLoader";
 import { makePuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
 
-const DEBUG_OUTPUT_FOLDER = "./output";
+const DEBUG_OUTPUT_FOLDER = DEFAULT_CONFIG.directory.output;
 
 const urlArg = Args.text({ name: "url" }).pipe(Args.withDescription("Scraper URL to debug (e.g. Scribd document URL)."));
 
@@ -26,15 +26,13 @@ const buildDebugLayer = () => makeScrapersLayer(makePuppeteerSgLive({ headful: t
 const program = (url: string) =>
   Effect.gen(function* () {
     const scrapers = yield* Scrapers;
-    const scraper = scrapers.find((s) => s.canHandle(url));
+    const scraper = findScraperForUrl(scrapers, url);
     if (!scraper) {
       console.error(`No scraper registered for URL: ${url}`);
       yield* Effect.sync(() => process.exit(1));
       return;
     }
-    console.log(
-      `[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms (prod default)`,
-    );
+    console.log(`[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms`);
     yield* scraper.execute(url, DEBUG_OUTPUT_FOLDER, logEvent, true).pipe(
       Effect.tapError((error) => Effect.sync(() => console.error("[debug] failed:", error))),
       Effect.catchAll(() => Effect.sync(() => process.exit(1))),
@@ -44,7 +42,7 @@ const program = (url: string) =>
 
 const command = Command.make("scribd-dl-debug", { url: urlArg }, ({ url }) =>
   program(url).pipe(Effect.provide(buildDebugLayer()), Effect.scoped),
-).pipe(Command.withDescription("Run a scraper in debug mode (headful browser, bumped rendertime, keep artifacts)."));
+).pipe(Command.withDescription("Run a scraper in debug mode (headful browser, keep artifacts)."));
 
 const cli = Command.run(command, {
   name: "Scribd Downloader Debug Runner",

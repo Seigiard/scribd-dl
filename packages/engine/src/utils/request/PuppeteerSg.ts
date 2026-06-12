@@ -89,7 +89,7 @@ const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
   return options;
 };
 
-export const makePuppeteerSgLive = (opts: PuppeteerSgOptions): Layer.Layer<PuppeteerSg, never, never> =>
+export const makePuppeteerSgLive = (opts: PuppeteerSgOptions): Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> =>
   Layer.scoped(
     PuppeteerSg,
     Effect.gen(function* () {

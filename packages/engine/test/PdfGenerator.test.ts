@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -30,12 +30,8 @@ const isPdfMergeFailure = (exit: Exit.Exit<unknown, unknown>): boolean => {
   if (!Exit.isFailure(exit)) {
     return false;
   }
-  const failures = Array.from(exit.cause.failures ?? []);
-  if (failures.length === 0) {
-    const error = (exit.cause as { error?: { _tag?: string } }).error;
-    return error?._tag === "PdfMergeFailed";
-  }
-  return failures.some((f) => (f as { _tag?: string })._tag === "PdfMergeFailed");
+  const failure = Cause.failureOption(exit.cause);
+  return failure._tag === "Some" && (failure.value as { _tag?: string })._tag === "PdfMergeFailed";
 };
 
 describe("PdfGenerator.merge", () => {
