@@ -8,28 +8,29 @@ import {
   retryJob,
   setFolder as apiSetFolder,
   type EngineSnapshot,
+  type EnqueueResponse,
 } from "@scribd-dl/shared";
 import { useEngineState } from "../hooks/useEngineState";
 import { useTransient } from "../hooks/useTransient";
 import { ChangeFolderPopup } from "./ChangeFolderPopup";
 import { ClearAllConfirm } from "./ClearAllConfirm";
 import { ExitConfirm } from "./ExitConfirm";
-import { computeFocusable } from "./focus";
+import { computeFocusable, type FocusableSlot } from "./focus";
 import { Header } from "./Header";
 import { Queue, type ActionableControl } from "./Queue";
 import { StatusZone } from "./StatusZone";
 
 const DISCONNECT_MESSAGE = "Disconnected from engine";
 const NO_LINKS_MESSAGE = "No links found in clipboard";
-const URL_REGEX = /(https?:\/\/\S+)/g;
+const URL_REGEX = /https?:\/\/\S+/;
 
-const extractUrls = (text: string): string[] => text.match(URL_REGEX) ?? [];
+const hasUrl = (text: string): boolean => URL_REGEX.test(text);
 
 const hasActiveJobs = (snap: EngineSnapshot): boolean => snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
 
 const looksLikePaste = (input: string): boolean => input.length > 5;
 
-const totalJobCount = (snap: EngineSnapshot): number => snap.jobs.length;
+type ConfirmDialog = { readonly kind: "exit" | "clearAll"; readonly focus: 0 | 1 };
 
 export interface AppProps {
   readonly baseUrl: string;
@@ -56,10 +57,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   const rows = stdout?.rows ?? 24;
 
   const [focusIndex, setFocusIndex] = useState(0);
-  const [exitPopupOpen, setExitPopupOpen] = useState(false);
-  const [exitPopupFocus, setExitPopupFocus] = useState(0);
-  const [clearAllOpen, setClearAllOpen] = useState(false);
-  const [clearAllFocus, setClearAllFocus] = useState(0);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [changeFolderOpen, setChangeFolderOpen] = useState(false);
 
   const focusable = useMemo(() => computeFocusable(snapshot, transient), [snapshot, transient]);
@@ -69,7 +67,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   const actionable = useMemo<ReadonlyArray<ActionableControl>>(
     () =>
       focusable.slots
-        .filter((s): s is { kind: "remove" | "retry"; id: string } => s.kind === "remove" || s.kind === "retry")
+        .filter((s): s is Extract<FocusableSlot, { readonly kind: "remove" | "retry" }> => s.kind === "remove" || s.kind === "retry")
         .map((s) => ({ type: s.kind, id: s.id })),
     [focusable.slots],
   );
@@ -86,18 +84,26 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   }, [focusCount, focusIndex]);
 
   const handleEnqueueResult = useCallback(
-    (jobs: ReadonlyArray<{ status: string; failure?: { reason?: string; retryable?: boolean } }>) => {
+    (jobs: EnqueueResponse["jobs"]) => {
       if (jobs.length === 0) {
         showTransient("info", NO_LINKS_MESSAGE);
         return;
       }
-      const rejected = jobs.filter((j) => j.status === "Failed" && j.failure?.retryable === false);
-      if (rejected.length === jobs.length) {
-        const reason = rejected[0]!.failure?.reason ?? "Unsupported link";
-        const msg = rejected.length === 1 ? reason : `${reason} (${rejected.length} links)`;
+
+      let rejectedCount = 0;
+      let firstReason = "Unsupported link";
+      for (const job of jobs) {
+        if (job.status === "Failed" && job.failure?.retryable === false) {
+          rejectedCount += 1;
+          if (rejectedCount === 1) firstReason = job.failure.reason;
+        }
+      }
+
+      if (rejectedCount === jobs.length) {
+        const msg = rejectedCount === 1 ? firstReason : `${firstReason} (${rejectedCount} links)`;
         showTransient("warning", msg);
-      } else if (rejected.length > 0) {
-        showTransient("warning", `${rejected.length} of ${jobs.length} links rejected`);
+      } else if (rejectedCount > 0) {
+        showTransient("warning", `${rejectedCount} of ${jobs.length} links rejected`);
       }
     },
     [showTransient],
@@ -106,35 +112,23 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   useInput((input, key) => {
     if (changeFolderOpen) return;
 
-    if (exitPopupOpen) {
+    if (confirmDialog) {
       if (key.escape) {
-        setExitPopupOpen(false);
+        setConfirmDialog(null);
         return;
       }
       if (key.tab) {
-        setExitPopupFocus((i) => (i + 1) % 2);
+        setConfirmDialog((dialog) => (dialog ? { ...dialog, focus: dialog.focus === 0 ? 1 : 0 } : null));
         return;
       }
       if (key.return) {
-        setExitPopupOpen(false);
-        if (exitPopupFocus === 1) exit();
-      }
-      return;
-    }
-
-    if (clearAllOpen) {
-      if (key.escape) {
-        setClearAllOpen(false);
-        return;
-      }
-      if (key.tab) {
-        setClearAllFocus((i) => (i + 1) % 2);
-        return;
-      }
-      if (key.return) {
-        const shouldClear = clearAllFocus === 1;
-        setClearAllOpen(false);
-        if (shouldClear) {
+        const accepted = confirmDialog.focus === 1;
+        const kind = confirmDialog.kind;
+        setConfirmDialog(null);
+        if (accepted && kind === "exit") {
+          exit();
+        }
+        if (accepted && kind === "clearAll") {
           void clearAll(baseUrl).catch((e: unknown) => {
             const msg = e instanceof Error ? e.message : "Failed to clear all jobs";
             showTransient("error", msg);
@@ -146,8 +140,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
 
     if (key.escape || input === "q" || input === "й") {
       if (hasActiveJobs(snapshot)) {
-        setExitPopupFocus(0);
-        setExitPopupOpen(true);
+        setConfirmDialog({ kind: "exit", focus: 0 });
       } else {
         exit();
       }
@@ -173,23 +166,21 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
         return;
       }
       if (currentSlot.kind === "clearAll") {
-        setClearAllFocus(0);
-        setClearAllOpen(true);
+        setConfirmDialog({ kind: "clearAll", focus: 0 });
         return;
       }
       if (currentSlot.kind === "remove") {
-        void removeJob(baseUrl, currentSlot.id!).catch(() => {});
+        void removeJob(baseUrl, currentSlot.id).catch(() => {});
         return;
       }
       if (currentSlot.kind === "retry") {
-        void retryJob(baseUrl, currentSlot.id!).catch(() => {});
+        void retryJob(baseUrl, currentSlot.id).catch(() => {});
         return;
       }
     }
 
     if (looksLikePaste(input)) {
-      const links = extractUrls(input);
-      if (links.length === 0) {
+      if (!hasUrl(input)) {
         showTransient("info", NO_LINKS_MESSAGE);
         return;
       }
@@ -216,8 +207,8 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
       <Box marginTop={1} flexDirection="column" flexGrow={1}>
         <Queue snapshot={snapshot} actionable={actionable} focusIndex={queueFocusIndex} />
       </Box>
-      {exitPopupOpen ? <ExitConfirm focus={exitPopupFocus} /> : null}
-      {clearAllOpen ? <ClearAllConfirm focus={clearAllFocus} total={totalJobCount(snapshot)} /> : null}
+      {confirmDialog?.kind === "exit" ? <ExitConfirm focus={confirmDialog.focus} /> : null}
+      {confirmDialog?.kind === "clearAll" ? <ClearAllConfirm focus={confirmDialog.focus} total={snapshot.jobs.length} /> : null}
       {changeFolderOpen ? (
         <ChangeFolderPopup
           initial={folder}

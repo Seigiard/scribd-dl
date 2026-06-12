@@ -21,9 +21,11 @@ export const Queue = ({ snapshot, actionable = [], focusIndex = 0 }: QueueProps)
     <Box flexDirection="column">
       {snapshot.jobs.map((job) => {
         const idx = actionable.findIndex((a) => a.id === job.id);
-        const action = idx >= 0 ? actionable[idx]!.type : undefined;
         const focused = idx >= 0 && idx === focusIndex;
-        return <QueueItem key={job.id} job={job} action={action} focused={focused} />;
+        if (idx >= 0) {
+          return <QueueItem key={job.id} job={job} action={actionable[idx]!.type} focused={focused} />;
+        }
+        return <QueueItem key={job.id} job={job} focused={focused} />;
       })}
     </Box>
   );

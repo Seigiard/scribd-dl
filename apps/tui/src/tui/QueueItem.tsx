@@ -53,7 +53,7 @@ export const QueueItem = ({ job, action, focused }: QueueItemProps) => {
             <Text> </Text>
           </>
         ) : null}
-        <Text color={color}>{job.status}</Text>
+        {color ? <Text color={color}>{job.status}</Text> : <Text>{job.status}</Text>}
       </Box>
       <Box>
         <Box flexGrow={1} marginRight={1}>

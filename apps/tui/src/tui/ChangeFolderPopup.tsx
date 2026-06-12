@@ -68,8 +68,14 @@ export const ChangeFolderPopup = ({ initial, onSave, onCancel }: ChangeFolderPop
   );
 };
 
-const Button = ({ label, focused }: { label: string; focused: boolean }) => (
-  <Text color={focused ? "cyan" : undefined} bold={focused} dimColor={!focused}>
-    [{label}]
-  </Text>
-);
+const Button = ({ label, focused }: { label: string; focused: boolean }) => {
+  if (focused) {
+    return (
+      <Text color="cyan" bold>
+        [{label}]
+      </Text>
+    );
+  }
+
+  return <Text dimColor>[{label}]</Text>;
+};

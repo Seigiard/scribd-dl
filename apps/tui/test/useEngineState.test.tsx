@@ -42,7 +42,7 @@ const installFetchStub = (...frames: EngineSnapshot[]): void => {
     const next = snapshots.shift() ?? { jobs: [] };
     snapshotCalls += 1;
     return new Response(JSON.stringify(next), { status: 200 });
-  }) as typeof fetch;
+  }) as unknown as typeof fetch;
 };
 
 beforeEach(() => {
