@@ -212,18 +212,41 @@ const getVisibleSlidePage = (page: Page, url: string): Effect.Effect<VisiblePage
   Effect.tryPromise({
     try: () =>
       page.evaluate(() => {
+        // Iterate outer_pages (they carry the id we use for tracking via seenIds
+        // and for waiting on navigation). For dimensions we prefer the inner
+        // `.newpage` — it's the actual content area without the decorative card
+        // frame, and its size becomes the PDF paper size.
         // eslint-disable-next-line no-undef
-        const nodes = document.querySelectorAll("div.outer_page_container .newpage");
+        const nodes = document.querySelectorAll("div.outer_page_container div[id^='outer_page_']");
         for (const node of Array.from(nodes)) {
           const el = node as HTMLElement;
           // eslint-disable-next-line no-undef
           if (getComputedStyle(el).display === "none") continue;
-          const rect = el.getBoundingClientRect();
+          const newpage = el.querySelector(".newpage") as HTMLElement | null;
+          const sizingEl = newpage ?? el;
+          const rect = sizingEl.getBoundingClientRect();
           if (rect.width === 0 || rect.height === 0) continue;
           return { id: el.id, width: Math.round(rect.width), height: Math.round(rect.height) };
         }
         return null;
       }),
+    catch: (cause) => new PageProcessFailed({ url, cause }),
+  });
+
+const setBodyToPageSize = (page: Page, url: string, width: number, height: number): Effect.Effect<void, PageProcessFailed, never> =>
+  Effect.tryPromise({
+    try: () =>
+      page.evaluate(
+        (w: number, h: number) => {
+          const inline = `width:${w}px !important;height:${h}px !important;min-width:0 !important;min-height:0 !important;max-width:${w}px !important;max-height:${h}px !important;overflow:hidden !important;margin:0 !important;padding:0 !important;background:white !important;`;
+          // eslint-disable-next-line no-undef
+          document.documentElement.style.cssText = inline;
+          // eslint-disable-next-line no-undef
+          document.body.style.cssText = inline;
+        },
+        width,
+        height,
+      ),
     catch: (cause) => new PageProcessFailed({ url, cause }),
   });
 
@@ -340,7 +363,7 @@ const maskSlideshowChrome = (page: Page, url: string): Effect.Effect<void, PageP
           html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
           body { width: min-content; height: min-content;}
           body * { visibility: hidden !important; }
-          body *:not(.not_visible, .center_tools, .outer_page *) { display: contents!important; }
+          body *:not(.not_visible, .toolbar_btn, .outer_page *) { display: contents!important; }
           .outer_page *, .newpage, .newpage * { visibility: visible !important; }
           .outer_page { width:auto!important; height:auto!important }
           .newpage { transform: none!important; position:fixed!important; }
@@ -390,6 +413,11 @@ const runSlideshow = ({
       seenIds.add(visible.id);
 
       yield* waitVisibleSlideImage(page, embedUrl, visible.id, SLIDESHOW_IMG_TIMEOUT_MS);
+
+      // Collapse body to the visible .newpage dimensions so page.pdf emits
+      // exactly one PDF page (otherwise visibility:hidden siblings keep body's
+      // layout height intact and Chrome paginates blank sheets around the slide).
+      yield* setBodyToPageSize(page, embedUrl, visible.width, visible.height);
 
       const slidePath = `${tempDir}/${(i + 1).toString().padStart(5, "0")}.pdf`;
       yield* puppeteerSg.generatePDF(page, slidePath, { width: visible.width, height: visible.height });
