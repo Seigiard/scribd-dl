@@ -187,6 +187,227 @@ const allSameDimensions = (pages: ReadonlyArray<PageDimensions>): boolean => {
   return pages.every((p) => p.width === first.width && p.height === first.height);
 };
 
+const SLIDESHOW_NEXT_SELECTOR = ".right_arrow[aria-label='Next page']";
+const SLIDESHOW_PAGE_CAP = 500;
+const SLIDESHOW_IMG_TIMEOUT_MS = 15_000;
+const SLIDESHOW_CLICK_TIMEOUT_MS = 5_000;
+
+const detectSlideshow = (page: Page, url: string): Effect.Effect<boolean, PageProcessFailed, never> =>
+  Effect.tryPromise({
+    try: () =>
+      page.evaluate((selector: string) => {
+        // eslint-disable-next-line no-undef
+        return !!document.querySelector(selector);
+      }, SLIDESHOW_NEXT_SELECTOR),
+    catch: (cause) => new PageProcessFailed({ url, cause }),
+  });
+
+interface VisiblePageInfo {
+  readonly id: string;
+  readonly width: number;
+  readonly height: number;
+}
+
+const getVisibleSlidePage = (page: Page, url: string): Effect.Effect<VisiblePageInfo | null, PageProcessFailed, never> =>
+  Effect.tryPromise({
+    try: () =>
+      page.evaluate(() => {
+        // eslint-disable-next-line no-undef
+        const nodes = document.querySelectorAll("div.outer_page_container div[id^='outer_page_']");
+        for (const node of Array.from(nodes)) {
+          const el = node as HTMLElement;
+          // eslint-disable-next-line no-undef
+          if (getComputedStyle(el).display === "none") continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 || rect.height === 0) continue;
+          return { id: el.id, width: Math.round(rect.width), height: Math.round(rect.height) };
+        }
+        return null;
+      }),
+    catch: (cause) => new PageProcessFailed({ url, cause }),
+  });
+
+const waitVisibleSlideImage = (page: Page, url: string, pageId: string, timeoutMs: number): Effect.Effect<void, PageProcessFailed, never> =>
+  Effect.tryPromise({
+    try: () =>
+      page.evaluate(
+        async (id: string, deadline: number) =>
+          new Promise<void>((resolve) => {
+            const tick = () => {
+              // eslint-disable-next-line no-undef
+              const el = document.getElementById(id);
+              if (!el) return resolve();
+              const imgs = Array.from(el.querySelectorAll("img")) as Array<HTMLImageElement>;
+              if (imgs.length === 0) {
+                // Some pages legitimately have no images (pure text); accept after a short grace.
+                if (Date.now() >= deadline) return resolve();
+                // eslint-disable-next-line no-undef
+                setTimeout(tick, 150);
+                return;
+              }
+              const done = imgs.every((i) => i.src && i.src.length > 0 && i.complete && i.naturalWidth > 0);
+              if (done) return resolve();
+              if (Date.now() >= deadline) return resolve();
+              // eslint-disable-next-line no-undef
+              setTimeout(tick, 100);
+            };
+            tick();
+          }),
+        pageId,
+        Date.now() + timeoutMs,
+      ),
+    catch: (cause) => new PageProcessFailed({ url, cause }),
+  });
+
+type ClickNextOutcome = "changed" | "disabled" | "no-next" | "no-change";
+
+const clickNextAndWait = (
+  page: Page,
+  url: string,
+  prevId: string,
+  timeoutMs: number,
+): Effect.Effect<ClickNextOutcome, PageProcessFailed, never> =>
+  Effect.tryPromise({
+    try: () =>
+      page.evaluate(
+        async (selector: string, prev: string, deadline: number): Promise<ClickNextOutcome> => {
+          // eslint-disable-next-line no-undef
+          const next = document.querySelector(selector) as HTMLElement | null;
+          if (!next) return "no-next";
+          if (next.getAttribute("aria-disabled") === "true" || next.classList.contains("disabled")) {
+            return "disabled";
+          }
+          next.click();
+          return new Promise<ClickNextOutcome>((resolve) => {
+            const tick = () => {
+              // eslint-disable-next-line no-undef
+              const nodes = document.querySelectorAll("div.outer_page_container div[id^='outer_page_']");
+              for (const node of Array.from(nodes)) {
+                const el = node as HTMLElement;
+                // eslint-disable-next-line no-undef
+                if (getComputedStyle(el).display === "none") continue;
+                if (el.id !== prev) return resolve("changed");
+              }
+              if (Date.now() >= deadline) return resolve("no-change");
+              // eslint-disable-next-line no-undef
+              setTimeout(tick, 50);
+            };
+            tick();
+          });
+        },
+        SLIDESHOW_NEXT_SELECTOR,
+        prevId,
+        Date.now() + timeoutMs,
+      ),
+    catch: (cause) => new PageProcessFailed({ url, cause }),
+  });
+
+interface RunSlideshowArgs {
+  readonly page: Page;
+  readonly embedUrl: string;
+  readonly folder: string;
+  readonly safeIdentifier: string;
+  readonly pdfPath: string;
+  readonly onEvent: OnEvent;
+  readonly debug: boolean;
+  readonly puppeteerSg: Context.Tag.Service<PuppeteerSg>;
+  readonly pdfGenerator: Context.Tag.Service<PdfGenerator>;
+  readonly directoryIo: Context.Tag.Service<DirectoryIo>;
+}
+
+const maskSlideshowChrome = (page: Page, url: string): Effect.Effect<void, PageProcessFailed, never> =>
+  Effect.tryPromise({
+    try: () =>
+      page.evaluate(() => {
+        // Drop pre-rendered consent overlays so they don't reappear; the CSS
+        // below pins them off if Scribd re-injects later.
+        // eslint-disable-next-line no-undef
+        document
+          .querySelectorAll(
+            "div.customOptInDialog,div[aria-label='Cookie Consent Banner'],.osano-cm-window,.osano-cm-dialog,.osano-cm-info-dialog",
+          )
+          .forEach((el) => el.remove());
+
+        // visibility:hidden on every body descendant + visible on the page-content
+        // subtree leaves only the slide visible to page.pdf. Layout space is
+        // preserved (no DOM mutation, no broken Scribd navigation state).
+        // element.click() on the Next button still works because synthetic
+        // clicks don't check visibility.
+        // eslint-disable-next-line no-undef
+        const style = document.createElement("style");
+        style.id = "scribd-dl-slideshow-mask";
+        style.textContent = `
+          body * { visibility: hidden !important; }
+          .outer_page * { visibility: visible !important; }
+          html, body { background: white !important; margin: 0 !important; padding: 0 !important; }
+        `;
+        // eslint-disable-next-line no-undef
+        document.head.appendChild(style);
+      }),
+    catch: (cause) => new PageProcessFailed({ url, cause }),
+  });
+
+const runSlideshow = ({
+  page,
+  embedUrl,
+  folder,
+  safeIdentifier,
+  pdfPath,
+  onEvent,
+  debug,
+  puppeteerSg,
+  pdfGenerator,
+  directoryIo,
+}: RunSlideshowArgs): Effect.Effect<void, PageProcessFailed | PdfGenerationFailed, never> =>
+  Effect.gen(function* () {
+    const tempDir = `${folder}/${safeIdentifier}_temp`;
+    yield* directoryIo.create(tempDir);
+
+    yield* maskSlideshowChrome(page, embedUrl);
+
+    if (debug) {
+      yield* Effect.promise(async () => {
+        try {
+          const html = await page.content();
+          await Bun.write(`${folder}/${safeIdentifier}.debug.html`, html);
+        } catch (cause) {
+          console.warn(`[debug] HTML dump failed for ${embedUrl}:`, cause);
+        }
+      });
+    }
+
+    const pdfPaths: string[] = [];
+    const seenIds = new Set<string>();
+
+    for (let i = 0; i < SLIDESHOW_PAGE_CAP; i++) {
+      const visible = yield* getVisibleSlidePage(page, embedUrl);
+      if (!visible) break;
+      if (seenIds.has(visible.id)) break;
+      seenIds.add(visible.id);
+
+      yield* waitVisibleSlideImage(page, embedUrl, visible.id, SLIDESHOW_IMG_TIMEOUT_MS);
+
+      const slidePath = `${tempDir}/${(i + 1).toString().padStart(5, "0")}.pdf`;
+      yield* puppeteerSg.generatePDF(page, slidePath, { width: visible.width, height: visible.height });
+      pdfPaths.push(slidePath);
+
+      yield* onEvent({ _tag: "ScrapeProgress", done: i + 1, total: i + 1 });
+      yield* onEvent({ _tag: "RenderProgress", done: i + 1, total: i + 1 });
+
+      const outcome = yield* clickNextAndWait(page, embedUrl, visible.id, SLIDESHOW_CLICK_TIMEOUT_MS);
+      if (outcome !== "changed") break;
+    }
+
+    if (pdfPaths.length === 0) {
+      return yield* Effect.fail(new PageProcessFailed({ url: embedUrl, cause: "slideshow click loop produced 0 pages" }));
+    }
+
+    yield* pdfGenerator.merge(pdfPaths, pdfPath);
+    if (!debug) {
+      yield* directoryIo.remove(tempDir);
+    }
+  });
+
 export const ScribdDownloaderLive: Layer.Layer<
   ScribdDownloader,
   never,
@@ -221,16 +442,36 @@ export const ScribdDownloaderLive: Layer.Layer<
 
           const [title, page] = yield* Effect.all([titleEff, pageEff], { concurrency: "unbounded" });
 
+          yield* onEvent({ _tag: "TitleResolved", title });
+
+          const identifier = sanitize(title);
+          const safeIdentifier = identifier === "" ? id : identifier;
+          yield* directoryIo.create(folder);
+          const pdfPath = resolvePdfPath({ folder, displayTitle: title, fallbackId: id });
+
+          const isSlideshow = yield* detectSlideshow(page, embedUrl);
+
+          if (isSlideshow) {
+            yield* runSlideshow({
+              page,
+              embedUrl,
+              folder,
+              safeIdentifier,
+              pdfPath,
+              onEvent,
+              debug: debug === true,
+              puppeteerSg,
+              pdfGenerator,
+              directoryIo,
+            });
+            return;
+          }
+
+          // Scrollable embed — existing flow.
           const { pages } = yield* processPage(page, embedUrl, config.scribd.rendertime);
           const meta: DocumentMeta = { title, id, pages };
 
-          yield* onEvent({ _tag: "TitleResolved", title: meta.title });
           yield* onEvent({ _tag: "ScrapeProgress", done: meta.pages.length, total: meta.pages.length });
-
-          const identifier = sanitize(meta.title);
-          const safeIdentifier = identifier === "" ? id : identifier;
-          yield* directoryIo.create(folder);
-          const pdfPath = resolvePdfPath({ folder, displayTitle: meta.title, fallbackId: id });
 
           if (debug === true) {
             // Debug-only side-effect — must not fail the scrape if the dump can't be written.
