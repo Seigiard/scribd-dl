@@ -19,6 +19,9 @@ interface MockState {
   processPageResult: { pages: Array<{ id: string; width: number; height: number }> };
   processPageThrows: boolean;
   resolvedTitle: string;
+  isSlideshow: boolean;
+  slideshowVisible: Array<{ id: string; width: number; height: number } | null>;
+  slideshowClickOutcomes: Array<"changed" | "disabled" | "no-next" | "no-change">;
   resolve: ReturnType<typeof mock>;
   getPage: ReturnType<typeof mock>;
   generatePDF: ReturnType<typeof mock>;
@@ -33,6 +36,9 @@ const state: MockState = {
   processPageResult: { pages: [] },
   processPageThrows: false,
   resolvedTitle: "doc",
+  isSlideshow: false,
+  slideshowVisible: [],
+  slideshowClickOutcomes: [],
   resolve: mock(),
   getPage: mock(),
   generatePDF: mock(),
@@ -49,9 +55,31 @@ const resetState = () => {
   state.processPageResult = { pages: [] };
   state.processPageThrows = false;
   state.resolvedTitle = "doc";
+  state.isSlideshow = false;
+  state.slideshowVisible = [];
+  state.slideshowClickOutcomes = [];
   state.page = {
-    evaluate: mock(async () => {
+    evaluate: mock(async (fn: unknown, ..._args: unknown[]) => {
       if (state.processPageThrows) throw new Error("evaluate failed");
+      // Dispatch by inspecting the evaluated function source. Each ScribdDownloader
+      // page.evaluate site carries a unique marker substring; the mock returns the
+      // matching fixture so unit tests don't need a real browser.
+      const src = String(fn);
+      if (src.includes("removeSelectorAll") || src.includes("removeMarginSelectorAll")) {
+        return state.processPageResult;
+      }
+      if (src.includes("next.click()")) {
+        return state.slideshowClickOutcomes.shift() ?? "no-next";
+      }
+      if (src.includes("naturalWidth")) {
+        return undefined;
+      }
+      if (src.includes("getBoundingClientRect")) {
+        return state.slideshowVisible.shift() ?? null;
+      }
+      if (src.includes("querySelector(selector)")) {
+        return state.isSlideshow;
+      }
       return state.processPageResult;
     }),
     close: mock(async () => {}),
@@ -494,6 +522,100 @@ describe("ScribdDownloader", () => {
         const htmlWrite = bunWrites.find((w) => w.path.endsWith(".debug.html"));
         expect(htmlWrite).toBeUndefined();
       });
+    });
+  });
+
+  describe("slideshow detection and click-through", () => {
+    test("slideshow path: per-page generatePDF + merge, scrollable processPage never runs", async () => {
+      // #given
+      state.resolvedTitle = "deck";
+      state.isSlideshow = true;
+      state.slideshowVisible = [
+        { id: "outer_page_1", width: 1000, height: 773 },
+        { id: "outer_page_2", width: 1000, height: 773 },
+        { id: "outer_page_3", width: 1000, height: 773 },
+      ];
+      // After page 3, click returns no-next → loop ends.
+      state.slideshowClickOutcomes = ["changed", "changed", "no-next"];
+
+      // #when
+      const exit = await runExecute("https://www.scribd.com/doc/999/deck");
+
+      // #then
+      expect(Exit.isSuccess(exit)).toBe(true);
+      expect(state.generatePDF).toHaveBeenCalledTimes(3);
+      expect(state.merge).toHaveBeenCalledTimes(1);
+      const mergeCall = state.merge.mock.calls[0];
+      expect((mergeCall![0] as string[]).length).toBe(3);
+      // temp dir is created and removed (non-debug).
+      const createCalls = state.dirCreate.mock.calls.map((c) => c[0]);
+      expect(createCalls).toContain("/tmp/out");
+      expect(createCalls.some((p) => (p as string).endsWith("_temp"))).toBe(true);
+      expect(state.dirRemove).toHaveBeenCalledTimes(1);
+    });
+
+    test("scrollable path (no slideshow markers) still runs existing processPage flow", async () => {
+      // #given
+      state.resolvedTitle = "doc";
+      state.isSlideshow = false;
+      state.processPageResult = { pages: [{ id: "p1", width: 800, height: 600 }] };
+
+      // #when
+      const exit = await runExecute("https://www.scribd.com/document/123/foo");
+
+      // #then
+      expect(Exit.isSuccess(exit)).toBe(true);
+      expect(state.generatePDF).toHaveBeenCalledTimes(1);
+      expect(state.merge).toHaveBeenCalledTimes(0);
+    });
+
+    test("slideshow with zero captured pages fails with PageProcessFailed", async () => {
+      // #given
+      state.resolvedTitle = "empty";
+      state.isSlideshow = true;
+      // No visible page at all on first try.
+      state.slideshowVisible = [null];
+      state.slideshowClickOutcomes = [];
+
+      // #when
+      const exit = await runExecute("https://www.scribd.com/doc/0/empty");
+
+      // #then
+      expect(Exit.isFailure(exit)).toBe(true);
+      if (Exit.isFailure(exit)) {
+        const failures = Array.from(
+          (function* walk(c: { _tag: string } & Record<string, unknown>): Generator<unknown> {
+            if (c._tag === "Fail") yield (c as unknown as { error: unknown }).error;
+            else if (c._tag === "Sequential" || c._tag === "Parallel") {
+              yield* walk(c.left as never);
+              yield* walk(c.right as never);
+            }
+          })(exit.cause as never),
+        );
+        const first = failures[0] as { _tag: string };
+        expect(first._tag).toBe("PageProcessFailed");
+      }
+      expect(state.merge).toHaveBeenCalledTimes(0);
+    });
+
+    test("slideshow respects same page id reappearing (loop guard)", async () => {
+      // #given — Scribd returns to page 1 after page 2 → loop exits.
+      state.resolvedTitle = "loop";
+      state.isSlideshow = true;
+      state.slideshowVisible = [
+        { id: "outer_page_1", width: 800, height: 600 },
+        { id: "outer_page_2", width: 800, height: 600 },
+        { id: "outer_page_1", width: 800, height: 600 },
+      ];
+      state.slideshowClickOutcomes = ["changed", "changed", "changed"];
+
+      // #when
+      const exit = await runExecute("https://www.scribd.com/doc/777/loop");
+
+      // #then
+      expect(Exit.isSuccess(exit)).toBe(true);
+      // First two unique ids captured; third (repeat of outer_page_1) breaks the loop.
+      expect(state.generatePDF).toHaveBeenCalledTimes(2);
     });
   });
 });
