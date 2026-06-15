@@ -1,6 +1,6 @@
 {
   "name": "scribd-dl",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Scribd Document Downloader based on ray.yukawai's script",
   "license": "GPL-3.0-or-later",

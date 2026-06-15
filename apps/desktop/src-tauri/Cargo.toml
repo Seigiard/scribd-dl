@@ -1,6 +1,6 @@
 [package]
 name = "scribd-dl-desktop"
-version = "0.0.1"
+version = "0.0.2"
 description = "scribd-dl desktop (Tauri shell wrapping web SPA + engine sidecar)"
 edition = "2021"
 rust-version = "1.77.2"
