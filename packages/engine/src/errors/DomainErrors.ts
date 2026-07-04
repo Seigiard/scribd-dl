@@ -57,3 +57,11 @@ export class PersistenceFailed extends Data.TaggedError("PersistenceFailed")<{
   readonly op: "read" | "write";
   readonly cause: unknown;
 }> {}
+
+export class CompressionFailed extends Data.TaggedError("CompressionFailed")<{
+  readonly path: string;
+  readonly reason: string;
+  // Scrubbed cause only ({ message, status }) — never the raw AxiosError, whose
+  // config.headers.Authorization carries the JWT signed from the secret key.
+  readonly cause: unknown;
+}> {}

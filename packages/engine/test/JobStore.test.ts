@@ -227,4 +227,42 @@ describe("JobStore", () => {
       expect([expectedA, expectedB]).toContain(winner);
     });
   });
+
+  describe("compression persistence (KTD4)", () => {
+    test("a Downloaded job with a failed compression survives write then read", async () => {
+      // #given
+      const jobs = [job("a", "Downloaded", { compression: { status: "failed", reason: "network error" } })];
+
+      // #when
+      await runWrite(tmpDir, jobs);
+      const result = await runRead(tmpDir);
+
+      // #then
+      expect(result).toEqual(jobs);
+    });
+
+    test("a transient compressing flag is dropped on write then read", async () => {
+      // #given
+      const jobs = [job("a", "Downloaded", { compression: { status: "compressing" } })];
+
+      // #when
+      await runWrite(tmpDir, jobs);
+      const result = await runRead(tmpDir);
+
+      // #then — the persisted job carries no compression field
+      expect(result).toEqual([job("a", "Downloaded")]);
+    });
+
+    test("a failed compression on a non-Downloaded job is dropped", async () => {
+      // #given — only terminal (Downloaded) failed compression is retained
+      const jobs = [job("a", "Queued", { compression: { status: "failed", reason: "network error" } })];
+
+      // #when
+      await runWrite(tmpDir, jobs);
+      const result = await runRead(tmpDir);
+
+      // #then
+      expect(result).toEqual([job("a", "Queued")]);
+    });
+  });
 });

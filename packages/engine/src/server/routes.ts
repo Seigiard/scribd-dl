@@ -109,6 +109,30 @@ const folderPostRoute = HttpRouter.post(
   }),
 );
 
+// GET /settings returns the iLovePDF keys — including the secret — in plaintext (KTD7).
+// It relies on the engine's loopback binding (127.0.0.1) plus the localhost/tauri CORS
+// gate in HttpServerLive; no stricter auth is applied (accepted local-tool tradeoff).
+const settingsGetRoute = HttpRouter.get(
+  "/settings",
+  Effect.gen(function* () {
+    const engine = yield* DownloadEngine;
+    const settings = yield* engine.settings;
+    return yield* HttpServerResponse.json(settings);
+  }),
+);
+
+const settingsPostRoute = HttpRouter.post(
+  "/settings",
+  Effect.gen(function* () {
+    const engine = yield* DownloadEngine;
+    const body = yield* readJsonBody.pipe(Effect.catchAll(() => Effect.succeed({})));
+    const publicKey = typeof (body as { publicKey?: unknown }).publicKey === "string" ? (body as { publicKey: string }).publicKey : "";
+    const secretKey = typeof (body as { secretKey?: unknown }).secretKey === "string" ? (body as { secretKey: string }).secretKey : "";
+    const valid = yield* engine.setSettings({ publicKey, secretKey });
+    return yield* HttpServerResponse.json({ valid });
+  }),
+);
+
 const eventsRoute = HttpRouter.get(
   "/events",
   Effect.gen(function* () {
@@ -132,5 +156,7 @@ export const router = HttpRouter.empty.pipe(
   retryRoute,
   folderGetRoute,
   folderPostRoute,
+  settingsGetRoute,
+  settingsPostRoute,
   eventsRoute,
 );

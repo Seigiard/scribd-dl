@@ -5,6 +5,7 @@ import type { Job } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService } from "../../src/service/ConfigStore";
 import { DownloadEngineLive } from "../../src/service/DownloadEngine";
 import { JobStore, type JobStoreService } from "../../src/service/JobStore";
+import { PdfCompressor, type PdfCompressorService } from "../../src/service/PdfCompressor";
 import { Scrapers, type Scraper } from "../../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../../src/utils/io/ConfigLoader";
 import { HttpServerLive } from "../../src/server/HttpServerLive";
@@ -12,11 +13,13 @@ import { HttpServerLive } from "../../src/server/HttpServerLive";
 interface MockState {
   scribdExecute: ReturnType<typeof mock>;
   restoredJobs: ReadonlyArray<Job>;
+  validateResult: boolean;
 }
 
 const state: MockState = {
   scribdExecute: mock(() => Effect.void),
   restoredJobs: [],
+  validateResult: true,
 };
 
 const defaultConfig: ConfigData = {
@@ -34,7 +37,12 @@ const scribdMockScraper: Scraper = {
 const scrapersMockLayer = Layer.succeed(Scrapers, [scribdMockScraper]);
 
 const configStoreMockLayer = Layer.succeed(ConfigStore, {
-  read: Effect.sync(() => ({ outputFolder: defaultConfig.directory.output })),
+  read: Effect.sync(() => ({
+    outputFolder: defaultConfig.directory.output,
+    ilovepdfPublicKey: "",
+    ilovepdfSecretKey: "",
+    ilovepdfKeysValid: false,
+  })),
   write: () => Effect.void,
 } satisfies ConfigStoreService);
 
@@ -43,10 +51,15 @@ const jobStoreMockLayer = Layer.succeed(JobStore, {
   write: () => Effect.void,
 } satisfies JobStoreService);
 
+const pdfCompressorMockLayer = Layer.succeed(PdfCompressor, {
+  compress: () => Effect.void,
+  validate: () => Effect.sync(() => state.validateResult),
+} satisfies PdfCompressorService);
+
 const buildEngineLayer = (config: ConfigData = defaultConfig) =>
   Layer.provide(
     DownloadEngineLive,
-    Layer.mergeAll(scrapersMockLayer, Layer.succeed(ConfigLoader, config), configStoreMockLayer, jobStoreMockLayer),
+    Layer.mergeAll(scrapersMockLayer, Layer.succeed(ConfigLoader, config), configStoreMockLayer, jobStoreMockLayer, pdfCompressorMockLayer),
   );
 
 let serverFiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;
@@ -376,5 +389,68 @@ describe("CORS", () => {
     });
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
+  });
+});
+
+describe("HttpServer settings routes", () => {
+  test("GET /settings returns stored keys with valid: null before any validation", async () => {
+    // #given — fresh engine, no keys set yet
+    // #when
+    const res = await fetch(`${baseUrl}/settings`);
+
+    // #then
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ publicKey: "", secretKey: "", valid: null });
+  });
+
+  test("POST /settings with a valid complete pair returns { valid: true } and persists", async () => {
+    // #given
+    state.validateResult = true;
+
+    // #when
+    const res = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body: j({ publicKey: "pub", secretKey: "sec" }) });
+
+    // #then
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ valid: true });
+    const after = await fetch(`${baseUrl}/settings`);
+    expect(await after.json()).toEqual({ publicKey: "pub", secretKey: "sec", valid: true });
+  });
+
+  test("POST /settings with invalid keys returns { valid: false } and still stores the entered keys", async () => {
+    // #given
+    state.validateResult = false;
+
+    // #when
+    const res = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body: j({ publicKey: "bad", secretKey: "keys" }) });
+
+    // #then
+    expect(await res.json()).toEqual({ valid: false });
+    const after = await fetch(`${baseUrl}/settings`);
+    expect(await after.json()).toEqual({ publicKey: "bad", secretKey: "keys", valid: false });
+  });
+
+  test("POST /settings with both keys empty clears them and makes no validation call", async () => {
+    // #given — a true validateResult would surface if validation were called
+    state.validateResult = true;
+
+    // #when
+    const res = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body: j({ publicKey: "", secretKey: "" }) });
+
+    // #then — returns false (not validated) and clears to the unverified state
+    expect(await res.json()).toEqual({ valid: false });
+    const after = await fetch(`${baseUrl}/settings`);
+    expect(await after.json()).toEqual({ publicKey: "", secretKey: "", valid: null });
+  });
+
+  test("POST /settings with exactly one key filled returns { valid: false } and makes no validation call", async () => {
+    // #given
+    state.validateResult = true;
+
+    // #when
+    const res = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body: j({ publicKey: "only-public", secretKey: "" }) });
+
+    // #then
+    expect(await res.json()).toEqual({ valid: false });
   });
 });

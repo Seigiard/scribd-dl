@@ -10,6 +10,7 @@ const job = (overrides: Partial<Job> & { id: JobId }): Job => ({
   status: overrides.status ?? "Queued",
   ...(overrides.failure !== undefined ? { failure: overrides.failure } : {}),
   ...(overrides.progress !== undefined ? { progress: overrides.progress } : {}),
+  ...(overrides.compression !== undefined ? { compression: overrides.compression } : {}),
 });
 
 const snapshot = (jobs: Job[]): EngineSnapshot => ({ jobs });
@@ -54,6 +55,25 @@ describe("store", () => {
 
     expect($jobs.get().a).toEqual(aDownloading);
     expect($jobs.get().b).toEqual(b);
+  });
+
+  it("detects a compression-only change (compressing → failed → cleared)", () => {
+    // #given
+    const a = job({ id: "a" as JobId, status: "Downloading", compression: { status: "compressing" } });
+    applySnapshot(snapshot([a]));
+    expect($jobs.get().a?.compression).toEqual({ status: "compressing" });
+
+    // #when — compression fails on the Downloaded job
+    const failed = job({ id: "a" as JobId, status: "Downloaded", compression: { status: "failed", reason: "network error" } });
+    applySnapshot(snapshot([failed]));
+    // #then
+    expect($jobs.get().a?.compression).toEqual({ status: "failed", reason: "network error" });
+
+    // #when — a later download of the same job clears compression
+    const cleared = job({ id: "a" as JobId, status: "Downloaded" });
+    applySnapshot(snapshot([cleared]));
+    // #then
+    expect($jobs.get().a?.compression).toBeUndefined();
   });
 
   it("removes a job whose id disappeared from the snapshot", () => {

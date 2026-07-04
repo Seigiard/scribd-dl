@@ -94,4 +94,29 @@ describe("queueItem()", () => {
     const el = mountJob(makeJob("Queued", { displayTitle: "" }));
     expect(el.querySelector(".item-title")?.textContent).toBe("—");
   });
+
+  it("compressing: shows the compressing indicator and suppresses the progress line", () => {
+    // #given — compression runs while status is still Downloading (KTD3)
+    const el = mountJob(
+      makeJob("Downloading", { progress: { done: 3, total: 3, stage: "render" }, compression: { status: "compressing" } }),
+    );
+
+    // #then
+    expect(el.querySelector(".item-compressing")?.textContent).toContain("Compressing");
+    expect(el.querySelector(".item-progress")).toBeNull();
+  });
+
+  it("failed compression: shows a visible subordinate warning with the reason, distinct from Failed styling", () => {
+    // #given
+    const el = mountJob(makeJob("Downloaded", { compression: { status: "failed", reason: "quota exceeded" } }));
+
+    // #then — inline visible text (not tooltip-only) plus a supplementary title
+    const marker = el.querySelector(".item-compression-failed") as HTMLElement;
+    expect(marker).not.toBeNull();
+    expect(marker.textContent).toContain("quota exceeded");
+    expect(marker.getAttribute("title")).toBe("quota exceeded");
+    // distinct from the Failed-status reason element
+    expect(el.querySelector(".item-reason")).toBeNull();
+    expect(el.dataset.status).toBe("Downloaded");
+  });
 });

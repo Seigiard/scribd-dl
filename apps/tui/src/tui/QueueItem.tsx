@@ -40,13 +40,23 @@ const renderBar = (done: number, total: number): string => {
 export const QueueItem = ({ job, action, focused }: QueueItemProps) => {
   const color = statusColor(job.status);
   const label = actionLabel(action);
-  const showProgress = job.status === "Downloading" && job.progress;
+  const compressing = job.compression?.status === "compressing";
+  // Compression runs while status is still Downloading (KTD3); its marker replaces
+  // the progress bar so the row shows a single state.
+  const showProgress = job.status === "Downloading" && job.progress && !job.compression;
+  const compressionFailed = job.compression?.status === "failed" ? job.compression.reason : null;
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box>
         <Box flexGrow={1} marginRight={1}>
           <Text wrap="truncate-end">{job.displayTitle}</Text>
         </Box>
+        {compressing ? (
+          <>
+            <Text color="cyan">compressing…</Text>
+            <Text> </Text>
+          </>
+        ) : null}
         {showProgress ? (
           <>
             <Text>{renderBar(job.progress!.done, job.progress!.total)}</Text>
@@ -63,6 +73,11 @@ export const QueueItem = ({ job, action, focused }: QueueItemProps) => {
         </Box>
         {label ? <Text inverse={focused === true}>{label}</Text> : null}
       </Box>
+      {compressionFailed ? (
+        <Text color="yellow" wrap="truncate-end">
+          Compression failed, file kept — {compressionFailed}
+        </Text>
+      ) : null}
       {job.status === "Failed" && job.failure ? (
         <Text color="red" wrap="truncate-end">
           Reason: {job.failure.reason}

@@ -82,6 +82,31 @@ describe("QueueItem", () => {
     expect(ui.lastFrame() ?? "").toContain("Reason: Unsupported domain");
     ui.unmount();
   });
+
+  test("compressing: shows compressing marker and no progress bar", () => {
+    // #given — compression runs while status is still Downloading (KTD3)
+    const job: Job = { ...downloadingJob, progress: { done: 3, total: 3, stage: "render" }, compression: { status: "compressing" } };
+    const ui = render(<QueueItem job={job} />);
+    const frame = ui.lastFrame() ?? "";
+
+    // #then
+    expect(frame).toContain("compressing…");
+    expect(frame).not.toMatch(/█+░+/);
+    ui.unmount();
+  });
+
+  test("compression failed: shows subordinate marker + reason, no red Failed reason line", () => {
+    // #given
+    const job: Job = { ...downloadedJob, compression: { status: "failed", reason: "quota exceeded" } };
+    const ui = render(<QueueItem job={job} />);
+    const frame = ui.lastFrame() ?? "";
+
+    // #then — visible inline marker distinct from the Failed-status Reason: block
+    expect(frame).toContain("Compression failed, file kept — quota exceeded");
+    expect(frame).toContain("Downloaded");
+    expect(frame).not.toContain("Reason:");
+    ui.unmount();
+  });
 });
 
 describe("Queue", () => {

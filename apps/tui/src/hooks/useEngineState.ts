@@ -1,5 +1,12 @@
-import { useEffect, useState } from "react";
-import { fetchSnapshot, subscribeEvents, type EngineSnapshot, type JobEvent } from "@scribd-dl/shared";
+import { useCallback, useEffect, useState } from "react";
+import {
+  fetchSettings,
+  fetchSnapshot,
+  subscribeEvents,
+  type EngineSnapshot,
+  type JobEvent,
+  type SettingsResponse,
+} from "@scribd-dl/shared";
 
 export interface UseEngineStateOptions {
   readonly onWsOpen?: () => void;
@@ -9,6 +16,8 @@ export interface UseEngineStateOptions {
 export interface UseEngineState {
   readonly snapshot: EngineSnapshot;
   readonly folder: string | null;
+  readonly settings: SettingsResponse | null;
+  readonly reloadSettings: () => void;
 }
 
 export const useEngineState = (
@@ -18,8 +27,15 @@ export const useEngineState = (
 ): UseEngineState => {
   const [snapshot, setSnapshot] = useState<EngineSnapshot>({ jobs: [] });
   const [folder, setFolder] = useState<string | null>(initialFolder);
+  const [settings, setSettings] = useState<SettingsResponse | null>(null);
 
   const { onWsOpen, onWsClose } = options;
+
+  const reloadSettings = useCallback(() => {
+    void fetchSettings(baseUrl)
+      .then(setSettings)
+      .catch(() => {});
+  }, [baseUrl]);
 
   useEffect(() => {
     let alive = true;
@@ -31,6 +47,16 @@ export const useEngineState = (
         if (alive) setSnapshot(snap);
       } catch {
         // ignore — connection errors surface via onWsClose
+      }
+    };
+
+    const refreshSettings = async () => {
+      if (!alive) return;
+      try {
+        const s = await fetchSettings(baseUrl);
+        if (alive) setSettings(s);
+      } catch {
+        // ignore — settings are non-critical; the popup seeds from null
       }
     };
 
@@ -48,6 +74,7 @@ export const useEngineState = (
     };
 
     void refresh();
+    void refreshSettings();
 
     const sub = subscribeEvents(baseUrl, {
       onMessage: onEvent,
@@ -65,5 +92,5 @@ export const useEngineState = (
     };
   }, [baseUrl, onWsOpen, onWsClose]);
 
-  return { snapshot, folder };
+  return { snapshot, folder, settings, reloadSettings };
 };

@@ -7,14 +7,17 @@ import {
   enqueueText,
   removeJob,
   retryJob,
+  saveSettings,
   setFolder as apiSetFolder,
   summarizeEnqueueFeedback,
   type EngineSnapshot,
   type EnqueueResponse,
+  type SettingsResponse,
 } from "@scribd-dl/shared";
 import { useEngineState } from "../hooks/useEngineState";
 import { useTransient } from "../hooks/useTransient";
 import { ChangeFolderPopup } from "./ChangeFolderPopup";
+import { SettingsPopup } from "./SettingsPopup";
 import { ClearAllConfirm } from "./ClearAllConfirm";
 import { ExitConfirm } from "./ExitConfirm";
 import { computeFocusable, type FocusableSlot } from "./focus";
@@ -47,8 +50,10 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
     dismissSticky();
   }, [dismissSticky]);
 
-  const { snapshot, folder: liveFolder } = useEngineState(baseUrl, initialFolder, { onWsOpen, onWsClose });
+  const { snapshot, folder: liveFolder, settings } = useEngineState(baseUrl, initialFolder, { onWsOpen, onWsClose });
   const folder = liveFolder ?? initialFolder;
+  const [settingsOverride, setSettingsOverride] = useState<SettingsResponse | null>(null);
+  const effectiveSettings = settingsOverride ?? settings;
   const app = useApp();
   const exit = useCallback(() => (onExit ? onExit() : app.exit()), [app, onExit]);
   const { stdout } = useStdout();
@@ -57,6 +62,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   const [focusIndex, setFocusIndex] = useState(0);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
   const [changeFolderOpen, setChangeFolderOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const focusable = useMemo(() => computeFocusable(snapshot, transient), [snapshot, transient]);
   const focusCount = focusable.slots.length;
@@ -92,7 +98,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   );
 
   useInput((input, key) => {
-    if (changeFolderOpen) return;
+    if (changeFolderOpen || settingsOpen) return;
 
     if (confirmDialog) {
       if (key.escape) {
@@ -126,6 +132,11 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
       } else {
         exit();
       }
+      return;
+    }
+
+    if (input === "s" || input === "ы") {
+      setSettingsOpen(true);
       return;
     }
 
@@ -200,6 +211,20 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
             setChangeFolderOpen(false);
           }}
           onCancel={() => setChangeFolderOpen(false)}
+        />
+      ) : null}
+      {settingsOpen ? (
+        <SettingsPopup
+          initialPublicKey={effectiveSettings?.publicKey ?? ""}
+          initialSecretKey={effectiveSettings?.secretKey ?? ""}
+          initialValid={effectiveSettings?.valid ?? null}
+          onSave={async (publicKey, secretKey) => {
+            const { valid } = await saveSettings(baseUrl, { publicKey, secretKey });
+            const cleared = publicKey === "" && secretKey === "";
+            setSettingsOverride({ publicKey, secretKey, valid: cleared ? null : valid });
+            return valid;
+          }}
+          onCancel={() => setSettingsOpen(false)}
         />
       ) : null}
     </Box>

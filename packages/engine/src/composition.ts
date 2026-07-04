@@ -2,6 +2,7 @@ import { Effect, Layer } from "effect";
 import { ConfigStoreLive } from "./service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive } from "./service/DownloadEngine";
 import { JobStoreLive } from "./service/JobStore";
+import { PdfCompressorLive } from "./service/PdfCompressor";
 import { ScribdDownloader, ScribdDownloaderLive } from "./service/ScribdDownloader";
 import { Scrapers } from "./service/Scraper";
 import { ConfigLoader, DEFAULT_CONFIG, makeConfigLoader } from "./utils/io/ConfigLoader";
@@ -31,7 +32,7 @@ export const makeScrapersLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, Brows
 export const buildDownloadEngineLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> = PuppeteerSgLive) => {
   const ScrapersLayer = makeScrapersLayer(puppeteerLayer);
   const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
-  const EngineDeps = Layer.mergeAll(ScrapersLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive);
+  const EngineDeps = Layer.mergeAll(ScrapersLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive, PdfCompressorLive);
   return Layer.provide(DownloadEngineLive, EngineDeps);
 };
 

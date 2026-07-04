@@ -1,14 +1,23 @@
 import { atom, map } from "nanostores";
-import { applyTransient, type EngineSnapshot, type Job, type JobId, type TransientSeverity, type TransientState } from "@scribd-dl/shared";
+import {
+  applyTransient,
+  type EngineSnapshot,
+  type Job,
+  type JobId,
+  type SettingsResponse,
+  type TransientSeverity,
+  type TransientState,
+} from "@scribd-dl/shared";
 
 export type { TransientSeverity, TransientState } from "@scribd-dl/shared";
 
-export type ModalMode = "none" | "folder";
+export type ModalMode = "none" | "folder" | "settings";
 
 type JobsMap = Record<JobId, Job | undefined>;
 
 export const $jobs = map<JobsMap>({});
 export const $folder = atom<string | null>(null);
+export const $settings = atom<SettingsResponse | null>(null);
 export const $connected = atom<boolean>(false);
 export const $transient = atom<TransientState | null>(null);
 export const $modal = atom<ModalMode>("none");
@@ -62,6 +71,13 @@ const jobsShallowEqual = (a: Job, b: Job): boolean => {
     if (!ap || !bp) return false;
     if (ap.done !== bp.done || ap.total !== bp.total || ap.stage !== bp.stage) return false;
   }
+  const ac = a.compression;
+  const bc = b.compression;
+  if (ac !== bc) {
+    if (!ac || !bc) return false;
+    if (ac.status !== bc.status) return false;
+    if (ac.status === "failed" && bc.status === "failed" && ac.reason !== bc.reason) return false;
+  }
   return true;
 };
 
@@ -91,6 +107,7 @@ export const applySnapshot = (snap: EngineSnapshot): void => {
 export const resetStores = (): void => {
   $jobs.set({});
   $folder.set(null);
+  $settings.set(null);
   $connected.set(false);
   clearTransient();
   $modal.set("none");

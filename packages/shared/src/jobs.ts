@@ -17,6 +17,8 @@ export interface JobProgress {
   readonly stage: ProgressStage;
 }
 
+export type JobCompression = { readonly status: "compressing" } | { readonly status: "failed"; readonly reason: string };
+
 export interface Job {
   readonly id: JobId;
   readonly url: string;
@@ -25,6 +27,7 @@ export interface Job {
   readonly status: JobStatus;
   readonly failure?: JobFailure;
   readonly progress?: JobProgress;
+  readonly compression?: JobCompression;
 }
 
 export interface EngineSnapshot {
@@ -40,5 +43,7 @@ export type JobEvent =
   | { readonly _tag: "JobRequeued"; readonly id: JobId }
   | { readonly _tag: "JobTitleUpdated"; readonly id: JobId; readonly title: string }
   | { readonly _tag: "JobProgress"; readonly id: JobId; readonly done: number; readonly total: number; readonly stage: ProgressStage }
+  | { readonly _tag: "JobCompressing"; readonly id: JobId }
+  | { readonly _tag: "JobCompressionFailed"; readonly id: JobId; readonly reason: string }
   | { readonly _tag: "OutputFolderChanged"; readonly path: string }
   | { readonly _tag: "SnapshotReplaced"; readonly snapshot: EngineSnapshot };

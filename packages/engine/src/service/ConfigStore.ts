@@ -9,6 +9,9 @@ import { expandHome } from "../utils/io/path";
 
 export interface Settings {
   readonly outputFolder: string;
+  readonly ilovepdfPublicKey: string;
+  readonly ilovepdfSecretKey: string;
+  readonly ilovepdfKeysValid: boolean;
 }
 
 export interface ConfigStoreService {
@@ -22,11 +25,23 @@ const SETTINGS_FILENAME = "settings.json";
 
 export const defaultBaseDir = (): string => path.join(os.homedir(), ".config", "scribd-dl");
 
+const coerceString = (value: unknown): string => (typeof value === "string" ? value : "");
+
 const parseSettings = (raw: string): Settings | null => {
   try {
-    const parsed = JSON.parse(raw) as { outputFolder?: unknown };
+    const parsed = JSON.parse(raw) as {
+      outputFolder?: unknown;
+      ilovepdfPublicKey?: unknown;
+      ilovepdfSecretKey?: unknown;
+      ilovepdfKeysValid?: unknown;
+    };
     if (typeof parsed.outputFolder !== "string") return null;
-    return { outputFolder: expandHome(parsed.outputFolder) };
+    return {
+      outputFolder: expandHome(parsed.outputFolder),
+      ilovepdfPublicKey: coerceString(parsed.ilovepdfPublicKey),
+      ilovepdfSecretKey: coerceString(parsed.ilovepdfSecretKey),
+      ilovepdfKeysValid: parsed.ilovepdfKeysValid === true,
+    };
   } catch {
     return null;
   }
@@ -40,7 +55,12 @@ export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never
       const filePath = path.join(baseDir, SETTINGS_FILENAME);
       const tmpPath = `${filePath}.tmp`;
 
-      const fallback = (): Settings => ({ outputFolder: defaults.directory.output });
+      const fallback = (): Settings => ({
+        outputFolder: defaults.directory.output,
+        ilovepdfPublicKey: "",
+        ilovepdfSecretKey: "",
+        ilovepdfKeysValid: false,
+      });
 
       const read: Effect.Effect<Settings, never, never> = Effect.sync(() => {
         try {
@@ -64,9 +84,20 @@ export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never
         Effect.tryPromise({
           try: async () => {
             await fs.mkdir(baseDir, { recursive: true });
-            const body = `${JSON.stringify({ outputFolder: settings.outputFolder }, null, 2)}\n`;
-            await fs.writeFile(tmpPath, body, "utf8");
+            const body = `${JSON.stringify(
+              {
+                outputFolder: settings.outputFolder,
+                ilovepdfPublicKey: settings.ilovepdfPublicKey,
+                ilovepdfSecretKey: settings.ilovepdfSecretKey,
+                ilovepdfKeysValid: settings.ilovepdfKeysValid,
+              },
+              null,
+              2,
+            )}\n`;
+            // File holds the iLovePDF secret key — keep it owner-only (0o600).
+            await fs.writeFile(tmpPath, body, { encoding: "utf8", mode: 0o600 });
             await fs.rename(tmpPath, filePath);
+            await fs.chmod(filePath, 0o600);
           },
           catch: (cause) => new PersistenceFailed({ path: filePath, op: "write", cause }),
         });

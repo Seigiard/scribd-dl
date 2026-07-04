@@ -14,6 +14,7 @@
     "@effect/cli": "^0.75.2",
     "@effect/platform": "^0.96.1",
     "@effect/platform-bun": "^0.90.0",
+    "@ilovepdf/ilovepdf-nodejs": "^0.3.1",
     "@scribd-dl/shared": "workspace:*",
     "cli-progress": "^3.12.0",
     "effect": "^3.21.3",

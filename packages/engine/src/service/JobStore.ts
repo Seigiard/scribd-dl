@@ -3,7 +3,7 @@ import * as fsSync from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { Context, Effect, Layer } from "effect";
-import type { Job, JobDomain, JobFailure, JobStatus } from "@scribd-dl/shared";
+import type { Job, JobCompression, JobDomain, JobFailure, JobStatus } from "@scribd-dl/shared";
 import { PersistenceFailed } from "../errors/DomainErrors";
 
 export interface JobStoreService {
@@ -26,6 +26,15 @@ const isFailure = (value: unknown): value is JobFailure => {
   return typeof f.reason === "string" && typeof f.retryable === "boolean";
 };
 
+// Only a terminal `failed` compression on a `Downloaded` job survives to disk (KTD4):
+// a transient `compressing` flag is always dropped so a killed engine never resumes
+// with a stale in-flight marker.
+const isTerminalFailedCompression = (value: unknown, status: JobStatus): value is JobCompression => {
+  if (status !== "Downloaded" || !value || typeof value !== "object") return false;
+  const c = value as { status?: unknown; reason?: unknown };
+  return c.status === "failed" && typeof c.reason === "string";
+};
+
 const parseJobLine = (raw: string): Job | null => {
   let parsed: unknown;
   try {
@@ -41,6 +50,7 @@ const parseJobLine = (raw: string): Job | null => {
     displayTitle?: unknown;
     status?: unknown;
     failure?: unknown;
+    compression?: unknown;
   };
   if (typeof j.id !== "string" || j.id === "") return null;
   if (typeof j.url !== "string" || j.url === "") return null;
@@ -48,15 +58,23 @@ const parseJobLine = (raw: string): Job | null => {
   if (typeof j.domain !== "string" || !VALID_DOMAINS.includes(j.domain as JobDomain)) return null;
   if (typeof j.status !== "string" || !VALID_STATUSES.includes(j.status as JobStatus)) return null;
 
+  const status = j.status as JobStatus;
   const base: Job = {
     id: j.id,
     url: j.url,
     domain: j.domain as JobDomain,
     displayTitle: j.displayTitle,
-    status: j.status as JobStatus,
+    status,
     ...(isFailure(j.failure) ? { failure: j.failure } : {}),
+    ...(isTerminalFailedCompression(j.compression, status) ? { compression: j.compression } : {}),
   };
   return base;
+};
+
+const forPersist = (job: Job): Job => {
+  if (isTerminalFailedCompression(job.compression, job.status)) return job;
+  const { compression: _drop, ...rest } = job;
+  return rest;
 };
 
 const normalize = (job: Job): Job => {
@@ -109,7 +127,7 @@ export const makeJobStore = (baseDir: string): Layer.Layer<JobStore, never, neve
         Effect.tryPromise({
           try: async () => {
             await fs.mkdir(baseDir, { recursive: true });
-            const body = jobs.map((j) => JSON.stringify(j)).join("\n");
+            const body = jobs.map((j) => JSON.stringify(forPersist(j))).join("\n");
             const payload = jobs.length === 0 ? "" : `${body}\n`;
             await fs.writeFile(tmpPath, payload, "utf8");
             await fs.rename(tmpPath, filePath);

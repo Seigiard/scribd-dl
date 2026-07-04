@@ -154,9 +154,23 @@ body {
 
 .queue-item .item-url,
 .queue-item .item-progress,
+.queue-item .item-compressing,
+.queue-item .item-compression-failed,
 .queue-item .item-reason {
   padding-left: var(--s3);
   font-size: 0.9em;
+}
+
+.queue-item .item-compressing {
+  color: var(--primary-color);
+  margin-top: 0.2rem;
+}
+
+/* Subordinate to the job's Downloaded status: muted secondary color, not the error
+   red used for a failed job, so a completed download is not misread as failed. */
+.queue-item .item-compression-failed {
+  color: var(--secondary-color);
+  margin-top: 0.2rem;
 }
 
 .queue-item .item-url {
@@ -218,4 +232,55 @@ body {
   justify-content: space-between;
   margin-top: 1rem;
   gap: 1rem;
+}
+
+.settings-modal {
+  position: fixed;
+  inset: 0;
+  background-color: rgba(0, 0, 0, 0.8);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.settings-modal .terminal-card {
+  width: calc(var(--s) * 45);
+  max-width: calc(100vw - var(--s2));
+  background-color: var(--background-color);
+}
+
+.settings-modal .modal-actions {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 1rem;
+  gap: 1rem;
+}
+
+.settings-modal .settings-note {
+  font-size: 0.85em;
+  opacity: 0.7;
+  margin-bottom: var(--s);
+}
+
+.settings-modal .settings-input {
+  width: 100%;
+}
+
+.settings-validity {
+  font-size: 0.9em;
+  margin-top: var(--s);
+}
+
+.settings-validity[data-validity="valid"] {
+  color: var(--primary-color);
+}
+
+.settings-validity[data-validity="invalid"] {
+  color: var(--error-color);
+}
+
+.settings-validity[data-validity="unverified"],
+.settings-validity[data-validity="validating"] {
+  color: var(--secondary-color);
 }

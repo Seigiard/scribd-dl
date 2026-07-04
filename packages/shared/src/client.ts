@@ -1,5 +1,5 @@
 import type { EngineSnapshot, JobEvent } from "./jobs";
-import type { ClearResponse, EnqueueResponse, FolderResponse } from "./http";
+import type { ClearResponse, EnqueueResponse, FolderResponse, SaveSettingsResponse, SettingsRequest, SettingsResponse } from "./http";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -48,6 +48,22 @@ export const setFolder = async (baseUrl: string, path: string): Promise<void> =>
     body: JSON.stringify({ path }),
   });
   if (!res.ok) throw new Error(`POST /folder failed: ${res.status}`);
+};
+
+export const fetchSettings = async (baseUrl: string): Promise<SettingsResponse> => {
+  const res = await fetch(`${baseUrl}/settings`);
+  if (!res.ok) throw new Error(`GET /settings failed: ${res.status}`);
+  return (await res.json()) as SettingsResponse;
+};
+
+export const saveSettings = async (baseUrl: string, req: SettingsRequest): Promise<SaveSettingsResponse> => {
+  const res = await fetch(`${baseUrl}/settings`, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw new Error(`POST /settings failed: ${res.status}`);
+  return (await res.json()) as SaveSettingsResponse;
 };
 
 const clearByScope = async (baseUrl: string, scope: "completed" | "failed"): Promise<number> => {

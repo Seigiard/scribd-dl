@@ -7,14 +7,24 @@ import type { EngineSnapshot, Job, JobEvent } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService, type Settings } from "../src/service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive } from "../src/service/DownloadEngine";
 import { JobStore, type JobStoreService } from "../src/service/JobStore";
+import { PdfCompressor, type PdfCompressorService } from "../src/service/PdfCompressor";
 import { Scrapers, type Scraper } from "../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
-import { PageLoadFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
+import { CompressionFailed, PageLoadFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
+
+const emptySettings: Settings = {
+  outputFolder: "/tmp/out",
+  ilovepdfPublicKey: "",
+  ilovepdfSecretKey: "",
+  ilovepdfKeysValid: false,
+};
 
 interface MockState {
   scribdExecute: ReturnType<typeof mock>;
   jobStoreWrite: ReturnType<typeof mock>;
   configStoreWrite: ReturnType<typeof mock>;
+  compressCompress: ReturnType<typeof mock>;
+  compressValidate: ReturnType<typeof mock>;
   restoredJobs: ReadonlyArray<Job>;
   initialSettings: Settings;
 }
@@ -23,16 +33,20 @@ const state: MockState = {
   scribdExecute: mock(),
   jobStoreWrite: mock(),
   configStoreWrite: mock(),
+  compressCompress: mock(),
+  compressValidate: mock(),
   restoredJobs: [],
-  initialSettings: { outputFolder: "/tmp/out" },
+  initialSettings: emptySettings,
 };
 
 const resetState = () => {
   state.scribdExecute = mock(() => Effect.void);
   state.jobStoreWrite = mock(() => Effect.void);
   state.configStoreWrite = mock(() => Effect.void);
+  state.compressCompress = mock(() => Effect.void);
+  state.compressValidate = mock(() => Effect.succeed(true));
   state.restoredJobs = [];
-  state.initialSettings = { outputFolder: "/tmp/out" };
+  state.initialSettings = emptySettings;
 };
 
 const defaultConfig: ConfigData = {
@@ -61,6 +75,10 @@ const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyA
     read: Effect.sync(() => state.restoredJobs),
     write: (jobs) => state.jobStoreWrite(jobs) as Effect.Effect<void, never, never>,
   };
+  const pdfCompressorSvc: PdfCompressorService = {
+    compress: (pdfPath, keys) => state.compressCompress(pdfPath, keys) as ReturnType<PdfCompressorService["compress"]>,
+    validate: (keys) => state.compressValidate(keys) as ReturnType<PdfCompressorService["validate"]>,
+  };
   return Layer.provide(
     DownloadEngineLive,
     Layer.mergeAll(
@@ -68,6 +86,7 @@ const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyA
       Layer.succeed(ConfigLoader, config),
       Layer.succeed(ConfigStore, configStoreSvc),
       Layer.succeed(JobStore, jobStoreSvc),
+      Layer.succeed(PdfCompressor, pdfCompressorSvc),
     ),
   );
 };
@@ -801,7 +820,7 @@ describe("DownloadEngine", () => {
     test("re-enqueue after Downloaded with file present → same id, no re-download", async () => {
       // #given — real tmp folder + pre-created PDF at the path resolvePdfPath would produce
       const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "engine-dedup-"));
-      state.initialSettings = { outputFolder: tmp };
+      state.initialSettings = { ...emptySettings, outputFolder: tmp };
       state.scribdExecute = mock(() => Effect.void);
       const url = "https://www.scribd.com/document/1/a";
 
@@ -1295,7 +1314,7 @@ describe("DownloadEngine", () => {
     test("restores outputFolder from ConfigStore on cold start", async () => {
       // #given
       state.scribdExecute = mock(() => Effect.void);
-      state.initialSettings = { outputFolder: "/tmp/persisted" };
+      state.initialSettings = { ...emptySettings, outputFolder: "/tmp/persisted" };
 
       // #when
       const folder = await runScoped(
@@ -1438,7 +1457,12 @@ describe("DownloadEngine", () => {
       );
 
       // #then
-      expect(state.configStoreWrite).toHaveBeenCalledWith({ outputFolder: "/tmp/new" });
+      expect(state.configStoreWrite).toHaveBeenCalledWith({
+        outputFolder: "/tmp/new",
+        ilovepdfPublicKey: "",
+        ilovepdfSecretKey: "",
+        ilovepdfKeysValid: false,
+      });
     });
 
     test("persist failure does not crash the engine", async () => {
@@ -1610,6 +1634,281 @@ describe("DownloadEngine", () => {
       // #then
       expect(snap.jobs[0]!.status).toBe("Failed");
       expect(snap.jobs[0]!.failure?.retryable).toBe(true);
+    });
+  });
+
+  describe("compression (best-effort, KTD1/KTD3/KTD9)", () => {
+    const validKeysSettings = (outputFolder: string): Settings => ({
+      outputFolder,
+      ilovepdfPublicKey: "pub",
+      ilovepdfSecretKey: "sec",
+      ilovepdfKeysValid: true,
+    });
+
+    const writingScraper = (filename: string) =>
+      mock((_url: string, folder: string) =>
+        Effect.promise(() => fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46]))),
+      );
+
+    const withTmp = async (run: (tmp: string) => Promise<void>) => {
+      const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "engine-compress-"));
+      try {
+        await run(tmp);
+      } finally {
+        await fs.rm(tmp, { recursive: true, force: true });
+      }
+    };
+
+    test("valid keys + compress succeeds → Downloaded with no compression field; called with resolved path", async () => {
+      await withTmp(async (tmp) => {
+        // #given
+        state.initialSettings = validKeysSettings(tmp);
+        state.scribdExecute = writingScraper("Scribd document 1.pdf");
+        state.compressCompress = mock(() => Effect.void);
+
+        // #when
+        const snap = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            return yield* waitForQuiet(engine);
+          }),
+        );
+
+        // #then
+        expect(snap.jobs[0]!.status).toBe("Downloaded");
+        expect(snap.jobs[0]!.compression).toBeUndefined();
+        expect(state.compressCompress).toHaveBeenCalledWith(path.join(tmp, "Scribd document 1.pdf"), {
+          publicKey: "pub",
+          secretKey: "sec",
+        });
+      });
+    });
+
+    test("valid keys + compress fails → Downloaded with compression failed + reason; never Failed", async () => {
+      await withTmp(async (tmp) => {
+        // #given
+        state.initialSettings = validKeysSettings(tmp);
+        state.scribdExecute = writingScraper("Scribd document 1.pdf");
+        state.compressCompress = mock(() => Effect.fail(new CompressionFailed({ path: "p", reason: "quota exceeded", cause: {} })));
+
+        // #when
+        const snap = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            return yield* waitForQuiet(engine);
+          }),
+        );
+
+        // #then
+        expect(snap.jobs[0]!.status).toBe("Downloaded");
+        expect(snap.jobs[0]!.compression).toEqual({ status: "failed", reason: "quota exceeded" });
+      });
+    });
+
+    test("keys present but ilovepdfKeysValid false → compress never invoked", async () => {
+      await withTmp(async (tmp) => {
+        // #given
+        state.initialSettings = { ...validKeysSettings(tmp), ilovepdfKeysValid: false };
+        state.scribdExecute = writingScraper("Scribd document 1.pdf");
+        state.compressCompress = mock(() => Effect.void);
+
+        // #when
+        const snap = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            return yield* waitForQuiet(engine);
+          }),
+        );
+
+        // #then
+        expect(snap.jobs[0]!.status).toBe("Downloaded");
+        expect(snap.jobs[0]!.compression).toBeUndefined();
+        expect(state.compressCompress).not.toHaveBeenCalled();
+      });
+    });
+
+    test("empty keys → compress never invoked", async () => {
+      await withTmp(async (tmp) => {
+        // #given — default emptySettings, just point the folder at tmp
+        state.initialSettings = { ...emptySettings, outputFolder: tmp };
+        state.scribdExecute = writingScraper("Scribd document 1.pdf");
+        state.compressCompress = mock(() => Effect.void);
+
+        // #when
+        const snap = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            return yield* waitForQuiet(engine);
+          }),
+        );
+
+        // #then
+        expect(snap.jobs[0]!.compression).toBeUndefined();
+        expect(state.compressCompress).not.toHaveBeenCalled();
+      });
+    });
+
+    test("valid keys but output file missing → compress not called; reason 'output file not found'", async () => {
+      await withTmp(async (tmp) => {
+        // #given — scraper writes nothing, so the recomputed path won't exist (KTD1 guard)
+        state.initialSettings = validKeysSettings(tmp);
+        state.scribdExecute = mock(() => Effect.void);
+        state.compressCompress = mock(() => Effect.void);
+
+        // #when
+        const snap = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            return yield* waitForQuiet(engine);
+          }),
+        );
+
+        // #then
+        expect(snap.jobs[0]!.status).toBe("Downloaded");
+        expect(snap.jobs[0]!.compression).toEqual({ status: "failed", reason: "output file not found" });
+        expect(state.compressCompress).not.toHaveBeenCalled();
+      });
+    });
+
+    test("runtime 'invalid credentials' flips persisted validity; next download skips compression", async () => {
+      await withTmp(async (tmp) => {
+        // #given
+        state.initialSettings = validKeysSettings(tmp);
+        state.scribdExecute = mock((_url: string, folder: string) =>
+          Effect.promise(async () => {
+            const doc = /document\/(\d+)/.exec(_url)![1];
+            await fs.writeFile(path.join(folder, `Scribd document ${doc}.pdf`), new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+          }),
+        );
+        state.compressCompress = mock(() => Effect.fail(new CompressionFailed({ path: "p", reason: "invalid credentials", cause: {} })));
+
+        // #when — first download flips validity, second (different URL) should skip
+        const snap = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            yield* waitForQuiet(engine);
+            yield* engine.enqueue("https://www.scribd.com/document/2/b");
+            return yield* waitForQuiet(engine);
+          }),
+        );
+
+        // #then
+        expect(state.compressCompress).toHaveBeenCalledTimes(1);
+        expect(state.configStoreWrite).toHaveBeenCalledWith({
+          outputFolder: tmp,
+          ilovepdfPublicKey: "pub",
+          ilovepdfSecretKey: "sec",
+          ilovepdfKeysValid: false,
+        });
+        const second = snap.jobs.find((j) => j.url.includes("/document/2/"))!;
+        expect(second.compression).toBeUndefined();
+      });
+    });
+
+    test("compressing state is observable via snapshot during the call", async () => {
+      await withTmp(async (tmp) => {
+        // #given — compress blocks until we release it, so we can observe the interim state
+        state.initialSettings = validKeysSettings(tmp);
+        state.scribdExecute = writingScraper("Scribd document 1.pdf");
+        let release: () => void = () => {};
+        const gate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        state.compressCompress = mock(() => Effect.promise(() => gate));
+
+        // #when
+        const observed = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            let seen: Job | undefined;
+            for (let i = 0; i < 200; i++) {
+              const snap = yield* engine.snapshot;
+              const job = snap.jobs[0];
+              if (job?.compression?.status === "compressing") {
+                seen = job;
+                break;
+              }
+              yield* Effect.sleep("5 millis");
+            }
+            yield* Effect.sync(() => release());
+            yield* waitForQuiet(engine);
+            return seen;
+          }),
+        );
+
+        // #then
+        expect(observed?.compression).toEqual({ status: "compressing" });
+      });
+    });
+
+    test("setSettings with a complete pair persists keys + validity and returns the result", async () => {
+      // #given
+      state.compressValidate = mock(() => Effect.succeed(true));
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const valid = yield* engine.setSettings({ publicKey: "p", secretKey: "s" });
+          const view = yield* engine.settings;
+          return { valid, view };
+        }),
+      );
+
+      // #then
+      expect(result.valid).toBe(true);
+      expect(result.view).toEqual({ publicKey: "p", secretKey: "s", valid: true });
+      expect(state.configStoreWrite).toHaveBeenCalledWith({
+        outputFolder: "/tmp/out",
+        ilovepdfPublicKey: "p",
+        ilovepdfSecretKey: "s",
+        ilovepdfKeysValid: true,
+      });
+    });
+
+    test("setSettings with both keys empty clears without validating and returns false", async () => {
+      // #given
+      state.initialSettings = validKeysSettings("/tmp/out");
+      state.compressValidate = mock(() => Effect.succeed(true));
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const valid = yield* engine.setSettings({ publicKey: "", secretKey: "" });
+          const view = yield* engine.settings;
+          return { valid, view };
+        }),
+      );
+
+      // #then
+      expect(result.valid).toBe(false);
+      expect(result.view).toEqual({ publicKey: "", secretKey: "", valid: null });
+      expect(state.compressValidate).not.toHaveBeenCalled();
+    });
+
+    test("setSettings with exactly one key filled returns false and does not validate", async () => {
+      // #given
+      state.compressValidate = mock(() => Effect.succeed(true));
+
+      // #when
+      const result = await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          return yield* engine.setSettings({ publicKey: "p", secretKey: "" });
+        }),
+      );
+
+      // #then
+      expect(result).toBe(false);
+      expect(state.compressValidate).not.toHaveBeenCalled();
     });
   });
 });

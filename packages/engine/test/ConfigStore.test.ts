@@ -3,10 +3,17 @@ import { Effect, Exit, Layer } from "effect";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { ConfigStore, makeConfigStore } from "../src/service/ConfigStore";
+import { ConfigStore, makeConfigStore, type Settings } from "../src/service/ConfigStore";
 import { DEFAULT_CONFIG, makeConfigLoader } from "../src/utils/io/ConfigLoader";
 
 const buildLayer = (baseDir: string) => Layer.provide(makeConfigStore(baseDir), makeConfigLoader(DEFAULT_CONFIG));
+
+const defaults = (outputFolder: string): Settings => ({
+  outputFolder,
+  ilovepdfPublicKey: "",
+  ilovepdfSecretKey: "",
+  ilovepdfKeysValid: false,
+});
 
 const runRead = (baseDir: string) =>
   Effect.runPromise(
@@ -19,12 +26,12 @@ const runRead = (baseDir: string) =>
     ),
   );
 
-const runWrite = (baseDir: string, outputFolder: string) =>
+const runWrite = (baseDir: string, settings: Settings) =>
   Effect.runPromiseExit(
     Effect.provide(
       Effect.gen(function* () {
         const store = yield* ConfigStore;
-        return yield* store.write({ outputFolder });
+        return yield* store.write(settings);
       }),
       buildLayer(baseDir),
     ),
@@ -50,7 +57,7 @@ describe("ConfigStore", () => {
       const settings = await runRead(tmpDir);
 
       // #then
-      expect(settings).toEqual({ outputFolder: "/tmp/foo" });
+      expect(settings).toEqual(defaults("/tmp/foo"));
     });
 
     test("falls back to defaults when settings.json is missing", async () => {
@@ -61,7 +68,7 @@ describe("ConfigStore", () => {
       const settings = await runRead(tmpDir);
 
       // #then
-      expect(settings).toEqual({ outputFolder: DEFAULT_CONFIG.directory.output });
+      expect(settings).toEqual(defaults(DEFAULT_CONFIG.directory.output));
     });
 
     test("falls back to defaults and warns when JSON is malformed", async () => {
@@ -73,7 +80,7 @@ describe("ConfigStore", () => {
       const settings = await runRead(tmpDir);
 
       // #then
-      expect(settings).toEqual({ outputFolder: DEFAULT_CONFIG.directory.output });
+      expect(settings).toEqual(defaults(DEFAULT_CONFIG.directory.output));
       expect(warn).toHaveBeenCalled();
       warn.mockRestore();
     });
@@ -87,7 +94,7 @@ describe("ConfigStore", () => {
       const settings = await runRead(tmpDir);
 
       // #then
-      expect(settings).toEqual({ outputFolder: DEFAULT_CONFIG.directory.output });
+      expect(settings).toEqual(defaults(DEFAULT_CONFIG.directory.output));
       expect(warn).toHaveBeenCalled();
       warn.mockRestore();
     });
@@ -101,7 +108,7 @@ describe("ConfigStore", () => {
       const settings = await runRead(tmpDir);
 
       // #then
-      expect(settings).toEqual({ outputFolder: DEFAULT_CONFIG.directory.output });
+      expect(settings).toEqual(defaults(DEFAULT_CONFIG.directory.output));
       expect(warn).toHaveBeenCalled();
       warn.mockRestore();
     });
@@ -116,6 +123,60 @@ describe("ConfigStore", () => {
       // #then
       expect(settings.outputFolder).toBe(`${os.homedir()}/scribd-out`);
     });
+
+    test("legacy settings.json with only outputFolder reads back with empty keys and valid false", async () => {
+      // #given — a pre-feature settings file that predates the iLovePDF keys
+      await fs.writeFile(path.join(tmpDir, "settings.json"), JSON.stringify({ outputFolder: "/tmp/legacy" }));
+
+      // #when
+      const settings = await runRead(tmpDir);
+
+      // #then — no fallback to the default folder; keys default empty, validity false
+      expect(settings).toEqual(defaults("/tmp/legacy"));
+    });
+
+    test("reads back persisted iLovePDF keys and validity", async () => {
+      // #given
+      await fs.writeFile(
+        path.join(tmpDir, "settings.json"),
+        JSON.stringify({
+          outputFolder: "/tmp/keys",
+          ilovepdfPublicKey: "pub_123",
+          ilovepdfSecretKey: "sec_456",
+          ilovepdfKeysValid: true,
+        }),
+      );
+
+      // #when
+      const settings = await runRead(tmpDir);
+
+      // #then
+      expect(settings).toEqual({
+        outputFolder: "/tmp/keys",
+        ilovepdfPublicKey: "pub_123",
+        ilovepdfSecretKey: "sec_456",
+        ilovepdfKeysValid: true,
+      });
+    });
+
+    test("coerces non-string keys and non-boolean validity to empty / false", async () => {
+      // #given
+      await fs.writeFile(
+        path.join(tmpDir, "settings.json"),
+        JSON.stringify({
+          outputFolder: "/tmp/coerce",
+          ilovepdfPublicKey: 42,
+          ilovepdfSecretKey: null,
+          ilovepdfKeysValid: "yes",
+        }),
+      );
+
+      // #when
+      const settings = await runRead(tmpDir);
+
+      // #then
+      expect(settings).toEqual(defaults("/tmp/coerce"));
+    });
   });
 
   describe("write", () => {
@@ -124,32 +185,48 @@ describe("ConfigStore", () => {
       const nestedBase = path.join(tmpDir, "deep", "nested");
 
       // #when
-      const exit = await runWrite(nestedBase, "/tmp/x");
+      const exit = await runWrite(nestedBase, defaults("/tmp/x"));
 
       // #then
       expect(Exit.isSuccess(exit)).toBe(true);
       const written = await fs.readFile(path.join(nestedBase, "settings.json"), "utf8");
-      expect(JSON.parse(written)).toEqual({ outputFolder: "/tmp/x" });
+      expect(JSON.parse(written)).toEqual(defaults("/tmp/x"));
     });
 
     test("does not leave a .tmp file behind after a successful write", async () => {
       // #given/#when
-      const exit = await runWrite(tmpDir, "/tmp/x");
+      const exit = await runWrite(tmpDir, defaults("/tmp/x"));
 
       // #then
       expect(Exit.isSuccess(exit)).toBe(true);
       await expect(fs.stat(path.join(tmpDir, "settings.json.tmp"))).rejects.toThrow();
     });
 
-    test("round-trips: write then read returns the same outputFolder", async () => {
+    test("round-trips outputFolder, both keys, and validity through write then read", async () => {
       // #given
-      await runWrite(tmpDir, "/tmp/round-trip");
+      const full: Settings = {
+        outputFolder: "/tmp/round-trip",
+        ilovepdfPublicKey: "pub_abc",
+        ilovepdfSecretKey: "sec_def",
+        ilovepdfKeysValid: true,
+      };
+      await runWrite(tmpDir, full);
 
       // #when
       const settings = await runRead(tmpDir);
 
       // #then
-      expect(settings).toEqual({ outputFolder: "/tmp/round-trip" });
+      expect(settings).toEqual(full);
+    });
+
+    test("writes settings.json owner-only (mode 0o600)", async () => {
+      // #given/#when
+      const exit = await runWrite(tmpDir, defaults("/tmp/x"));
+
+      // #then
+      expect(Exit.isSuccess(exit)).toBe(true);
+      const stat = await fs.stat(path.join(tmpDir, "settings.json"));
+      expect(stat.mode & 0o777).toBe(0o600);
     });
   });
 });

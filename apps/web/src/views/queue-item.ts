@@ -36,9 +36,20 @@ const actionButton = (job: Job): Hole | null => {
 };
 
 const progressLine = (job: Job): Hole | null => {
-  if (job.status !== "Downloading" || !job.progress) return null;
+  // Compression runs while status is still Downloading (KTD3); when it does, the
+  // compressing indicator replaces the progress line so the row shows one state.
+  if (job.status !== "Downloading" || !job.progress || job.compression) return null;
   const { done, total, stage } = job.progress;
   return html`<div class="item-progress">${done} / ${total} (${stage})</div>`;
+};
+
+const compressionLine = (job: Job): Hole | null => {
+  const c = job.compression;
+  if (!c) return null;
+  if (c.status === "compressing") {
+    return html`<div class="item-compressing">Compressing…</div>`;
+  }
+  return html`<div class="item-compression-failed" title=${c.reason}>⚠ Compression failed, file kept — ${c.reason}</div>`;
 };
 
 const reasonLine = (job: Job): Hole | null => {
@@ -54,6 +65,6 @@ export const queueItem = (job: Job): Hole => {
       ${actionButton(job)}
     </div>
     <div class="item-url">${job.url}</div>
-    ${progressLine(job)} ${reasonLine(job)}
+    ${progressLine(job)} ${compressionLine(job)} ${reasonLine(job)}
   </div>`;
 };

@@ -12,6 +12,8 @@ export const Header = ({ folder, changeFocused }: HeaderProps) => {
       <Text bold>{folder}</Text>
       <Text> </Text>
       <Text inverse={changeFocused === true}>[Change]</Text>
+      <Text> </Text>
+      <Text dimColor>[s Settings]</Text>
     </Box>
   );
 };

@@ -38,7 +38,11 @@ let snapshotCalls = 0;
 const installFetchStub = (...frames: EngineSnapshot[]): void => {
   snapshots = [...frames];
   snapshotCalls = 0;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (input: unknown) => {
+    // useEngineState also GETs /settings on mount; keep it off the snapshot queue/count.
+    if (String(input).endsWith("/settings")) {
+      return new Response(JSON.stringify({ publicKey: "", secretKey: "", valid: null }), { status: 200 });
+    }
     const next = snapshots.shift() ?? { jobs: [] };
     snapshotCalls += 1;
     return new Response(JSON.stringify(next), { status: 200 });

@@ -1,7 +1,18 @@
 import { containsUrl, summarizeEnqueueFeedback, type JobEvent } from "@scribd-dl/shared";
-import { clearAll, clearFinished, enqueueText, fetchFolder, fetchSnapshot, removeJob, retryJob, setFolder } from "@/lib/api";
+import {
+  clearAll,
+  clearFinished,
+  enqueueText,
+  fetchFolder,
+  fetchSettings,
+  fetchSnapshot,
+  removeJob,
+  retryJob,
+  saveSettings,
+  setFolder,
+} from "@/lib/api";
 import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
-import { $connected, $folder, $jobs, applySnapshot, dismissSticky, showTransient } from "@/store";
+import { $connected, $folder, $jobs, $settings, applySnapshot, dismissSticky, showTransient } from "@/store";
 
 let ws: WebSocket | null = null;
 let baseUrl: string | null = null;
@@ -23,6 +34,15 @@ const loadFolder = async (): Promise<void> => {
     $folder.set(await fetchFolder(baseUrl));
   } catch {
     $folder.set(null);
+  }
+};
+
+const loadSettings = async (): Promise<void> => {
+  if (!baseUrl) return;
+  try {
+    $settings.set(await fetchSettings(baseUrl));
+  } catch {
+    $settings.set(null);
   }
 };
 
@@ -58,6 +78,7 @@ const openSocket = (): void => {
     dismissSticky();
     void refresh();
     void loadFolder();
+    void loadSettings();
   };
   next.onmessage = (msg) => {
     if (ws !== next) return;
@@ -101,6 +122,14 @@ export const saveFolder = async (path: string): Promise<void> => {
   if (!baseUrl) throw new Error("Engine not connected");
   await setFolder(baseUrl, path);
   $folder.set(path);
+};
+
+export const saveSettingsCommand = async (publicKey: string, secretKey: string): Promise<boolean> => {
+  if (!baseUrl) throw new Error("Engine not connected");
+  const { valid } = await saveSettings(baseUrl, { publicKey, secretKey });
+  const cleared = publicKey === "" && secretKey === "";
+  $settings.set({ publicKey, secretKey, valid: cleared ? null : valid });
+  return valid;
 };
 
 export const removeJobById = async (id: string): Promise<void> => {

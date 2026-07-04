@@ -16,6 +16,21 @@ export interface FolderResponse {
   readonly path: string;
 }
 
+export interface SettingsResponse {
+  readonly publicKey: string;
+  readonly secretKey: string;
+  readonly valid: boolean | null;
+}
+
+export interface SettingsRequest {
+  readonly publicKey: string;
+  readonly secretKey: string;
+}
+
+export interface SaveSettingsResponse {
+  readonly valid: boolean;
+}
+
 export type SnapshotResponse = EngineSnapshot;
 
 export interface ErrorResponse {
