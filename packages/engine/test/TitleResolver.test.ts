@@ -3,14 +3,16 @@ import { Effect } from "effect";
 import { type Fetcher, TitleResolver, makeTitleResolverLayer, slugFromUrl } from "../src/utils/request/TitleResolver";
 
 interface FakeFetcher {
+  fetchPageTitle: ReturnType<typeof mock>;
   fetchOEmbedTitle: ReturnType<typeof mock>;
   url: string | null;
 }
 
-const fakeFetcher: FakeFetcher = { fetchOEmbedTitle: mock(), url: null };
+const fakeFetcher: FakeFetcher = { fetchPageTitle: mock(), fetchOEmbedTitle: mock(), url: null };
 
 const resetFetcher = () => {
   fakeFetcher.url = null;
+  fakeFetcher.fetchPageTitle = mock(() => Effect.fail(new Error("page unavailable")));
   fakeFetcher.fetchOEmbedTitle = mock((url: string) => {
     fakeFetcher.url = url;
     return Effect.fail(new Error("oEmbed unavailable"));
@@ -18,6 +20,7 @@ const resetFetcher = () => {
 };
 
 const fetcher: Fetcher = {
+  fetchPageTitle: (url) => fakeFetcher.fetchPageTitle(url) as ReturnType<Fetcher["fetchPageTitle"]>,
   fetchOEmbedTitle: (url) => fakeFetcher.fetchOEmbedTitle(url) as ReturnType<Fetcher["fetchOEmbedTitle"]>,
 };
 
@@ -65,6 +68,41 @@ describe("TitleResolver.resolve", () => {
 
     // #then
     expect(title).toBe("Canonical Document Title");
+  });
+
+  test("prefers the displayed page title over the original oEmbed title", async () => {
+    // #given
+    fakeFetcher.fetchPageTitle = mock(() => Effect.succeed("Cypher System Task Difficulty Guide | PDF | Attention | Nature"));
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Cypher system custom GM screen"));
+
+    // #when
+    const title = await runResolve("https://www.scribd.com/document/422706811/Cypher-system-custom-GM-screen", "422706811");
+
+    // #then
+    expect(title).toBe("Cypher System Task Difficulty Guide");
+  });
+
+  test("falls back to oEmbed when the page returns a client challenge", async () => {
+    // #given
+    fakeFetcher.fetchPageTitle = mock(() => Effect.succeed("Client Challenge"));
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Original Document Title"));
+
+    // #when
+    const title = await runResolve("https://www.scribd.com/document/42/Original-Document-Title", "42");
+
+    // #then
+    expect(title).toBe("Original Document Title");
+  });
+
+  test("preserves pipe characters in an oEmbed title", async () => {
+    // #given
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Research | Development Plan"));
+
+    // #when
+    const title = await runResolve("https://www.scribd.com/document/42/Fallback-Slug", "42");
+
+    // #then
+    expect(title).toBe("Research | Development Plan");
   });
 
   test("decodes HTML entities in the oEmbed title", async () => {
@@ -120,6 +158,8 @@ describe("TitleResolver.resolve", () => {
 
     // #then
     expect(title).toBe("Embed Document Title");
+    expect(fakeFetcher.fetchPageTitle).toHaveBeenCalledWith("https://www.scribd.com/document/42");
+    expect(fakeFetcher.fetchOEmbedTitle).toHaveBeenCalledWith("https://www.scribd.com/document/42");
   });
 
   test("uses oEmbed for a document URL without a slug", async () => {
