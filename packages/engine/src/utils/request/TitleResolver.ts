@@ -2,7 +2,7 @@ import { Context, Effect, Layer } from "effect";
 import * as scribdRegex from "../../const/ScribdRegex";
 
 const FETCH_TIMEOUT_MS = 5000;
-const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+const MAX_TITLE_BYTES = 128 * 1024;
 
 export interface TitleResolverService {
   readonly resolve: (originalUrl: string, id: string) => Effect.Effect<string, never, never>;
@@ -20,27 +20,6 @@ const decodeEntities = (s: string): string =>
     .replace(/&#x27;/g, "'")
     .trim();
 
-const extractOgTitle = (html: string): string | null => {
-  const re1 = /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i;
-  const re2 = /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i;
-  const m = re1.exec(html) ?? re2.exec(html);
-  return m ? decodeEntities(m[1]!) : null;
-};
-
-const extractTitleTag = (html: string): string | null => {
-  const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
-  return m ? decodeEntities(m[1]!) : null;
-};
-
-export const firstSegment = (raw: string | null): string | null => {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed === "") return null;
-  const idx = trimmed.indexOf(" | ");
-  const head = idx === -1 ? trimmed : trimmed.slice(0, idx).trim();
-  return head === "" ? null : head;
-};
-
 export const slugFromUrl = (url: string): string | null => {
   const m = scribdRegex.DOCUMENT.exec(url);
   if (!m) return null;
@@ -52,46 +31,86 @@ export const slugFromUrl = (url: string): string | null => {
 };
 
 export interface Fetcher {
-  readonly fetchHtml: (url: string) => Effect.Effect<string, Error, never>;
+  readonly fetchPageTitle: (url: string) => Effect.Effect<string, Error, never>;
+  readonly fetchOEmbedTitle: (url: string) => Effect.Effect<string, Error, never>;
 }
 
 const liveFetcher: Fetcher = {
-  fetchHtml: (url) =>
+  fetchPageTitle: (url) =>
     Effect.tryPromise({
-      try: async () => {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-        try {
-          const resp = await fetch(url, {
-            redirect: "follow",
-            signal: controller.signal,
-            headers: { "user-agent": USER_AGENT, accept: "text/html,application/xhtml+xml" },
-          });
-          if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}`);
-          }
-          return await resp.text();
-        } finally {
-          clearTimeout(timer);
+      try: async (signal) => {
+        const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
+        const response = await fetch(url, { signal: requestSignal, headers: { accept: "text/html" } });
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => undefined);
+          throw new Error(`HTTP ${response.status}`);
         }
+        if (!response.body) throw new Error("Document page has no body");
+
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let html = "";
+        let bytesRead = 0;
+        try {
+          while (bytesRead < MAX_TITLE_BYTES) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            const remaining = MAX_TITLE_BYTES - bytesRead;
+            const chunk = value.byteLength > remaining ? value.subarray(0, remaining) : value;
+            bytesRead += chunk.byteLength;
+            html += decoder.decode(chunk, { stream: true });
+            const title = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1];
+            if (title) return title;
+            if (/<\/head>/i.test(html) || value.byteLength >= remaining) break;
+          }
+        } finally {
+          await reader.cancel().catch(() => undefined);
+        }
+        throw new Error("Document page has no title");
+      },
+      catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
+    }),
+  fetchOEmbedTitle: (url) =>
+    Effect.tryPromise({
+      try: async (signal) => {
+        const endpoint = `https://www.scribd.com/services/oembed?url=${encodeURIComponent(url)}&format=json`;
+        const requestSignal = AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
+        const response = await fetch(endpoint, { signal: requestSignal, headers: { accept: "application/json" } });
+        if (!response.ok) {
+          await response.body?.cancel().catch(() => undefined);
+          throw new Error(`HTTP ${response.status}`);
+        }
+        const title = ((await response.json()) as { readonly title?: unknown }).title;
+        if (typeof title !== "string") throw new Error("oEmbed response has no title");
+        return title;
       },
       catch: (cause) => (cause instanceof Error ? cause : new Error(String(cause))),
     }),
 };
 
+const usableTitle = (raw: string, stripSuffix: boolean): string | null => {
+  const decoded = decodeEntities(raw);
+  const separator = stripSuffix ? decoded.indexOf(" | ") : -1;
+  const title = separator === -1 ? decoded : decoded.slice(0, separator).trim();
+  return title !== "" && title.toLowerCase() !== "client challenge" && title.toLowerCase() !== "scribd" ? title : null;
+};
+
 const makeResolver = (fetcher: Fetcher): TitleResolverService => ({
   resolve: (originalUrl, id) =>
     Effect.gen(function* () {
-      const slug = slugFromUrl(originalUrl);
-      if (!slug) return id;
-      const html = yield* fetcher.fetchHtml(originalUrl).pipe(Effect.catchAll(() => Effect.succeed<string | null>(null)));
-      if (html) {
-        const fromOg = firstSegment(extractOgTitle(html));
-        if (fromOg) return fromOg;
-        const fromTitle = firstSegment(extractTitleTag(html));
-        if (fromTitle) return fromTitle;
+      const fallback = <A>(effect: Effect.Effect<A, Error, never>) => effect.pipe(Effect.catchAll(() => Effect.succeed<A | null>(null)));
+      const metadataUrl = scribdRegex.EMBED.test(originalUrl) ? `https://www.scribd.com/document/${id}` : originalUrl;
+      const pageTitle = yield* fallback(fetcher.fetchPageTitle(metadataUrl));
+      if (pageTitle) {
+        const usable = usableTitle(pageTitle, true);
+        if (usable) return usable;
       }
-      return slug;
+      const oEmbedTitle = yield* fallback(fetcher.fetchOEmbedTitle(metadataUrl));
+      if (oEmbedTitle) {
+        const usable = usableTitle(oEmbedTitle, false);
+        if (usable) return usable;
+      }
+      return slugFromUrl(originalUrl) ?? id;
     }),
 });
 

@@ -141,9 +141,11 @@ export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
         </div>
         <div class="modal-actions">
           <button type="button" class="btn btn-default" @click=${close}>Cancel</button>
-          ${isTauri()
-            ? html`<button type="button" class="btn btn-default" data-action="browse" @click=${onBrowseClick}>Browse…</button>`
-            : null}
+          ${
+            isTauri()
+              ? html`<button type="button" class="btn btn-default" data-action="browse" @click=${onBrowseClick}>Browse…</button>`
+              : null
+          }
           <button type="button" class="btn btn-primary" @click=${onSaveClick}>Save</button>
         </div>
         ${error ? html`<div class="terminal-alert terminal-alert-error">${error}</div>` : null}

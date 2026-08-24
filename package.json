@@ -35,8 +35,8 @@
     "format:check": "oxfmt --check package.json packages/engine/*.ts packages/engine/src packages/engine/test packages/shared/src apps/tui/tui.ts apps/tui/src apps/tui/test apps/web/src apps/web/test scripts"
   },
   "devDependencies": {
-    "oxfmt": "^0.54.0",
-    "oxlint": "^1.69.0"
+    "oxfmt": "^0.64.0",
+    "oxlint": "^1.79.0"
   },
-  "packageManager": "bun@1.3.14"
+  "packageManager": "bun@1.4.0"
 }

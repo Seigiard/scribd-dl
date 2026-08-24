@@ -1,24 +1,27 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import { Effect } from "effect";
-import { type Fetcher, TitleResolver, firstSegment, makeTitleResolverLayer, slugFromUrl } from "../src/utils/request/TitleResolver";
+import { type Fetcher, TitleResolver, makeTitleResolverLayer, slugFromUrl } from "../src/utils/request/TitleResolver";
 
 interface FakeFetcher {
-  fetchHtml: ReturnType<typeof mock>;
+  fetchPageTitle: ReturnType<typeof mock>;
+  fetchOEmbedTitle: ReturnType<typeof mock>;
   url: string | null;
 }
 
-const fakeFetcher: FakeFetcher = { fetchHtml: mock(), url: null };
+const fakeFetcher: FakeFetcher = { fetchPageTitle: mock(), fetchOEmbedTitle: mock(), url: null };
 
 const resetFetcher = () => {
   fakeFetcher.url = null;
-  fakeFetcher.fetchHtml = mock((url: string) => {
+  fakeFetcher.fetchPageTitle = mock(() => Effect.fail(new Error("page unavailable")));
+  fakeFetcher.fetchOEmbedTitle = mock((url: string) => {
     fakeFetcher.url = url;
-    return Effect.succeed("");
+    return Effect.fail(new Error("oEmbed unavailable"));
   });
 };
 
 const fetcher: Fetcher = {
-  fetchHtml: (url) => fakeFetcher.fetchHtml(url) as ReturnType<Fetcher["fetchHtml"]>,
+  fetchPageTitle: (url) => fakeFetcher.fetchPageTitle(url) as ReturnType<Fetcher["fetchPageTitle"]>,
+  fetchOEmbedTitle: (url) => fakeFetcher.fetchOEmbedTitle(url) as ReturnType<Fetcher["fetchOEmbedTitle"]>,
 };
 
 const runResolve = (originalUrl: string, id: string): Promise<string> =>
@@ -28,28 +31,6 @@ const runResolve = (originalUrl: string, id: string): Promise<string> =>
       return yield* svc.resolve(originalUrl, id);
     }).pipe(Effect.provide(makeTitleResolverLayer(fetcher))),
   );
-
-describe("firstSegment", () => {
-  test("splits on first ' | '", () => {
-    expect(firstSegment("Foo | PDF | Tags")).toBe("Foo");
-  });
-
-  test("returns whole string when no ' | '", () => {
-    expect(firstSegment("Just Title")).toBe("Just Title");
-  });
-
-  test("trims whitespace", () => {
-    expect(firstSegment("  Foo  | Bar")).toBe("Foo");
-  });
-
-  test("null in, null out", () => {
-    expect(firstSegment(null)).toBeNull();
-  });
-
-  test("empty string returns null", () => {
-    expect(firstSegment("")).toBeNull();
-  });
-});
 
 describe("slugFromUrl", () => {
   test("extracts and humanises slug", () => {
@@ -78,86 +59,56 @@ describe("TitleResolver.resolve", () => {
     resetFetcher();
   });
 
-  test("returns og:title first segment when present", async () => {
+  test("returns the oEmbed title", async () => {
     // #given
-    fakeFetcher.fetchHtml = mock(() =>
-      Effect.succeed(
-        `<html><head><meta property="og:title" content="Smart Money Concept Trading Guide | PDF | Hedge (Finance)"/></head></html>`,
-      ),
-    );
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Canonical Document Title"));
 
     // #when
-    const title = await runResolve("https://www.scribd.com/document/693471767/Smart-Money-Concept-SMC-Trading", "693471767");
+    const title = await runResolve("https://www.scribd.com/document/649160495/Different-Url-Slug", "649160495");
 
     // #then
-    expect(title).toBe("Smart Money Concept Trading Guide");
+    expect(title).toBe("Canonical Document Title");
   });
 
-  test("falls back to <title> when og:title is missing", async () => {
+  test("prefers the displayed page title over the original oEmbed title", async () => {
     // #given
-    fakeFetcher.fetchHtml = mock(() => Effect.succeed(`<html><head><title>Just A Title | Tag</title></head></html>`));
+    fakeFetcher.fetchPageTitle = mock(() => Effect.succeed("Cypher System Task Difficulty Guide | PDF | Attention | Nature"));
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Cypher system custom GM screen"));
 
     // #when
-    const title = await runResolve("https://www.scribd.com/document/42/some-slug", "42");
+    const title = await runResolve("https://www.scribd.com/document/422706811/Cypher-system-custom-GM-screen", "422706811");
 
     // #then
-    expect(title).toBe("Just A Title");
+    expect(title).toBe("Cypher System Task Difficulty Guide");
+    expect(fakeFetcher.fetchOEmbedTitle).not.toHaveBeenCalled();
   });
 
-  test("falls back to slug when fetch returns empty html", async () => {
+  test("falls back to oEmbed when the page returns a client challenge", async () => {
     // #given
-    fakeFetcher.fetchHtml = mock(() => Effect.succeed(""));
+    fakeFetcher.fetchPageTitle = mock(() => Effect.succeed("Client Challenge"));
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Original Document Title"));
 
     // #when
-    const title = await runResolve("https://www.scribd.com/document/42/My-Custom-Slug", "42");
+    const title = await runResolve("https://www.scribd.com/document/42/Original-Document-Title", "42");
 
     // #then
-    expect(title).toBe("My Custom Slug");
+    expect(title).toBe("Original Document Title");
   });
 
-  test("falls back to slug when fetch fails", async () => {
+  test("preserves pipe characters in an oEmbed title", async () => {
     // #given
-    fakeFetcher.fetchHtml = mock(() => Effect.fail(new Error("network down")));
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Research | Development Plan"));
 
     // #when
     const title = await runResolve("https://www.scribd.com/document/42/Fallback-Slug", "42");
 
     // #then
-    expect(title).toBe("Fallback Slug");
+    expect(title).toBe("Research | Development Plan");
   });
 
-  test("returns id for embed URL", async () => {
-    // #when
-    const title = await runResolve("https://www.scribd.com/embeds/42/content", "42");
-
-    // #then
-    expect(title).toBe("42");
-  });
-
-  test("returns id for document URL without slug", async () => {
-    // #when
-    const title = await runResolve("https://www.scribd.com/document/42", "42");
-
-    // #then
-    expect(title).toBe("42");
-  });
-
-  test("falls back to slug when og:title and <title> both empty", async () => {
+  test("decodes HTML entities in the oEmbed title", async () => {
     // #given
-    fakeFetcher.fetchHtml = mock(() => Effect.succeed(`<html><head><title></title></head></html>`));
-
-    // #when
-    const title = await runResolve("https://www.scribd.com/document/42/Fallback-Here", "42");
-
-    // #then
-    expect(title).toBe("Fallback Here");
-  });
-
-  test("decodes HTML entities in og:title", async () => {
-    // #given
-    fakeFetcher.fetchHtml = mock(() =>
-      Effect.succeed(`<meta property="og:title" content="Tom &amp; Jerry&#39;s &quot;Show&quot; | PDF"/>`),
-    );
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed(`Tom &amp; Jerry&#39;s &quot;Show&quot;`));
 
     // #when
     const title = await runResolve("https://www.scribd.com/document/1/slug", "1");
@@ -166,29 +117,76 @@ describe("TitleResolver.resolve", () => {
     expect(title).toBe(`Tom & Jerry's "Show"`);
   });
 
-  test("fetches the original document URL when slug is present", async () => {
+  test("falls back to slug when oEmbed fails", async () => {
     // #given
-    let fetchedUrl = "";
-    fakeFetcher.fetchHtml = mock((url: string) => {
-      fetchedUrl = url;
-      return Effect.succeed("");
-    });
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.fail(new Error("network down")));
 
+    // #when
+    const title = await runResolve("https://www.scribd.com/document/42/Fallback-Slug", "42");
+
+    // #then
+    expect(title).toBe("Fallback Slug");
+  });
+
+  test("falls back to slug when oEmbed returns an empty title", async () => {
+    // #given
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("  "));
+
+    // #when
+    const title = await runResolve("https://www.scribd.com/document/42/Empty-Title", "42");
+
+    // #then
+    expect(title).toBe("Empty Title");
+  });
+
+  test("falls back to slug when oEmbed returns a client challenge", async () => {
+    // #given
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Client Challenge"));
+
+    // #when
+    const title = await runResolve("https://www.scribd.com/document/649160495/Cypher-System-Cheat-Sheet", "649160495");
+
+    // #then
+    expect(title).toBe("Cypher System Cheat Sheet");
+  });
+
+  test("uses oEmbed for an embed URL", async () => {
+    // #given
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Embed Document Title"));
+
+    // #when
+    const title = await runResolve("https://www.scribd.com/embeds/42/content", "42");
+
+    // #then
+    expect(title).toBe("Embed Document Title");
+    expect(fakeFetcher.fetchPageTitle).toHaveBeenCalledWith("https://www.scribd.com/document/42");
+    expect(fakeFetcher.fetchOEmbedTitle).toHaveBeenCalledWith("https://www.scribd.com/document/42");
+  });
+
+  test("uses oEmbed for a document URL without a slug", async () => {
+    // #given
+    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Bare Document Title"));
+
+    // #when
+    const title = await runResolve("https://www.scribd.com/document/42", "42");
+
+    // #then
+    expect(title).toBe("Bare Document Title");
+  });
+
+  test("falls back to id when oEmbed fails and the URL has no slug", async () => {
+    // #when
+    const title = await runResolve("https://www.scribd.com/document/42", "42");
+
+    // #then
+    expect(title).toBe("42");
+  });
+
+  test("passes the original URL to oEmbed", async () => {
     // #when
     await runResolve("https://www.scribd.com/document/42/Some-Slug", "42");
 
     // #then
-    expect(fetchedUrl).toBe("https://www.scribd.com/document/42/Some-Slug");
-  });
-
-  test("handles og:title with attribute order reversed", async () => {
-    // #given
-    fakeFetcher.fetchHtml = mock(() => Effect.succeed(`<meta content="Reversed Title | suffix" property="og:title"/>`));
-
-    // #when
-    const title = await runResolve("https://www.scribd.com/document/1/slug", "1");
-
-    // #then
-    expect(title).toBe("Reversed Title");
+    expect(fakeFetcher.url).toBe("https://www.scribd.com/document/42/Some-Slug");
   });
 });
