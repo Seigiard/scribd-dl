@@ -1,4 +1,4 @@
-import { Context, Effect, Fiber, Layer } from "effect";
+import { Context, Effect, Layer } from "effect";
 import * as scribdRegex from "../../const/ScribdRegex";
 
 const FETCH_TIMEOUT_MS = 5000;
@@ -100,16 +100,12 @@ const makeResolver = (fetcher: Fetcher): TitleResolverService => ({
     Effect.gen(function* () {
       const fallback = <A>(effect: Effect.Effect<A, Error, never>) => effect.pipe(Effect.catchAll(() => Effect.succeed<A | null>(null)));
       const metadataUrl = scribdRegex.EMBED.test(originalUrl) ? `https://www.scribd.com/document/${id}` : originalUrl;
-      const oEmbedFiber = yield* Effect.fork(fallback(fetcher.fetchOEmbedTitle(metadataUrl)));
       const pageTitle = yield* fallback(fetcher.fetchPageTitle(metadataUrl));
       if (pageTitle) {
         const usable = usableTitle(pageTitle, true);
-        if (usable) {
-          yield* Fiber.interrupt(oEmbedFiber);
-          return usable;
-        }
+        if (usable) return usable;
       }
-      const oEmbedTitle = yield* Fiber.join(oEmbedFiber);
+      const oEmbedTitle = yield* fallback(fetcher.fetchOEmbedTitle(metadataUrl));
       if (oEmbedTitle) {
         const usable = usableTitle(oEmbedTitle, false);
         if (usable) return usable;

@@ -80,6 +80,7 @@ describe("TitleResolver.resolve", () => {
 
     // #then
     expect(title).toBe("Cypher System Task Difficulty Guide");
+    expect(fakeFetcher.fetchOEmbedTitle).not.toHaveBeenCalled();
   });
 
   test("falls back to oEmbed when the page returns a client challenge", async () => {
