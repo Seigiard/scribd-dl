@@ -56,6 +56,7 @@ const BROWSER_HELPERS_SOURCE = `
 export interface PuppeteerPdfOptions {
   readonly width?: number;
   readonly height?: number;
+  readonly pageRanges?: string;
 }
 
 export interface PuppeteerSgService {

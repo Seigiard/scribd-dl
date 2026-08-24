@@ -420,7 +420,7 @@ const runSlideshow = ({
       yield* setBodyToPageSize(page, embedUrl, visible.width, visible.height);
 
       const slidePath = `${tempDir}/${(i + 1).toString().padStart(5, "0")}.pdf`;
-      yield* puppeteerSg.generatePDF(page, slidePath, { width: visible.width, height: visible.height });
+      yield* puppeteerSg.generatePDF(page, slidePath, { width: visible.width, height: visible.height, pageRanges: "1" });
       pdfPaths.push(slidePath);
 
       yield* onEvent({ _tag: "ScrapeProgress", done: i + 1, total: i + 1 });
