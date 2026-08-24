@@ -104,6 +104,7 @@ const buildLayer = () => {
   };
   const pdfSvc: PdfGeneratorService = {
     merge: (inputs, output) => state.merge(inputs, output) as ReturnType<PdfGeneratorService["merge"]>,
+    setTitle: () => Effect.void,
   };
   const dirSvc: DirectoryIoService = {
     create: (p) => state.dirCreate(p) as ReturnType<DirectoryIoService["create"]>,

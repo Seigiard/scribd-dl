@@ -10,7 +10,8 @@ import { JobStore, type JobStoreService } from "../src/service/JobStore";
 import { PdfCompressor, type PdfCompressorService } from "../src/service/PdfCompressor";
 import { Scrapers, type Scraper } from "../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
-import { CompressionFailed, PageLoadFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
+import { PdfGenerator, type PdfGeneratorService } from "../src/utils/io/PdfGenerator";
+import { CompressionFailed, PageLoadFailed, PdfMetadataFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
 
 const emptySettings: Settings = {
   outputFolder: "/tmp/out",
@@ -25,6 +26,7 @@ interface MockState {
   configStoreWrite: ReturnType<typeof mock>;
   compressCompress: ReturnType<typeof mock>;
   compressValidate: ReturnType<typeof mock>;
+  pdfSetTitle: ReturnType<typeof mock>;
   restoredJobs: ReadonlyArray<Job>;
   initialSettings: Settings;
 }
@@ -35,6 +37,7 @@ const state: MockState = {
   configStoreWrite: mock(),
   compressCompress: mock(),
   compressValidate: mock(),
+  pdfSetTitle: mock(),
   restoredJobs: [],
   initialSettings: emptySettings,
 };
@@ -45,6 +48,7 @@ const resetState = () => {
   state.configStoreWrite = mock(() => Effect.void);
   state.compressCompress = mock(() => Effect.void);
   state.compressValidate = mock(() => Effect.succeed(true));
+  state.pdfSetTitle = mock(() => Effect.void);
   state.restoredJobs = [];
   state.initialSettings = emptySettings;
 };
@@ -79,6 +83,10 @@ const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyA
     compress: (pdfPath, keys) => state.compressCompress(pdfPath, keys) as ReturnType<PdfCompressorService["compress"]>,
     validate: (keys) => state.compressValidate(keys) as ReturnType<PdfCompressorService["validate"]>,
   };
+  const pdfGeneratorSvc: PdfGeneratorService = {
+    merge: () => Effect.void,
+    setTitle: (pdfPath, title) => state.pdfSetTitle(pdfPath, title) as ReturnType<PdfGeneratorService["setTitle"]>,
+  };
   return Layer.provide(
     DownloadEngineLive,
     Layer.mergeAll(
@@ -87,6 +95,7 @@ const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyA
       Layer.succeed(ConfigStore, configStoreSvc),
       Layer.succeed(JobStore, jobStoreSvc),
       Layer.succeed(PdfCompressor, pdfCompressorSvc),
+      Layer.succeed(PdfGenerator, pdfGeneratorSvc),
     ),
   );
 };
@@ -1909,6 +1918,82 @@ describe("DownloadEngine", () => {
       // #then
       expect(result).toBe(false);
       expect(state.compressValidate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("title metadata stamp", () => {
+    const writingScraper = (filename: string) =>
+      mock((_url: string, folder: string) =>
+        Effect.promise(() => fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46]))),
+      );
+
+    const withTmp = async (run: (tmp: string) => Promise<void>) => {
+      const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "engine-title-"));
+      try {
+        await run(tmp);
+      } finally {
+        await fs.rm(tmp, { recursive: true, force: true });
+      }
+    };
+
+    test("output file present → setTitle called with resolved displayTitle (even with no compression keys)", async () => {
+      await withTmp(async (tmp) => {
+        // #given — empty keys means compression is skipped; the stamp must still run
+        state.initialSettings = { ...emptySettings, outputFolder: tmp };
+        state.scribdExecute = writingScraper("Scribd document 1.pdf");
+
+        // #when
+        const snap = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            return yield* waitForQuiet(engine);
+          }),
+        );
+
+        // #then
+        expect(snap.jobs[0]!.status).toBe("Downloaded");
+        expect(state.pdfSetTitle).toHaveBeenCalledWith(path.join(tmp, "Scribd document 1.pdf"), "Scribd document 1");
+      });
+    });
+
+    test("setTitle failure never blocks the job from reaching Downloaded", async () => {
+      await withTmp(async (tmp) => {
+        // #given
+        state.initialSettings = { ...emptySettings, outputFolder: tmp };
+        state.scribdExecute = writingScraper("Scribd document 1.pdf");
+        state.pdfSetTitle = mock(() => Effect.fail(new PdfMetadataFailed({ path: "p", cause: new Error("boom") })));
+
+        // #when
+        const snap = await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            return yield* waitForQuiet(engine);
+          }),
+        );
+
+        // #then
+        expect(snap.jobs[0]!.status).toBe("Downloaded");
+        expect(state.pdfSetTitle).toHaveBeenCalledTimes(1);
+      });
+    });
+
+    test("output file missing → setTitle not called", async () => {
+      // #given — scraper writes nothing, so the resolved path does not exist
+      state.scribdExecute = mock(() => Effect.void);
+
+      // #when
+      await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          return yield* waitForQuiet(engine);
+        }),
+      );
+
+      // #then
+      expect(state.pdfSetTitle).not.toHaveBeenCalled();
     });
   });
 });

@@ -32,7 +32,7 @@ export const makeScrapersLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, Brows
 export const buildDownloadEngineLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> = PuppeteerSgLive) => {
   const ScrapersLayer = makeScrapersLayer(puppeteerLayer);
   const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
-  const EngineDeps = Layer.mergeAll(ScrapersLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive, PdfCompressorLive);
+  const EngineDeps = Layer.mergeAll(ScrapersLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive, PdfCompressorLive, PdfGeneratorLive);
   return Layer.provide(DownloadEngineLive, EngineDeps);
 };
 

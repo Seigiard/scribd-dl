@@ -23,6 +23,11 @@ export class PdfMergeFailed extends Data.TaggedError("PdfMergeFailed")<{
   readonly cause: unknown;
 }> {}
 
+export class PdfMetadataFailed extends Data.TaggedError("PdfMetadataFailed")<{
+  readonly path: string;
+  readonly cause: unknown;
+}> {}
+
 export class DirectoryIoFailed extends Data.TaggedError("DirectoryIoFailed")<{
   readonly path: string;
   readonly op: "create" | "remove";

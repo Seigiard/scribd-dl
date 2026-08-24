@@ -2,7 +2,6 @@ import { Context, Effect, Layer } from "effect";
 import * as scribdRegex from "../../const/ScribdRegex";
 
 const FETCH_TIMEOUT_MS = 5000;
-const USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
 
 export interface TitleResolverService {
   readonly resolve: (originalUrl: string, id: string) => Effect.Effect<string, never, never>;
@@ -20,27 +19,6 @@ const decodeEntities = (s: string): string =>
     .replace(/&#x27;/g, "'")
     .trim();
 
-const extractOgTitle = (html: string): string | null => {
-  const re1 = /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i;
-  const re2 = /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i;
-  const m = re1.exec(html) ?? re2.exec(html);
-  return m ? decodeEntities(m[1]!) : null;
-};
-
-const extractTitleTag = (html: string): string | null => {
-  const m = /<title[^>]*>([\s\S]*?)<\/title>/i.exec(html);
-  return m ? decodeEntities(m[1]!) : null;
-};
-
-export const firstSegment = (raw: string | null): string | null => {
-  if (!raw) return null;
-  const trimmed = raw.trim();
-  if (trimmed === "") return null;
-  const idx = trimmed.indexOf(" | ");
-  const head = idx === -1 ? trimmed : trimmed.slice(0, idx).trim();
-  return head === "" ? null : head;
-};
-
 export const slugFromUrl = (url: string): string | null => {
   const m = scribdRegex.DOCUMENT.exec(url);
   if (!m) return null;
@@ -52,25 +30,22 @@ export const slugFromUrl = (url: string): string | null => {
 };
 
 export interface Fetcher {
-  readonly fetchHtml: (url: string) => Effect.Effect<string, Error, never>;
+  readonly fetchOEmbedTitle: (url: string) => Effect.Effect<string, Error, never>;
 }
 
 const liveFetcher: Fetcher = {
-  fetchHtml: (url) =>
+  fetchOEmbedTitle: (url) =>
     Effect.tryPromise({
       try: async () => {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
         try {
-          const resp = await fetch(url, {
-            redirect: "follow",
-            signal: controller.signal,
-            headers: { "user-agent": USER_AGENT, accept: "text/html,application/xhtml+xml" },
-          });
-          if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}`);
-          }
-          return await resp.text();
+          const endpoint = `https://www.scribd.com/services/oembed?url=${encodeURIComponent(url)}&format=json`;
+          const response = await fetch(endpoint, { signal: controller.signal, headers: { accept: "application/json" } });
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          const title = ((await response.json()) as { readonly title?: unknown }).title;
+          if (typeof title !== "string") throw new Error("oEmbed response has no title");
+          return title;
         } finally {
           clearTimeout(timer);
         }
@@ -79,19 +54,20 @@ const liveFetcher: Fetcher = {
     }),
 };
 
+const usableTitle = (raw: string): string | null => {
+  const title = decodeEntities(raw);
+  return title !== "" && title.toLowerCase() !== "client challenge" ? title : null;
+};
+
 const makeResolver = (fetcher: Fetcher): TitleResolverService => ({
   resolve: (originalUrl, id) =>
     Effect.gen(function* () {
-      const slug = slugFromUrl(originalUrl);
-      if (!slug) return id;
-      const html = yield* fetcher.fetchHtml(originalUrl).pipe(Effect.catchAll(() => Effect.succeed<string | null>(null)));
-      if (html) {
-        const fromOg = firstSegment(extractOgTitle(html));
-        if (fromOg) return fromOg;
-        const fromTitle = firstSegment(extractTitleTag(html));
-        if (fromTitle) return fromTitle;
+      const rawTitle = yield* fetcher.fetchOEmbedTitle(originalUrl).pipe(Effect.catchAll(() => Effect.succeed<string | null>(null)));
+      if (rawTitle) {
+        const title = usableTitle(rawTitle);
+        if (title) return title;
       }
-      return slug;
+      return slugFromUrl(originalUrl) ?? id;
     }),
 });
 

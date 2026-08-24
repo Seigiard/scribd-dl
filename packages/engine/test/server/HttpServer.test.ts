@@ -8,6 +8,7 @@ import { JobStore, type JobStoreService } from "../../src/service/JobStore";
 import { PdfCompressor, type PdfCompressorService } from "../../src/service/PdfCompressor";
 import { Scrapers, type Scraper } from "../../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../../src/utils/io/ConfigLoader";
+import { PdfGenerator, type PdfGeneratorService } from "../../src/utils/io/PdfGenerator";
 import { HttpServerLive } from "../../src/server/HttpServerLive";
 
 interface MockState {
@@ -56,10 +57,22 @@ const pdfCompressorMockLayer = Layer.succeed(PdfCompressor, {
   validate: () => Effect.sync(() => state.validateResult),
 } satisfies PdfCompressorService);
 
+const pdfGeneratorMockLayer = Layer.succeed(PdfGenerator, {
+  merge: () => Effect.void,
+  setTitle: () => Effect.void,
+} satisfies PdfGeneratorService);
+
 const buildEngineLayer = (config: ConfigData = defaultConfig) =>
   Layer.provide(
     DownloadEngineLive,
-    Layer.mergeAll(scrapersMockLayer, Layer.succeed(ConfigLoader, config), configStoreMockLayer, jobStoreMockLayer, pdfCompressorMockLayer),
+    Layer.mergeAll(
+      scrapersMockLayer,
+      Layer.succeed(ConfigLoader, config),
+      configStoreMockLayer,
+      jobStoreMockLayer,
+      pdfCompressorMockLayer,
+      pdfGeneratorMockLayer,
+    ),
   );
 
 let serverFiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;
