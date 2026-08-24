@@ -545,6 +545,9 @@ describe("ScribdDownloader", () => {
       // #then
       expect(Exit.isSuccess(exit)).toBe(true);
       expect(state.generatePDF).toHaveBeenCalledTimes(3);
+      for (const call of state.generatePDF.mock.calls) {
+        expect(call[2]).toEqual({ width: 1000, height: 773, pageRanges: "1" });
+      }
       expect(state.merge).toHaveBeenCalledTimes(1);
       const mergeCall = state.merge.mock.calls[0];
       expect((mergeCall![0] as string[]).length).toBe(3);

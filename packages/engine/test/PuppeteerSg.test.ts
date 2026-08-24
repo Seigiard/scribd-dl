@@ -205,7 +205,7 @@ describe("PuppeteerSg", () => {
       Effect.gen(function* () {
         const svc = yield* PuppeteerSg;
         const page = yield* svc.getPage("about:blank");
-        yield* svc.generatePDF(page, "/tmp/out.pdf", { width: 100, height: 200 });
+        yield* svc.generatePDF(page, "/tmp/out.pdf", { width: 100, height: 200, pageRanges: "1" });
       }).pipe(Effect.provide(PuppeteerSgLive)),
     );
     const exit = await Effect.runPromiseExit(program);
@@ -216,6 +216,7 @@ describe("PuppeteerSg", () => {
       timeout: 0,
       width: 100,
       height: 200,
+      pageRanges: "1",
     });
   });
 });
