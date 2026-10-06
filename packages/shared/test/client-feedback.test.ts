@@ -317,6 +317,7 @@ describe("module boundaries", () => {
       "@effect/cli",
       "@effect/platform",
     ]);
+
     for (const spec of importSpecifiers) {
       expect(spec.startsWith("./") || spec.startsWith("../")).toBe(true);
       expect(forbidden.has(spec)).toBe(false);

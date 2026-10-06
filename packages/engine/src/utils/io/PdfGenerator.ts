@@ -4,32 +4,59 @@ import { PDFDocument } from "pdf-lib";
 import { PdfMergeFailed, PdfMetadataFailed } from "../../errors/DomainErrors";
 
 export interface PdfGeneratorService {
-  readonly merge: (inputPdfPaths: ReadonlyArray<string>, outputPath: string) => Effect.Effect<void, PdfMergeFailed, never>;
-  readonly setTitle: (pdfPath: string, title: string) => Effect.Effect<void, PdfMetadataFailed, never>;
+  readonly merge: (
+    inputPdfPaths: ReadonlyArray<string>,
+    outputPath: string,
+  ) => Effect.Effect<void, PdfMergeFailed, never>;
+  readonly setTitle: (
+    pdfPath: string,
+    title: string,
+  ) => Effect.Effect<void, PdfMetadataFailed, never>;
 }
 
-export class PdfGenerator extends Context.Tag("PdfGenerator")<PdfGenerator, PdfGeneratorService>() {}
+export class PdfGenerator extends Context.Tag("PdfGenerator")<
+  PdfGenerator,
+  PdfGeneratorService
+>() {}
 
-const merge = (inputPdfPaths: ReadonlyArray<string>, outputPath: string): Effect.Effect<void, PdfMergeFailed, never> => {
+export const PdfGeneratorTag: Context.Tag<PdfGenerator, PdfGeneratorService> = PdfGenerator;
+
+const merge = (
+  inputPdfPaths: ReadonlyArray<string>,
+  outputPath: string,
+  io: Pick<typeof fs, "readFile" | "writeFile" | "rename">,
+): Effect.Effect<void, PdfMergeFailed, never> => {
   if (inputPdfPaths.length === 0) {
     return Effect.fail(new PdfMergeFailed({ cause: new Error("no PDFs provided") }));
   }
+
   return Effect.tryPromise({
     try: async () => {
       const merged = await PDFDocument.create();
+
       for (const pdfPath of inputPdfPaths) {
-        const pdfBytes = await fs.readFile(pdfPath);
+        const pdfBytes = await io.readFile(pdfPath);
         const pdfDoc = await PDFDocument.load(pdfBytes);
         const copiedPages = await merged.copyPages(pdfDoc, pdfDoc.getPageIndices());
+
         for (const page of copiedPages) {
           merged.addPage(page);
         }
       }
-      const mergedBytes = await merged.save();
-      await fs.writeFile(outputPath, mergedBytes);
+
+      return await merged.save();
     },
     catch: (cause) => new PdfMergeFailed({ cause }),
-  });
+  }).pipe(
+    Effect.flatMap((mergedBytes) =>
+      Effect.uninterruptible(
+        Effect.tryPromise({
+          try: () => io.writeFile(outputPath, mergedBytes),
+          catch: (cause) => new PdfMergeFailed({ cause }),
+        }),
+      ),
+    ),
+  );
 };
 
 // Stamps the PDF's document Title without touching Producer/ModDate, so a value written
@@ -38,18 +65,39 @@ const merge = (inputPdfPaths: ReadonlyArray<string>, outputPath: string): Effect
 // own name inside updateInfoDict(), which runs at *load* time — so the load must pass
 // updateMetadata:false, not just the save. Atomic tmp+rename: the source bytes are already
 // in memory, so a partial write or crash never corrupts the finalized PDF.
-const setTitle = (pdfPath: string, title: string): Effect.Effect<void, PdfMetadataFailed, never> =>
+const setTitle = (
+  pdfPath: string,
+  title: string,
+  io: Pick<typeof fs, "readFile" | "writeFile" | "rename">,
+): Effect.Effect<void, PdfMetadataFailed, never> =>
   Effect.tryPromise({
     try: async () => {
-      const bytes = await fs.readFile(pdfPath);
+      const bytes = await io.readFile(pdfPath);
       const doc = await PDFDocument.load(bytes, { updateMetadata: false });
       doc.setTitle(title);
-      const stamped = await doc.save();
-      const tmpPath = `${pdfPath}.tmp`;
-      await fs.writeFile(tmpPath, stamped);
-      await fs.rename(tmpPath, pdfPath);
+
+      return await doc.save();
     },
     catch: (cause) => new PdfMetadataFailed({ path: pdfPath, cause }),
+  }).pipe(
+    Effect.flatMap((stamped) =>
+      Effect.uninterruptible(
+        Effect.tryPromise({
+          try: async () => {
+            const tmpPath = `${pdfPath}.tmp`;
+            await io.writeFile(tmpPath, stamped);
+            await io.rename(tmpPath, pdfPath);
+          },
+          catch: (cause) => new PdfMetadataFailed({ path: pdfPath, cause }),
+        }),
+      ),
+    ),
+  );
+
+export const makePdfGenerator = (io: Pick<typeof fs, "readFile" | "writeFile" | "rename"> = fs) =>
+  Layer.succeed(PdfGenerator, {
+    merge: (inputs, output) => merge(inputs, output, io),
+    setTitle: (pdfPath, title) => setTitle(pdfPath, title, io),
   });
 
-export const PdfGeneratorLive = Layer.succeed(PdfGenerator, { merge, setTitle });
+export const PdfGeneratorLive = makePdfGenerator();

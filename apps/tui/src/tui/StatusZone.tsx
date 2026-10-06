@@ -13,7 +13,9 @@ export interface StatusZoneProps {
 
 const severityColor = (severity: TransientSeverity): string | undefined => {
   if (severity === "warning") return "yellow";
+
   if (severity === "error") return "red";
+
   return undefined;
 };
 
@@ -27,7 +29,10 @@ export const StatusZone = ({
   if (transient !== null) {
     const color = severityColor(transient.severity);
     const bold = transient.severity !== "info";
-    const textProps = color === undefined ? { bold, dimColor: transient.severity === "info" } : { bold, color };
+
+    const textProps =
+      color === undefined ? { bold, dimColor: transient.severity === "info" } : { bold, color };
+
     return (
       <Box>
         <Text {...textProps}>{transient.message}</Text>

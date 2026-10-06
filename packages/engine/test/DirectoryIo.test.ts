@@ -1,15 +1,17 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Fiber, Option } from "effect";
+import { DirectoryIoFailed } from "../src/errors/DomainErrors";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import { DirectoryIo, DirectoryIoLive } from "../src/utils/io/DirectoryIo";
+import { DirectoryIo, DirectoryIoLive, makeDirectoryIo } from "../src/utils/io/DirectoryIo";
 
 const runCreate = (target: string) =>
   Effect.runPromiseExit(
     Effect.provide(
       Effect.gen(function* () {
         const svc = yield* DirectoryIo;
+
         return yield* svc.create(target);
       }),
       DirectoryIoLive,
@@ -21,22 +23,31 @@ const runRemove = (target: string) =>
     Effect.provide(
       Effect.gen(function* () {
         const svc = yield* DirectoryIo;
+
         return yield* svc.remove(target);
       }),
       DirectoryIoLive,
     ),
   );
 
-const isDirectoryIoFailed = (exit: Exit.Exit<unknown, unknown>, op: "create" | "remove"): boolean => {
+const isDirectoryIoFailed = (
+  exit: Exit.Exit<unknown, DirectoryIoFailed>,
+  op: "create" | "remove",
+  expectedPath: string,
+): boolean => {
   if (!Exit.isFailure(exit)) {
     return false;
   }
+
   const failure = Cause.failureOption(exit.cause);
-  if (failure._tag === "None") {
+
+  if (Option.isNone(failure)) {
     return false;
   }
-  const err = failure.value as { _tag?: string; op?: string; path?: string };
-  return err._tag === "DirectoryIoFailed" && err.op === op && typeof err.path === "string";
+
+  const err = failure.value;
+
+  return err instanceof DirectoryIoFailed && err.op === op && err.path === expectedPath;
 };
 
 describe("DirectoryIo", () => {
@@ -84,8 +95,73 @@ describe("DirectoryIo", () => {
       const exit = await runCreate(invalid);
 
       // #then
-      expect(isDirectoryIoFailed(exit, "create")).toBe(true);
+      expect(isDirectoryIoFailed(exit, "create", invalid)).toBe(true);
     });
+  });
+
+  describe("IO cancellation", () => {
+    test.each(["create", "remove"] satisfies ReadonlyArray<"create" | "remove">)(
+      "cancellation waits for %s before the same directory can be reused",
+      async (operation) => {
+        // #given
+        const target = path.join(tmpDir, "reused");
+        await fs.mkdir(target);
+        await fs.writeFile(path.join(target, "old.txt"), "old");
+        const entered = Promise.withResolvers<void>();
+        const release = Promise.withResolvers<void>();
+        const finished = Promise.withResolvers<void>();
+
+        const io = makeDirectoryIo({
+          mkdir: async (dir) => {
+            entered.resolve();
+            await release.promise;
+
+            try {
+              return await fs.mkdir(dir, { recursive: true });
+            } finally {
+              finished.resolve();
+            }
+          },
+          rm: async (dir) => {
+            entered.resolve();
+            await release.promise;
+
+            try {
+              await fs.rm(dir, { recursive: true, force: true });
+            } finally {
+              finished.resolve();
+            }
+          },
+        });
+
+        const fiber = Effect.runFork(io[operation](target));
+        await entered.promise;
+
+        // #when
+        let cancellationCompleted = false;
+
+        const cancellation = Effect.runPromise(Fiber.interrupt(fiber)).then((exit) => {
+          cancellationCompleted = true;
+
+          return exit;
+        });
+
+        await new Promise<void>((resolve) => setImmediate(resolve));
+        const completedBeforeRelease = cancellationCompleted;
+        release.resolve();
+        const exit = await cancellation;
+        await fs.rm(target, { recursive: true, force: true });
+        await fs.mkdir(target);
+        await fs.writeFile(path.join(target, "fresh.txt"), "fresh");
+        await finished.promise;
+
+        // #then
+        expect(completedBeforeRelease).toBe(false);
+        expect(Exit.isInterrupted(exit)).toBe(true);
+        expect(await fs.readdir(target)).toEqual(["fresh.txt"]);
+        expect(await fs.readFile(path.join(target, "fresh.txt"), "utf8")).toBe("fresh");
+      },
+    );
   });
 
   describe("remove", () => {

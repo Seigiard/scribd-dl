@@ -1,12 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "uhtml";
+import type { TauriInvoke } from "@/lib/backendUrl";
 
 const saveFolderMock = vi.fn(async (_path: string) => {});
-vi.mock("@/engineClient", () => ({
-  saveFolder: saveFolderMock,
-}));
 
 const { folderModal, $modalError, $draftFolder } = await import("@/views/folder-modal");
+
 const { $folder, $modal, resetStores } = await import("@/store");
 
 type ModalProps = {
@@ -19,7 +18,8 @@ type ModalProps = {
 const mountModal = (props: ModalProps): HTMLElement => {
   const container = document.createElement("div");
   document.body.appendChild(container);
-  render(container, folderModal({ draft: "", ...props }));
+  render(container, folderModal({ draft: "", ...props }, saveFolderMock));
+
   return container;
 };
 
@@ -49,12 +49,14 @@ describe("folderModal()", () => {
 
     // #when — opening triggers seed + needsFocus flag, then render attaches focus
     $modal.set("folder");
+
     const root = mountModal({
       mode: "folder",
       folder: "/home/me/Downloads",
       error: null,
       draft: $draftFolder.get(),
     });
+
     await flush();
 
     // #then
@@ -85,7 +87,13 @@ describe("folderModal()", () => {
   });
 
   it("renders modal with input value from draft when open", () => {
-    const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/home/me/Downloads" });
+    const root = mountModal({
+      mode: "folder",
+      folder: null,
+      error: null,
+      draft: "/home/me/Downloads",
+    });
+
     const input = root.querySelector<HTMLInputElement>(".folder-modal-input")!;
     expect(root.querySelector(".folder-modal")).not.toBeNull();
     expect(input.value).toBe("/home/me/Downloads");
@@ -213,22 +221,19 @@ describe("folderModal()", () => {
   });
 
   describe("native Browse button (Tauri runtime)", () => {
-    const invokeMock = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>();
+    const invokeMock = vi.fn<TauriInvoke>();
 
     beforeEach(() => {
       invokeMock.mockReset();
-      // @ts-expect-error — installing the Tauri global for the duration of these tests
       window.__TAURI__ = { core: { invoke: invokeMock } };
     });
 
     afterEach(() => {
-      // @ts-expect-error — clean up the global between scopes
       delete window.__TAURI__;
     });
 
     it("does not render Browse button without __TAURI__", () => {
       // #given — clear the Tauri global installed by this describe's beforeEach
-      // @ts-expect-error
       delete window.__TAURI__;
 
       // #when
@@ -318,7 +323,10 @@ describe("folderModal()", () => {
     $draftFolder.set("/my-draft");
     const container = document.createElement("div");
     document.body.appendChild(container);
-    render(container, folderModal({ mode: "folder", folder: "/old", error: null, draft: $draftFolder.get() }));
+    render(
+      container,
+      folderModal({ mode: "folder", folder: "/old", error: null, draft: $draftFolder.get() }),
+    );
     const input = container.querySelector<HTMLInputElement>(".folder-modal-input")!;
     expect(input.value).toBe("/my-draft");
 
@@ -326,7 +334,10 @@ describe("folderModal()", () => {
     $folder.set("/external");
 
     // #then — draft survives the external change; next render keeps user input
-    render(container, folderModal({ mode: "folder", folder: "/external", error: null, draft: $draftFolder.get() }));
+    render(
+      container,
+      folderModal({ mode: "folder", folder: "/external", error: null, draft: $draftFolder.get() }),
+    );
     expect(input.value).toBe("/my-draft");
     expect($draftFolder.get()).toBe("/my-draft");
   });

@@ -1,16 +1,19 @@
 import { afterEach, beforeEach, describe, expect, test } from "bun:test";
-import { Cause, Effect, Exit } from "effect";
+import { Cause, Effect, Exit, Option } from "effect";
+import type { PdfMergeFailed, PdfMetadataFailed } from "../src/errors/DomainErrors";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { PDFDocument } from "pdf-lib";
-import { PdfGenerator, PdfGeneratorLive } from "../src/utils/io/PdfGenerator";
+import { makePdfGenerator, PdfGenerator, PdfGeneratorLive } from "../src/utils/io/PdfGenerator";
 
 const createPdf = async (filePath: string, pageCount: number): Promise<void> => {
   const doc = await PDFDocument.create();
+
   for (let i = 0; i < pageCount; i++) {
     doc.addPage([612, 792]);
   }
+
   const bytes = await doc.save();
   await fs.writeFile(filePath, bytes);
 };
@@ -37,15 +40,90 @@ const runSetTitle = (pdfPath: string, title: string) =>
     ),
   );
 
-const failureTag = (exit: Exit.Exit<unknown, unknown>): string | undefined => {
+const failureTag = (
+  exit: Exit.Exit<unknown, PdfMergeFailed | PdfMetadataFailed>,
+): string | undefined => {
   if (!Exit.isFailure(exit)) {
     return undefined;
   }
+
   const failure = Cause.failureOption(exit.cause);
-  return failure._tag === "Some" ? (failure.value as { _tag?: string })._tag : undefined;
+
+  return Option.isSome(failure) ? failure.value._tag : undefined;
 };
 
-const isPdfMergeFailure = (exit: Exit.Exit<unknown, unknown>): boolean => failureTag(exit) === "PdfMergeFailed";
+const isPdfMergeFailure = (exit: Exit.Exit<unknown, PdfMergeFailed>): boolean =>
+  failureTag(exit) === "PdfMergeFailed";
+
+describe("PdfGenerator file transaction cancellation", () => {
+  for (const operation of ["merge", "setTitle"] as const) {
+    test(`${operation} cancellation waits for a started real file write`, async () => {
+      // #given
+      const directory = await fs.mkdtemp(path.join(os.tmpdir(), "pdf-transaction-"));
+      const input = path.join(directory, "input.pdf");
+      const output = path.join(directory, "output.pdf");
+      await createPdf(input, 1);
+      await createPdf(output, 1);
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const completed = Promise.withResolvers<void>();
+
+      const layer = makePdfGenerator({
+        readFile: fs.readFile,
+        rename: fs.rename,
+        writeFile: async (...args) => {
+          entered.resolve();
+          await release.promise;
+          await fs.writeFile(...args);
+          completed.resolve();
+        },
+      });
+
+      const controller = new AbortController();
+      let settled = false;
+
+      const running = Effect.runPromiseExit(
+        Effect.provide(
+          Effect.flatMap(
+            PdfGenerator,
+            (svc): Effect.Effect<void, PdfMergeFailed | PdfMetadataFailed> =>
+              operation === "merge"
+                ? svc.merge([input], output)
+                : svc.setTitle(output, "Old title"),
+          ),
+          layer,
+        ),
+        { signal: controller.signal },
+      );
+
+      void running.then(() => {
+        settled = true;
+      });
+
+      try {
+        await entered.promise;
+        // #when
+        controller.abort();
+        await Bun.sleep(10);
+        const canceledBeforeWriteFinished = settled;
+        release.resolve();
+        await completed.promise;
+        const exit = await running;
+        await runSetTitle(output, "New job title");
+
+        // #then
+        expect(canceledBeforeWriteFinished).toBe(false);
+        expect(Exit.isInterrupted(exit)).toBe(true);
+        const doc = await PDFDocument.load(await fs.readFile(output));
+        expect(doc.getTitle()).toBe("New job title");
+      } finally {
+        release.resolve();
+        await running;
+        await fs.rm(directory, { recursive: true, force: true });
+      }
+    });
+  }
+});
 
 describe("PdfGenerator.merge", () => {
   let tmpDir: string;

@@ -1,17 +1,17 @@
 import { Context, Effect, Layer } from "effect";
 import type { Page } from "puppeteer";
 import sanitize from "sanitize-filename";
-import { ConfigLoader } from "../utils/io/ConfigLoader";
-import { DirectoryIo } from "../utils/io/DirectoryIo";
-import { PdfGenerator } from "../utils/io/PdfGenerator";
+import { ConfigLoaderTag, type ConfigLoader } from "../utils/io/ConfigLoader";
+import { DirectoryIoTag, type DirectoryIo } from "../utils/io/DirectoryIo";
+import { PdfGeneratorTag, type PdfGenerator } from "../utils/io/PdfGenerator";
 import { resolvePdfPath } from "../utils/io/pdfPath";
-import { PuppeteerSg } from "../utils/request/PuppeteerSg";
-import { TitleResolver } from "../utils/request/TitleResolver";
+import { PuppeteerSgTag, type PuppeteerSg } from "../utils/request/PuppeteerSg";
+import { TitleResolverTag, type TitleResolver } from "../utils/request/TitleResolver";
 import { PageProcessFailed, PdfGenerationFailed, UnsupportedUrl } from "../errors/DomainErrors";
 import type { PageDimensions } from "../types/PageDimensions";
 import type { DocumentMeta } from "../types/DocumentMeta";
 import * as scribdRegex from "../const/ScribdRegex";
-import type { OnEvent, Scraper, ScraperError } from "./Scraper";
+import { ScraperEvent, type OnEvent, type Scraper, type ScraperError } from "./Scraper";
 
 export type { OnEvent, ScraperError as ScribdError } from "./Scraper";
 
@@ -19,7 +19,13 @@ export interface ScribdDownloaderService extends Scraper {
   readonly id: "scribd";
 }
 
-export class ScribdDownloader extends Context.Tag("ScribdDownloader")<ScribdDownloader, ScribdDownloaderService>() {}
+export class ScribdDownloader extends Context.Tag("ScribdDownloader")<
+  ScribdDownloader,
+  ScribdDownloaderService
+>() {}
+
+export const ScribdDownloaderTag: Context.Tag<ScribdDownloader, ScribdDownloaderService> =
+  ScribdDownloader;
 
 interface PageGroup {
   readonly ids: ReadonlyArray<string>;
@@ -29,20 +35,25 @@ interface PageGroup {
 
 const resolveEmbedUrl = (url: string): Effect.Effect<string, UnsupportedUrl, never> => {
   const documentMatch = scribdRegex.DOCUMENT.exec(url);
+
   if (documentMatch) {
     return Effect.succeed(`https://www.scribd.com/embeds/${documentMatch[2]}/content`);
   }
+
   if (scribdRegex.EMBED.test(url)) {
     return Effect.succeed(url);
   }
+
   return Effect.fail(new UnsupportedUrl({ url }));
 };
 
 const extractId = (embedUrl: string): Effect.Effect<string, UnsupportedUrl, never> => {
   const match = scribdRegex.EMBED.exec(embedUrl);
+
   if (!match) {
     return Effect.fail(new UnsupportedUrl({ url: embedUrl }));
   }
+
   return Effect.succeed(match[1]!);
 };
 
@@ -55,15 +66,12 @@ const processPage = (
     try: () =>
       page.evaluate(async (rendertime: number) => {
         // eslint-disable-next-line no-undef
-        const win = window as unknown as {
-          __helpers__: {
-            removeSelectorAll: (selector: string) => void;
-            lazyLoad: (selector: string, rendertime: number) => Promise<void>;
-            removeMarginSelectorAll: (selector: string) => void;
-          };
-        };
+        const helpers = window.__helpers__;
+
+        if (!helpers) throw new Error("Browser helpers were not installed");
+
         ["div.customOptInDialog", "div[aria-label='Cookie Consent Banner']"].forEach((sel) => {
-          win.__helpers__.removeSelectorAll(sel);
+          helpers.removeSelectorAll(sel);
         });
 
         // eslint-disable-next-line no-undef
@@ -83,42 +91,52 @@ const processPage = (
         // eslint-disable-next-line no-undef
         document.head.appendChild(style);
 
-        await win.__helpers__.lazyLoad("div.document_scroller", rendertime);
+        await helpers.lazyLoad("div.document_scroller", rendertime);
 
-        win.__helpers__.removeMarginSelectorAll("div.outer_page_container div[id^='outer_page_']");
+        helpers.removeMarginSelectorAll("div.outer_page_container div[id^='outer_page_']");
 
         const pages: Array<{ id: string; width: number; height: number }> = [];
         // eslint-disable-next-line no-undef
-        document.querySelectorAll("div.outer_page_container div[id^='outer_page_']").forEach((dom) => {
-          // eslint-disable-next-line no-undef
-          const computed = getComputedStyle(dom);
-          pages.push({
-            id: (dom as HTMLElement).id,
-            width: parseInt(computed.width),
-            height: parseInt(computed.height),
+        document
+          .querySelectorAll("div.outer_page_container div[id^='outer_page_']")
+          .forEach((dom) => {
+            // eslint-disable-next-line no-undef
+            const computed = getComputedStyle(dom);
+            pages.push({
+              id: dom.id,
+              width: parseInt(computed.width),
+              height: parseInt(computed.height),
+            });
           });
-        });
         // eslint-disable-next-line no-undef
         const container = document.querySelector("div.outer_page_container");
+
         if (container) {
           // eslint-disable-next-line no-undef
           document.body.innerHTML = container.innerHTML;
         }
+
         return { pages };
       }, rendertime),
     catch: (cause) => new PageProcessFailed({ url, cause }),
   });
 
-const groupPagesByDimensions = (pages: ReadonlyArray<PageDimensions>): Effect.Effect<ReadonlyArray<PageGroup>, never, never> =>
+const groupPagesByDimensions = (
+  pages: ReadonlyArray<PageDimensions>,
+): Effect.Effect<ReadonlyArray<PageGroup>, never, never> =>
   Effect.sync(() => {
     const groups: PageGroup[] = [];
+
     if (pages.length === 0) {
       return groups;
     }
+
     let ids: string[] = [pages[0]!.id];
+
     for (let i = 1; i < pages.length; i++) {
       const prev = pages[i - 1]!;
       const curr = pages[i]!;
+
       if (curr.width === prev.width && curr.height === prev.height) {
         ids.push(curr.id);
       } else {
@@ -126,8 +144,10 @@ const groupPagesByDimensions = (pages: ReadonlyArray<PageDimensions>): Effect.Ef
         ids = [curr.id];
       }
     }
+
     const last = pages[pages.length - 1]!;
     groups.push({ ids, width: last.width, height: last.height });
+
     return groups;
   });
 
@@ -144,12 +164,14 @@ const generatePDFs = (
       try: () =>
         page.evaluate(() => {
           // eslint-disable-next-line no-undef
-          (window as unknown as { __helpers__: { hideSelectorAll: (s: string) => void } }).__helpers__.hideSelectorAll(
-            "div[id^='outer_page_']",
-          );
+          const helpers = window.__helpers__;
+
+          if (!helpers) throw new Error("Browser helpers were not installed");
+          helpers.hideSelectorAll("div[id^='outer_page_']");
         }),
       catch: (cause) => new PageProcessFailed({ url: "", cause }),
     });
+
     for (let i = 0; i < groups.length; i++) {
       const group = groups[i]!;
       const idsArr = [...group.ids];
@@ -157,9 +179,10 @@ const generatePDFs = (
         try: () =>
           page.evaluate((ids: string[]) => {
             // eslint-disable-next-line no-undef
-            (window as unknown as { __helpers__: { showSelectorAll: (s: string) => void } }).__helpers__.showSelectorAll(
-              ids.map((id) => `div#${id}`).join(","),
-            );
+            const helpers = window.__helpers__;
+
+            if (!helpers) throw new Error("Browser helpers were not installed");
+            helpers.showSelectorAll(ids.map((id) => `div#${id}`).join(","));
           }, idsArr),
         catch: (cause) => new PageProcessFailed({ url: "", cause }),
       });
@@ -170,29 +193,38 @@ const generatePDFs = (
         try: () =>
           page.evaluate((ids: string[]) => {
             // eslint-disable-next-line no-undef
-            (window as unknown as { __helpers__: { removeSelectorAll: (s: string) => void } }).__helpers__.removeSelectorAll(
-              ids.map((id) => `div#${id}`).join(","),
-            );
+            const helpers = window.__helpers__;
+
+            if (!helpers) throw new Error("Browser helpers were not installed");
+            helpers.removeSelectorAll(ids.map((id) => `div#${id}`).join(","));
           }, idsArr),
         catch: (cause) => new PageProcessFailed({ url: "", cause }),
       });
-      yield* onEvent({ _tag: "RenderProgress", done: i + 1, total: groups.length });
+      yield* onEvent(ScraperEvent.RenderProgress({ done: i + 1, total: groups.length }));
     }
+
     return pdfPaths;
   });
 
 const allSameDimensions = (pages: ReadonlyArray<PageDimensions>): boolean => {
   if (pages.length === 0) return true;
   const first = pages[0]!;
+
   return pages.every((p) => p.width === first.width && p.height === first.height);
 };
 
 const SLIDESHOW_NEXT_SELECTOR = ".right_arrow[aria-label='Next page']";
+
 const SLIDESHOW_PAGE_CAP = 500;
+
 const SLIDESHOW_IMG_TIMEOUT_MS = 15_000;
+
 const SLIDESHOW_CLICK_TIMEOUT_MS = 5_000;
 
-const detectSlideshow = (page: Page, url: string): Effect.Effect<boolean, PageProcessFailed, never> =>
+const detectSlideshow = (
+  page: Page,
+  url: string,
+): Effect.Effect<boolean, PageProcessFailed, never> =>
   Effect.tryPromise({
     try: () =>
       page.evaluate((selector: string) => {
@@ -208,32 +240,87 @@ interface VisiblePageInfo {
   readonly height: number;
 }
 
-const getVisibleSlidePage = (page: Page, url: string): Effect.Effect<VisiblePageInfo | null, PageProcessFailed, never> =>
+type ClickNextOutcome = "changed" | "disabled" | "no-next" | "no-change";
+
+interface SlideObservation {
+  readonly visible: VisiblePageInfo | null;
+  readonly outcome: ClickNextOutcome | null;
+}
+
+// Puppeteer serializes this callback. Keep all runtime helpers inside it.
+const observeSlideInBrowser = async (
+  selector?: string,
+  prev?: string,
+  deadline = 0,
+): Promise<SlideObservation> => {
+  const getVisible = (): VisiblePageInfo | null => {
+    // Iterate outer_pages (they carry the id we use for tracking via seenIds
+    // and for waiting on navigation). For dimensions we prefer the inner
+    // `.newpage` — it's the actual content area without the decorative card
+    // frame, and its size becomes the PDF paper size.
+    // eslint-disable-next-line no-undef
+    const nodes = document.querySelectorAll("div.outer_page_container div[id^='outer_page_']");
+
+    for (const node of Array.from(nodes)) {
+      const el = node;
+
+      // eslint-disable-next-line no-undef
+      if (getComputedStyle(el).display === "none") continue;
+      const newpage = el.querySelector(".newpage");
+      const sizingEl = newpage ?? el;
+      const rect = sizingEl.getBoundingClientRect();
+
+      if (rect.width === 0 || rect.height === 0) continue;
+
+      return { id: el.id, width: Math.round(rect.width), height: Math.round(rect.height) };
+    }
+
+    return null;
+  };
+
+  if (selector === undefined) return { visible: getVisible(), outcome: null };
+
+  // eslint-disable-next-line no-undef
+  const next = document.querySelector(selector);
+
+  if (!(next instanceof HTMLElement)) return { visible: null, outcome: "no-next" };
+
+  if (next.getAttribute("aria-disabled") === "true" || next.classList.contains("disabled")) {
+    return { visible: null, outcome: "disabled" };
+  }
+
+  next.click();
+
+  return new Promise<SlideObservation>((resolve) => {
+    const tick = () => {
+      const visible = getVisible();
+
+      if (visible !== null && visible.id !== prev) return resolve({ visible, outcome: "changed" });
+
+      if (Date.now() >= deadline) return resolve({ visible, outcome: "no-change" });
+      // eslint-disable-next-line no-undef
+      setTimeout(tick, 50);
+    };
+
+    tick();
+  });
+};
+
+const getVisibleSlidePage = (
+  page: Page,
+  url: string,
+): Effect.Effect<VisiblePageInfo | null, PageProcessFailed, never> =>
   Effect.tryPromise({
-    try: () =>
-      page.evaluate(() => {
-        // Iterate outer_pages (they carry the id we use for tracking via seenIds
-        // and for waiting on navigation). For dimensions we prefer the inner
-        // `.newpage` — it's the actual content area without the decorative card
-        // frame, and its size becomes the PDF paper size.
-        // eslint-disable-next-line no-undef
-        const nodes = document.querySelectorAll("div.outer_page_container div[id^='outer_page_']");
-        for (const node of Array.from(nodes)) {
-          const el = node as HTMLElement;
-          // eslint-disable-next-line no-undef
-          if (getComputedStyle(el).display === "none") continue;
-          const newpage = el.querySelector(".newpage") as HTMLElement | null;
-          const sizingEl = newpage ?? el;
-          const rect = sizingEl.getBoundingClientRect();
-          if (rect.width === 0 || rect.height === 0) continue;
-          return { id: el.id, width: Math.round(rect.width), height: Math.round(rect.height) };
-        }
-        return null;
-      }),
+    try: () => page.evaluate(observeSlideInBrowser).then((result) => result.visible),
     catch: (cause) => new PageProcessFailed({ url, cause }),
   });
 
-const setBodyToPageSize = (page: Page, url: string, width: number, height: number): Effect.Effect<void, PageProcessFailed, never> =>
+const setBodyToPageSize = (
+  page: Page,
+  url: string,
+  width: number,
+  height: number,
+): Effect.Effect<void, PageProcessFailed, never> =>
   Effect.tryPromise({
     try: () =>
       page.evaluate(
@@ -250,7 +337,12 @@ const setBodyToPageSize = (page: Page, url: string, width: number, height: numbe
     catch: (cause) => new PageProcessFailed({ url, cause }),
   });
 
-const waitVisibleSlideImage = (page: Page, url: string, pageId: string, timeoutMs: number): Effect.Effect<void, PageProcessFailed, never> =>
+const waitVisibleSlideImage = (
+  page: Page,
+  url: string,
+  pageId: string,
+  timeoutMs: number,
+): Effect.Effect<void, PageProcessFailed, never> =>
   Effect.tryPromise({
     try: () =>
       page.evaluate(
@@ -259,21 +351,30 @@ const waitVisibleSlideImage = (page: Page, url: string, pageId: string, timeoutM
             const tick = () => {
               // eslint-disable-next-line no-undef
               const el = document.getElementById(id);
+
               if (!el) return resolve();
-              const imgs = Array.from(el.querySelectorAll("img")) as Array<HTMLImageElement>;
+              const imgs = Array.from(el.querySelectorAll("img"));
+
               if (imgs.length === 0) {
                 // Some pages legitimately have no images (pure text); accept after a short grace.
                 if (Date.now() >= deadline) return resolve();
                 // eslint-disable-next-line no-undef
                 setTimeout(tick, 150);
+
                 return;
               }
-              const done = imgs.every((i) => i.src && i.src.length > 0 && i.complete && i.naturalWidth > 0);
+
+              const done = imgs.every(
+                (i) => i.src && i.src.length > 0 && i.complete && i.naturalWidth > 0,
+              );
+
               if (done) return resolve();
+
               if (Date.now() >= deadline) return resolve();
               // eslint-disable-next-line no-undef
               setTimeout(tick, 100);
             };
+
             tick();
           }),
         pageId,
@@ -281,8 +382,6 @@ const waitVisibleSlideImage = (page: Page, url: string, pageId: string, timeoutM
       ),
     catch: (cause) => new PageProcessFailed({ url, cause }),
   });
-
-type ClickNextOutcome = "changed" | "disabled" | "no-next" | "no-change";
 
 const clickNextAndWait = (
   page: Page,
@@ -292,36 +391,9 @@ const clickNextAndWait = (
 ): Effect.Effect<ClickNextOutcome, PageProcessFailed, never> =>
   Effect.tryPromise({
     try: () =>
-      page.evaluate(
-        async (selector: string, prev: string, deadline: number): Promise<ClickNextOutcome> => {
-          // eslint-disable-next-line no-undef
-          const next = document.querySelector(selector) as HTMLElement | null;
-          if (!next) return "no-next";
-          if (next.getAttribute("aria-disabled") === "true" || next.classList.contains("disabled")) {
-            return "disabled";
-          }
-          next.click();
-          return new Promise<ClickNextOutcome>((resolve) => {
-            const tick = () => {
-              // eslint-disable-next-line no-undef
-              const nodes = document.querySelectorAll("div.outer_page_container .newpage");
-              for (const node of Array.from(nodes)) {
-                const el = node as HTMLElement;
-                // eslint-disable-next-line no-undef
-                if (getComputedStyle(el).display === "none") continue;
-                if (el.id !== prev) return resolve("changed");
-              }
-              if (Date.now() >= deadline) return resolve("no-change");
-              // eslint-disable-next-line no-undef
-              setTimeout(tick, 50);
-            };
-            tick();
-          });
-        },
-        SLIDESHOW_NEXT_SELECTOR,
-        prevId,
-        Date.now() + timeoutMs,
-      ),
+      page
+        .evaluate(observeSlideInBrowser, SLIDESHOW_NEXT_SELECTOR, prevId, Date.now() + timeoutMs)
+        .then((result) => result.outcome ?? "no-change"),
     catch: (cause) => new PageProcessFailed({ url, cause }),
   });
 
@@ -338,7 +410,10 @@ interface RunSlideshowArgs {
   readonly directoryIo: Context.Tag.Service<DirectoryIo>;
 }
 
-const maskSlideshowChrome = (page: Page, url: string): Effect.Effect<void, PageProcessFailed, never> =>
+const maskSlideshowChrome = (
+  page: Page,
+  url: string,
+): Effect.Effect<void, PageProcessFailed, never> =>
   Effect.tryPromise({
     try: () =>
       page.evaluate(() => {
@@ -385,7 +460,7 @@ const runSlideshow = ({
   puppeteerSg,
   pdfGenerator,
   directoryIo,
-}: RunSlideshowArgs): Effect.Effect<void, PageProcessFailed | PdfGenerationFailed, never> =>
+}: RunSlideshowArgs): Effect.Effect<void, ScraperError, never> =>
   Effect.gen(function* () {
     const tempDir = `${folder}/${safeIdentifier}_temp`;
     yield* directoryIo.create(tempDir);
@@ -408,7 +483,9 @@ const runSlideshow = ({
 
     for (let i = 0; i < SLIDESHOW_PAGE_CAP; i++) {
       const visible = yield* getVisibleSlidePage(page, embedUrl);
+
       if (!visible) break;
+
       if (seenIds.has(visible.id)) break;
       seenIds.add(visible.id);
 
@@ -420,21 +497,34 @@ const runSlideshow = ({
       yield* setBodyToPageSize(page, embedUrl, visible.width, visible.height);
 
       const slidePath = `${tempDir}/${(i + 1).toString().padStart(5, "0")}.pdf`;
-      yield* puppeteerSg.generatePDF(page, slidePath, { width: visible.width, height: visible.height, pageRanges: "1" });
+      yield* puppeteerSg.generatePDF(page, slidePath, {
+        width: visible.width,
+        height: visible.height,
+        pageRanges: "1",
+      });
       pdfPaths.push(slidePath);
 
-      yield* onEvent({ _tag: "ScrapeProgress", done: i + 1, total: i + 1 });
-      yield* onEvent({ _tag: "RenderProgress", done: i + 1, total: i + 1 });
+      yield* onEvent(ScraperEvent.ScrapeProgress({ done: i + 1, total: i + 1 }));
+      yield* onEvent(ScraperEvent.RenderProgress({ done: i + 1, total: i + 1 }));
 
-      const outcome = yield* clickNextAndWait(page, embedUrl, visible.id, SLIDESHOW_CLICK_TIMEOUT_MS);
+      const outcome = yield* clickNextAndWait(
+        page,
+        embedUrl,
+        visible.id,
+        SLIDESHOW_CLICK_TIMEOUT_MS,
+      );
+
       if (outcome !== "changed") break;
     }
 
     if (pdfPaths.length === 0) {
-      return yield* Effect.fail(new PageProcessFailed({ url: embedUrl, cause: "slideshow click loop produced 0 pages" }));
+      return yield* Effect.fail(
+        new PageProcessFailed({ url: embedUrl, cause: "slideshow click loop produced 0 pages" }),
+      );
     }
 
     yield* pdfGenerator.merge(pdfPaths, pdfPath);
+
     if (!debug) {
       yield* directoryIo.remove(tempDir);
     }
@@ -447,34 +537,50 @@ export const ScribdDownloaderLive: Layer.Layer<
 > = Layer.effect(
   ScribdDownloader,
   Effect.gen(function* () {
-    const puppeteerSg = yield* PuppeteerSg;
-    const pdfGenerator = yield* PdfGenerator;
-    const config = yield* ConfigLoader;
-    const directoryIo = yield* DirectoryIo;
-    const titleResolver = yield* TitleResolver;
+    const puppeteerSg = yield* PuppeteerSgTag;
+    const pdfGenerator = yield* PdfGeneratorTag;
+    const config = yield* ConfigLoaderTag;
+    const directoryIo = yield* DirectoryIoTag;
+    const titleResolver = yield* TitleResolverTag;
 
     const canHandle = (url: string): boolean => scribdRegex.DOMAIN.test(url);
 
     const deriveDisplayTitle = (url: string): string => {
       const doc = scribdRegex.DOCUMENT.exec(url);
+
       if (doc) return `Scribd document ${doc[2]}`;
       const embed = scribdRegex.EMBED.exec(url);
+
       if (embed) return `Scribd document ${embed[1]}`;
+
       return "Scribd document";
     };
 
-    const execute = (url: string, folder: string, onEvent: OnEvent, debug?: boolean): Effect.Effect<void, ScraperError, never> =>
+    const execute = (
+      url: string,
+      folder: string,
+      onEvent: OnEvent,
+      debug?: boolean,
+    ): Effect.Effect<void, ScraperError, never> =>
       Effect.scoped(
         Effect.gen(function* () {
           const embedUrl = yield* resolveEmbedUrl(url);
           const id = yield* extractId(embedUrl);
 
-          const titleEff = config.directory.filename === "title" ? titleResolver.resolve(url, id) : Effect.succeed(id);
-          const pageEff = Effect.acquireRelease(puppeteerSg.getPage(embedUrl), (p) => Effect.promise(() => p.close()));
+          const titleEff =
+            config.directory.filename === "title"
+              ? titleResolver.resolve(url, id)
+              : Effect.succeed(id);
 
-          const [title, page] = yield* Effect.all([titleEff, pageEff], { concurrency: "unbounded" });
+          const pageEff = Effect.acquireRelease(puppeteerSg.getPage(embedUrl), (p) =>
+            Effect.promise(() => p.close()),
+          );
 
-          yield* onEvent({ _tag: "TitleResolved", title });
+          const [title, page] = yield* Effect.all([titleEff, pageEff], {
+            concurrency: "unbounded",
+          });
+
+          yield* onEvent(ScraperEvent.TitleResolved({ title }));
 
           const identifier = sanitize(title);
           const safeIdentifier = identifier === "" ? id : identifier;
@@ -496,6 +602,7 @@ export const ScribdDownloaderLive: Layer.Layer<
               pdfGenerator,
               directoryIo,
             });
+
             return;
           }
 
@@ -503,7 +610,12 @@ export const ScribdDownloaderLive: Layer.Layer<
           const { pages } = yield* processPage(page, embedUrl, config.scribd.rendertime);
           const meta: DocumentMeta = { title, id, pages };
 
-          yield* onEvent({ _tag: "ScrapeProgress", done: meta.pages.length, total: meta.pages.length });
+          yield* onEvent(
+            ScraperEvent.ScrapeProgress({
+              done: meta.pages.length,
+              total: meta.pages.length,
+            }),
+          );
 
           if (debug === true) {
             // Debug-only side-effect — must not fail the scrape if the dump can't be written.
@@ -519,18 +631,24 @@ export const ScribdDownloaderLive: Layer.Layer<
 
           if (allSameDimensions(meta.pages)) {
             const dims = meta.pages[0];
+
             if (dims) {
-              yield* puppeteerSg.generatePDF(page, pdfPath, { width: dims.width, height: dims.height });
+              yield* puppeteerSg.generatePDF(page, pdfPath, {
+                width: dims.width,
+                height: dims.height,
+              });
             } else {
               yield* puppeteerSg.generatePDF(page, pdfPath);
             }
-            yield* onEvent({ _tag: "RenderProgress", done: 1, total: 1 });
+
+            yield* onEvent(ScraperEvent.RenderProgress({ done: 1, total: 1 }));
           } else {
             const tempDir = `${folder}/${safeIdentifier}_temp`;
             yield* directoryIo.create(tempDir);
             const groups = yield* groupPagesByDimensions(meta.pages);
             const pdfPaths = yield* generatePDFs(page, groups, tempDir, puppeteerSg, onEvent);
             yield* pdfGenerator.merge(pdfPaths, pdfPath);
+
             if (debug !== true) {
               yield* directoryIo.remove(tempDir);
             }

@@ -2,9 +2,9 @@ import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import { PersistenceFailed } from "../errors/DomainErrors";
-import { ConfigLoader } from "../utils/io/ConfigLoader";
+import { ConfigLoaderTag, type ConfigLoader } from "../utils/io/ConfigLoader";
 import { expandHome } from "../utils/io/path";
 
 export interface Settings {
@@ -21,39 +21,57 @@ export interface ConfigStoreService {
 
 export class ConfigStore extends Context.Tag("ConfigStore")<ConfigStore, ConfigStoreService>() {}
 
+export const ConfigStoreTag: Context.Tag<ConfigStore, ConfigStoreService> = ConfigStore;
+
 const SETTINGS_FILENAME = "settings.json";
 
 export const defaultBaseDir = (): string => path.join(os.homedir(), ".config", "scribd-dl");
 
-const coerceString = (value: unknown): string => (typeof value === "string" ? value : "");
+const StoredSettings = Schema.Struct({
+  outputFolder: Schema.String,
+  ilovepdfPublicKey: Schema.optional(Schema.Unknown),
+  ilovepdfSecretKey: Schema.optional(Schema.Unknown),
+  ilovepdfKeysValid: Schema.optional(Schema.Unknown),
+});
 
 const parseSettings = (raw: string): Settings | null => {
   try {
-    const parsed = JSON.parse(raw) as {
-      outputFolder?: unknown;
-      ilovepdfPublicKey?: unknown;
-      ilovepdfSecretKey?: unknown;
-      ilovepdfKeysValid?: unknown;
-    };
-    if (typeof parsed.outputFolder !== "string") return null;
+    const parsed = Schema.decodeUnknownSync(Schema.parseJson(StoredSettings))(raw);
+
     return {
       outputFolder: expandHome(parsed.outputFolder),
-      ilovepdfPublicKey: coerceString(parsed.ilovepdfPublicKey),
-      ilovepdfSecretKey: coerceString(parsed.ilovepdfSecretKey),
-      ilovepdfKeysValid: parsed.ilovepdfKeysValid === true,
+      // Invalid optional credentials must not discard a valid output folder.
+      ilovepdfPublicKey: Option.getOrElse(
+        Schema.decodeUnknownOption(Schema.String)(parsed.ilovepdfPublicKey),
+        () => "",
+      ),
+      ilovepdfSecretKey: Option.getOrElse(
+        Schema.decodeUnknownOption(Schema.String)(parsed.ilovepdfSecretKey),
+        () => "",
+      ),
+      ilovepdfKeysValid: Option.getOrElse(
+        Schema.decodeUnknownOption(Schema.Boolean)(parsed.ilovepdfKeysValid),
+        () => false,
+      ),
     };
   } catch {
     return null;
   }
 };
 
-export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never, ConfigLoader> =>
+export type ConfigStoreIo = Pick<typeof fs, "mkdir" | "writeFile" | "rename" | "chmod">;
+
+export const makeConfigStore = (
+  baseDir: string,
+  io: ConfigStoreIo = fs,
+): Layer.Layer<ConfigStore, never, ConfigLoader> =>
   Layer.effect(
     ConfigStore,
     Effect.gen(function* () {
-      const defaults = yield* ConfigLoader;
+      const defaults = yield* ConfigLoaderTag;
       const filePath = path.join(baseDir, SETTINGS_FILENAME);
       const tmpPath = `${filePath}.tmp`;
+      const writeLock = yield* Effect.makeSemaphore(1);
 
       const fallback = (): Settings => ({
         outputFolder: defaults.directory.output,
@@ -66,24 +84,32 @@ export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never
         try {
           const raw = fsSync.readFileSync(filePath, "utf8");
           const parsed = parseSettings(raw);
+
           if (!parsed) {
-            console.warn(`[ConfigStore] ${filePath} malformed or missing outputFolder; using defaults`);
+            console.warn(
+              `[ConfigStore] ${filePath} malformed or missing outputFolder; using defaults`,
+            );
+
             return fallback();
           }
+
           return parsed;
         } catch (cause) {
-          const err = cause as NodeJS.ErrnoException;
-          if (err.code !== "ENOENT") {
-            console.warn(`[ConfigStore] failed to read ${filePath} (${err.code}); using defaults`);
+          const err = Schema.decodeUnknownOption(Schema.Struct({ code: Schema.String }))(cause);
+
+          if (Option.isNone(err) || err.value.code !== "ENOENT") {
+            console.warn(`[ConfigStore] failed to read ${filePath}; using defaults`, cause);
           }
+
           return fallback();
         }
       });
 
-      const write = (settings: Settings): Effect.Effect<void, PersistenceFailed, never> =>
+      const performWrite = (settings: Settings): Effect.Effect<void, PersistenceFailed, never> =>
         Effect.tryPromise({
           try: async () => {
-            await fs.mkdir(baseDir, { recursive: true });
+            await io.mkdir(baseDir, { recursive: true });
+
             const body = `${JSON.stringify(
               {
                 outputFolder: settings.outputFolder,
@@ -94,16 +120,21 @@ export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never
               null,
               2,
             )}\n`;
+
             // File holds the iLovePDF secret key — keep it owner-only (0o600).
-            await fs.writeFile(tmpPath, body, { encoding: "utf8", mode: 0o600 });
-            await fs.rename(tmpPath, filePath);
-            await fs.chmod(filePath, 0o600);
+            await io.writeFile(tmpPath, body, { encoding: "utf8", mode: 0o600 });
+            await io.rename(tmpPath, filePath);
+            await io.chmod(filePath, 0o600);
           },
           catch: (cause) => new PersistenceFailed({ path: filePath, op: "write", cause }),
         });
+
+      const write = (settings: Settings): Effect.Effect<void, PersistenceFailed, never> =>
+        writeLock.withPermits(1)(Effect.uninterruptible(performWrite(settings)));
 
       return { read, write };
     }),
   );
 
-export const ConfigStoreLive: Layer.Layer<ConfigStore, never, ConfigLoader> = makeConfigStore(defaultBaseDir());
+export const ConfigStoreLive: Layer.Layer<ConfigStore, never, ConfigLoader> =
+  makeConfigStore(defaultBaseDir());

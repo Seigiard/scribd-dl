@@ -3,13 +3,16 @@ import { Effect } from "effect";
 import { TitleResolver, TitleResolverLive } from "../../src/utils/request/TitleResolver";
 
 const REFERENCE_URL = "https://www.scribd.com/document/422706811/Cypher-system-custom-GM-screen";
+
 const REFERENCE_ID = "422706811";
+
 const REFERENCE_TITLE = "Cypher System Task Difficulty Guide";
 
 const resolve = (url: string, id: string): Promise<string> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const svc = yield* TitleResolver;
+
       return yield* svc.resolve(url, id);
     }).pipe(Effect.provide(TitleResolverLive)),
   );

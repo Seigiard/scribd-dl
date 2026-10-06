@@ -27,7 +27,8 @@ import { StatusZone } from "./StatusZone";
 
 const DISCONNECT_MESSAGE = "Disconnected from engine";
 
-const hasActiveJobs = (snap: EngineSnapshot): boolean => snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
+const hasActiveJobs = (snap: EngineSnapshot): boolean =>
+  snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
 
 const looksLikePaste = (input: string): boolean => input.length > 5;
 
@@ -50,7 +51,12 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
     dismissSticky();
   }, [dismissSticky]);
 
-  const { snapshot, folder: liveFolder, settings } = useEngineState(baseUrl, initialFolder, { onWsOpen, onWsClose });
+  const {
+    snapshot,
+    folder: liveFolder,
+    settings,
+  } = useEngineState(baseUrl, initialFolder, { onWsOpen, onWsClose });
+
   const folder = liveFolder ?? initialFolder;
   const [settingsOverride, setSettingsOverride] = useState<SettingsResponse | null>(null);
   const effectiveSettings = settingsOverride ?? settings;
@@ -71,7 +77,10 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   const actionable = useMemo<ReadonlyArray<ActionableControl>>(
     () =>
       focusable.slots
-        .filter((s): s is Extract<FocusableSlot, { readonly kind: "remove" | "retry" }> => s.kind === "remove" || s.kind === "retry")
+        .filter(
+          (s): s is Extract<FocusableSlot, { readonly kind: "remove" | "retry" }> =>
+            s.kind === "remove" || s.kind === "retry",
+        )
         .map((s) => ({ type: s.kind, id: s.id })),
     [focusable.slots],
   );
@@ -90,6 +99,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   const handleEnqueueResult = useCallback(
     (jobs: EnqueueResponse["jobs"]) => {
       const feedback = summarizeEnqueueFeedback(jobs);
+
       if (feedback !== null) {
         showTransient(feedback.severity, feedback.message, { sticky: feedback.sticky });
       }
@@ -97,32 +107,49 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
     [showTransient],
   );
 
+  const clearWithFeedback = async (
+    command: (baseUrl: string) => Promise<number>,
+    failureMessage: string,
+  ): Promise<void> => {
+    try {
+      await command(baseUrl);
+    } catch (e) {
+      showTransient("error", e instanceof Error ? e.message : failureMessage);
+    }
+  };
+
   useInput((input, key) => {
     if (changeFolderOpen || settingsOpen) return;
 
     if (confirmDialog) {
       if (key.escape) {
         setConfirmDialog(null);
+
         return;
       }
+
       if (key.tab) {
-        setConfirmDialog((dialog) => (dialog ? { ...dialog, focus: dialog.focus === 0 ? 1 : 0 } : null));
+        setConfirmDialog((dialog) =>
+          dialog ? { ...dialog, focus: dialog.focus === 0 ? 1 : 0 } : null,
+        );
+
         return;
       }
+
       if (key.return) {
         const accepted = confirmDialog.focus === 1;
         const kind = confirmDialog.kind;
         setConfirmDialog(null);
+
         if (accepted && kind === "exit") {
           exit();
         }
+
         if (accepted && kind === "clearAll") {
-          void clearAll(baseUrl).catch((e: unknown) => {
-            const msg = e instanceof Error ? e.message : "Failed to clear all jobs";
-            showTransient("error", msg);
-          });
+          void clearWithFeedback(clearAll, "Failed to clear all jobs");
         }
       }
+
       return;
     }
 
@@ -132,42 +159,52 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
       } else {
         exit();
       }
+
       return;
     }
 
     if (input === "s" || input === "ы") {
       setSettingsOpen(true);
+
       return;
     }
 
     if (key.tab) {
       if (focusCount > 0) setFocusIndex((i) => (i + 1) % focusCount);
+
       return;
     }
 
     if (key.return) {
       if (!currentSlot) return;
+
       if (currentSlot.kind === "change") {
         setChangeFolderOpen(true);
+
         return;
       }
+
       if (currentSlot.kind === "clearFinished") {
-        void clearFinished(baseUrl).catch((e: unknown) => {
-          const msg = e instanceof Error ? e.message : "Failed to clear finished jobs";
-          showTransient("error", msg);
-        });
+        void clearWithFeedback(clearFinished, "Failed to clear finished jobs");
+
         return;
       }
+
       if (currentSlot.kind === "clearAll") {
         setConfirmDialog({ kind: "clearAll", focus: 0 });
+
         return;
       }
+
       if (currentSlot.kind === "remove") {
         void removeJob(baseUrl, currentSlot.id).catch(() => {});
+
         return;
       }
+
       if (currentSlot.kind === "retry") {
         void retryJob(baseUrl, currentSlot.id).catch(() => {});
+
         return;
       }
     }
@@ -175,9 +212,12 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
     if (looksLikePaste(input)) {
       if (!containsUrl(input)) {
         const empty = summarizeEnqueueFeedback([]);
+
         if (empty !== null) showTransient(empty.severity, empty.message, { sticky: empty.sticky });
+
         return;
       }
+
       void enqueueText(baseUrl, input)
         .then(({ jobs }) => handleEnqueueResult(jobs))
         .catch(() => {});
@@ -202,7 +242,9 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
         <Queue snapshot={snapshot} actionable={actionable} focusIndex={queueFocusIndex} />
       </Box>
       {confirmDialog?.kind === "exit" ? <ExitConfirm focus={confirmDialog.focus} /> : null}
-      {confirmDialog?.kind === "clearAll" ? <ClearAllConfirm focus={confirmDialog.focus} total={snapshot.jobs.length} /> : null}
+      {confirmDialog?.kind === "clearAll" ? (
+        <ClearAllConfirm focus={confirmDialog.focus} total={snapshot.jobs.length} />
+      ) : null}
       {changeFolderOpen ? (
         <ChangeFolderPopup
           initial={folder}
@@ -222,6 +264,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
             const { valid } = await saveSettings(baseUrl, { publicKey, secretKey });
             const cleared = publicKey === "" && secretKey === "";
             setSettingsOverride({ publicKey, secretKey, valid: cleared ? null : valid });
+
             return valid;
           }}
           onCancel={() => setSettingsOpen(false)}

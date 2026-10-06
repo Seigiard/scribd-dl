@@ -1,21 +1,30 @@
 import { HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import { Effect, Stream } from "effect";
-import type { JobId } from "@scribd-dl/shared";
+import { Effect, Schema, Stream } from "effect";
+import {
+  EnqueueRequestSchema,
+  FolderRequestSchema,
+  SettingsRequestSchema,
+  type ErrorResponse,
+  type JobId,
+} from "@scribd-dl/shared";
 import type { NotRemovable, NotRetryable } from "../errors/DomainErrors";
-import { DownloadEngine } from "../service/DownloadEngine";
+import { DownloadEngineTag } from "../service/DownloadEngine";
 
-const jsonError = (status: number, body: object) => HttpServerResponse.json(body, { status });
+const jsonError = (status: number, body: ErrorResponse) =>
+  HttpServerResponse.json(body, { status });
 
 const readJsonBody = Effect.gen(function* () {
   const req = yield* HttpServerRequest.HttpServerRequest;
+
   return yield* req.json;
 });
 
 const snapshotRoute = HttpRouter.get(
   "/snapshot",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const snap = yield* engine.snapshot;
+
     return yield* HttpServerResponse.json(snap);
   }),
 );
@@ -23,10 +32,15 @@ const snapshotRoute = HttpRouter.get(
 const enqueueRoute = HttpRouter.post(
   "/enqueue",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const body = yield* readJsonBody.pipe(Effect.catchAll(() => Effect.succeed({})));
-    const text = typeof (body as { text?: unknown }).text === "string" ? (body as { text: string }).text : "";
+
+    const { text } = yield* Schema.decodeUnknown(EnqueueRequestSchema)(body).pipe(
+      Effect.orElseSucceed(() => ({ text: "" })),
+    );
+
     const jobs = yield* engine.enqueue(text);
+
     return yield* HttpServerResponse.json({ jobs });
   }),
 );
@@ -34,8 +48,9 @@ const enqueueRoute = HttpRouter.post(
 const clearCompletedRoute = HttpRouter.del(
   "/jobs/completed",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const removed = yield* engine.clearCompleted;
+
     return yield* HttpServerResponse.json({ removed });
   }),
 );
@@ -43,8 +58,9 @@ const clearCompletedRoute = HttpRouter.del(
 const clearFailedRoute = HttpRouter.del(
   "/jobs/failed",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const removed = yield* engine.clearFailed;
+
     return yield* HttpServerResponse.json({ removed });
   }),
 );
@@ -52,8 +68,9 @@ const clearFailedRoute = HttpRouter.del(
 const clearAllRoute = HttpRouter.del(
   "/jobs",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const removed = yield* engine.clearAll;
+
     return yield* HttpServerResponse.json({ removed });
   }),
 );
@@ -61,13 +78,16 @@ const clearAllRoute = HttpRouter.del(
 const removeRoute = HttpRouter.del(
   "/jobs/:id",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const params = yield* HttpRouter.params;
-    const id = (params.id ?? "") as JobId;
+    const id: JobId = params.id ?? "";
+
     return yield* engine.remove(id).pipe(
       Effect.map(() => HttpServerResponse.empty({ status: 204 })),
       Effect.catchTag("JobNotFound", () => jsonError(404, { error: "JobNotFound" })),
-      Effect.catchTag("NotRemovable", (e: NotRemovable) => jsonError(409, { error: "NotRemovable", status: e.status })),
+      Effect.catchTag("NotRemovable", (e: NotRemovable) =>
+        jsonError(409, { error: "NotRemovable", status: e.status }),
+      ),
     );
   }),
 );
@@ -75,13 +95,16 @@ const removeRoute = HttpRouter.del(
 const retryRoute = HttpRouter.post(
   "/jobs/:id/retry",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const params = yield* HttpRouter.params;
-    const id = (params.id ?? "") as JobId;
+    const id: JobId = params.id ?? "";
+
     return yield* engine.retry(id).pipe(
       Effect.map(() => HttpServerResponse.empty({ status: 204 })),
       Effect.catchTag("JobNotFound", () => jsonError(404, { error: "JobNotFound" })),
-      Effect.catchTag("NotRetryable", (e: NotRetryable) => jsonError(409, { error: "NotRetryable", status: e.status })),
+      Effect.catchTag("NotRetryable", (e: NotRetryable) =>
+        jsonError(409, { error: "NotRetryable", status: e.status }),
+      ),
     );
   }),
 );
@@ -89,8 +112,9 @@ const retryRoute = HttpRouter.post(
 const folderGetRoute = HttpRouter.get(
   "/folder",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const path = yield* engine.outputFolder;
+
     return yield* HttpServerResponse.json({ path });
   }),
 );
@@ -98,13 +122,19 @@ const folderGetRoute = HttpRouter.get(
 const folderPostRoute = HttpRouter.post(
   "/folder",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const body = yield* readJsonBody.pipe(Effect.catchAll(() => Effect.succeed({})));
-    const path = typeof (body as { path?: unknown }).path === "string" ? (body as { path: string }).path : "";
+
+    const { path } = yield* Schema.decodeUnknown(FolderRequestSchema)(body).pipe(
+      Effect.orElseSucceed(() => ({ path: "" })),
+    );
+
     if (path.trim() === "") {
       return yield* jsonError(400, { error: "InvalidPath" });
     }
+
     yield* engine.setOutputFolder(path);
+
     return HttpServerResponse.empty({ status: 204 });
   }),
 );
@@ -115,8 +145,9 @@ const folderPostRoute = HttpRouter.post(
 const settingsGetRoute = HttpRouter.get(
   "/settings",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const settings = yield* engine.settings;
+
     return yield* HttpServerResponse.json(settings);
   }),
 );
@@ -124,11 +155,19 @@ const settingsGetRoute = HttpRouter.get(
 const settingsPostRoute = HttpRouter.post(
   "/settings",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const body = yield* readJsonBody.pipe(Effect.catchAll(() => Effect.succeed({})));
-    const publicKey = typeof (body as { publicKey?: unknown }).publicKey === "string" ? (body as { publicKey: string }).publicKey : "";
-    const secretKey = typeof (body as { secretKey?: unknown }).secretKey === "string" ? (body as { secretKey: string }).secretKey : "";
+
+    const { publicKey } = yield* Schema.decodeUnknown(SettingsRequestSchema.pick("publicKey"))(
+      body,
+    ).pipe(Effect.orElseSucceed(() => ({ publicKey: "" })));
+
+    const { secretKey } = yield* Schema.decodeUnknown(SettingsRequestSchema.pick("secretKey"))(
+      body,
+    ).pipe(Effect.orElseSucceed(() => ({ secretKey: "" })));
+
     const valid = yield* engine.setSettings({ publicKey, secretKey });
+
     return yield* HttpServerResponse.json({ valid });
   }),
 );
@@ -136,12 +175,13 @@ const settingsPostRoute = HttpRouter.post(
 const eventsRoute = HttpRouter.get(
   "/events",
   Effect.gen(function* () {
-    const engine = yield* DownloadEngine;
+    const engine = yield* DownloadEngineTag;
     const socket = yield* HttpServerRequest.upgrade;
     const write = yield* socket.writer;
     const pushEvents = Stream.runForEach(engine.events, (event) => write(JSON.stringify(event)));
     yield* Effect.forkScoped(pushEvents);
     yield* socket.run(() => Effect.void);
+
     return HttpServerResponse.empty();
   }),
 );

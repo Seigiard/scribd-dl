@@ -1,10 +1,15 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test, type Mock } from "bun:test";
 import { Effect } from "effect";
-import { type Fetcher, TitleResolver, makeTitleResolverLayer, slugFromUrl } from "../src/utils/request/TitleResolver";
+import {
+  type Fetcher,
+  TitleResolver,
+  makeTitleResolverLayer,
+  slugFromUrl,
+} from "../src/utils/request/TitleResolver";
 
 interface FakeFetcher {
-  fetchPageTitle: ReturnType<typeof mock>;
-  fetchOEmbedTitle: ReturnType<typeof mock>;
+  fetchPageTitle: Mock<Fetcher["fetchPageTitle"]>;
+  fetchOEmbedTitle: Mock<Fetcher["fetchOEmbedTitle"]>;
   url: string | null;
 }
 
@@ -15,26 +20,30 @@ const resetFetcher = () => {
   fakeFetcher.fetchPageTitle = mock(() => Effect.fail(new Error("page unavailable")));
   fakeFetcher.fetchOEmbedTitle = mock((url: string) => {
     fakeFetcher.url = url;
+
     return Effect.fail(new Error("oEmbed unavailable"));
   });
 };
 
 const fetcher: Fetcher = {
-  fetchPageTitle: (url) => fakeFetcher.fetchPageTitle(url) as ReturnType<Fetcher["fetchPageTitle"]>,
-  fetchOEmbedTitle: (url) => fakeFetcher.fetchOEmbedTitle(url) as ReturnType<Fetcher["fetchOEmbedTitle"]>,
+  fetchPageTitle: (url) => fakeFetcher.fetchPageTitle(url),
+  fetchOEmbedTitle: (url) => fakeFetcher.fetchOEmbedTitle(url),
 };
 
 const runResolve = (originalUrl: string, id: string): Promise<string> =>
   Effect.runPromise(
     Effect.gen(function* () {
       const svc = yield* TitleResolver;
+
       return yield* svc.resolve(originalUrl, id);
     }).pipe(Effect.provide(makeTitleResolverLayer(fetcher))),
   );
 
 describe("slugFromUrl", () => {
   test("extracts and humanises slug", () => {
-    expect(slugFromUrl("https://www.scribd.com/document/123/Smart-Money-Concept-Trading")).toBe("Smart Money Concept Trading");
+    expect(slugFromUrl("https://www.scribd.com/document/123/Smart-Money-Concept-Trading")).toBe(
+      "Smart Money Concept Trading",
+    );
   });
 
   test("decodes percent-escapes", () => {
@@ -64,7 +73,10 @@ describe("TitleResolver.resolve", () => {
     fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Canonical Document Title"));
 
     // #when
-    const title = await runResolve("https://www.scribd.com/document/649160495/Different-Url-Slug", "649160495");
+    const title = await runResolve(
+      "https://www.scribd.com/document/649160495/Different-Url-Slug",
+      "649160495",
+    );
 
     // #then
     expect(title).toBe("Canonical Document Title");
@@ -72,11 +84,16 @@ describe("TitleResolver.resolve", () => {
 
   test("prefers the displayed page title over the original oEmbed title", async () => {
     // #given
-    fakeFetcher.fetchPageTitle = mock(() => Effect.succeed("Cypher System Task Difficulty Guide | PDF | Attention | Nature"));
+    fakeFetcher.fetchPageTitle = mock(() =>
+      Effect.succeed("Cypher System Task Difficulty Guide | PDF | Attention | Nature"),
+    );
     fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Cypher system custom GM screen"));
 
     // #when
-    const title = await runResolve("https://www.scribd.com/document/422706811/Cypher-system-custom-GM-screen", "422706811");
+    const title = await runResolve(
+      "https://www.scribd.com/document/422706811/Cypher-system-custom-GM-screen",
+      "422706811",
+    );
 
     // #then
     expect(title).toBe("Cypher System Task Difficulty Guide");
@@ -89,7 +106,10 @@ describe("TitleResolver.resolve", () => {
     fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Original Document Title"));
 
     // #when
-    const title = await runResolve("https://www.scribd.com/document/42/Original-Document-Title", "42");
+    const title = await runResolve(
+      "https://www.scribd.com/document/42/Original-Document-Title",
+      "42",
+    );
 
     // #then
     expect(title).toBe("Original Document Title");
@@ -108,7 +128,9 @@ describe("TitleResolver.resolve", () => {
 
   test("decodes HTML entities in the oEmbed title", async () => {
     // #given
-    fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed(`Tom &amp; Jerry&#39;s &quot;Show&quot;`));
+    fakeFetcher.fetchOEmbedTitle = mock(() =>
+      Effect.succeed(`Tom &amp; Jerry&#39;s &quot;Show&quot;`),
+    );
 
     // #when
     const title = await runResolve("https://www.scribd.com/document/1/slug", "1");
@@ -144,7 +166,10 @@ describe("TitleResolver.resolve", () => {
     fakeFetcher.fetchOEmbedTitle = mock(() => Effect.succeed("Client Challenge"));
 
     // #when
-    const title = await runResolve("https://www.scribd.com/document/649160495/Cypher-System-Cheat-Sheet", "649160495");
+    const title = await runResolve(
+      "https://www.scribd.com/document/649160495/Cypher-System-Cheat-Sheet",
+      "649160495",
+    );
 
     // #then
     expect(title).toBe("Cypher System Cheat Sheet");
@@ -181,6 +206,20 @@ describe("TitleResolver.resolve", () => {
     // #then
     expect(title).toBe("42");
   });
+
+  test.each(["%", "%ZZ", "%E0%A4"])(
+    "falls back to id when metadata is unavailable and slug %s is malformed",
+    async (slug) => {
+      // #given
+      const url = `https://www.scribd.com/document/42/${slug}`;
+
+      // #when
+      const title = await runResolve(url, "42");
+
+      // #then
+      expect(title).toBe("42");
+    },
+  );
 
   test("passes the original URL to oEmbed", async () => {
     // #when

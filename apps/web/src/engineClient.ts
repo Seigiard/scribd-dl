@@ -1,27 +1,35 @@
-import { containsUrl, summarizeEnqueueFeedback, type JobEvent } from "@scribd-dl/shared";
 import {
-  clearAll,
-  clearFinished,
-  enqueueText,
-  fetchFolder,
-  fetchSettings,
-  fetchSnapshot,
-  removeJob,
-  retryJob,
-  saveSettings,
-  setFolder,
-} from "@/lib/api";
+  containsUrl,
+  JobEventSchema,
+  summarizeEnqueueFeedback,
+  type JobEvent,
+} from "@scribd-dl/shared";
+import * as defaultApi from "@/lib/api";
+import { Either, Match, Schema } from "effect";
 import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
-import { $connected, $folder, $jobs, $settings, applySnapshot, dismissSticky, showTransient } from "@/store";
+import {
+  $connected,
+  $folder,
+  $jobs,
+  $settings,
+  applySnapshot,
+  dismissSticky,
+  showTransient,
+} from "@/store";
 
 let ws: WebSocket | null = null;
+
+let api: typeof defaultApi = defaultApi;
+
 let baseUrl: string | null = null;
+
 let starting: Promise<void> | null = null;
 
 const refresh = async (): Promise<void> => {
   if (!baseUrl) return;
+
   try {
-    const snap = await fetchSnapshot(baseUrl);
+    const snap = await api.fetchSnapshot(baseUrl);
     applySnapshot(snap);
   } catch {
     // transport errors surface via the disconnect banner (R6)
@@ -30,8 +38,9 @@ const refresh = async (): Promise<void> => {
 
 const loadFolder = async (): Promise<void> => {
   if (!baseUrl) return;
+
   try {
-    $folder.set(await fetchFolder(baseUrl));
+    $folder.set(await api.fetchFolder(baseUrl));
   } catch {
     $folder.set(null);
   }
@@ -39,32 +48,20 @@ const loadFolder = async (): Promise<void> => {
 
 const loadSettings = async (): Promise<void> => {
   if (!baseUrl) return;
+
   try {
-    $settings.set(await fetchSettings(baseUrl));
+    $settings.set(await api.fetchSettings(baseUrl));
   } catch {
     $settings.set(null);
   }
 };
 
 const handleWsEvent = (event: JobEvent): void => {
-  if (event._tag === "OutputFolderChanged") {
-    $folder.set(event.path);
-    return;
-  }
-  if (event._tag === "SnapshotReplaced") {
-    applySnapshot(event.snapshot);
-    return;
-  }
-  void refresh();
-};
-
-const parseEvent = (data: unknown): JobEvent | null => {
-  if (typeof data !== "string") return null;
-  try {
-    return JSON.parse(data) as JobEvent;
-  } catch {
-    return null;
-  }
+  Match.value(event).pipe(
+    Match.tag("OutputFolderChanged", ({ path }) => $folder.set(path)),
+    Match.tag("SnapshotReplaced", ({ snapshot }) => applySnapshot(snapshot)),
+    Match.orElse(() => void refresh()),
+  );
 };
 
 const openSocket = (): void => {
@@ -80,17 +77,21 @@ const openSocket = (): void => {
     void loadFolder();
     void loadSettings();
   };
+
   next.onmessage = (msg) => {
     if (ws !== next) return;
-    const event = parseEvent(msg.data);
-    if (event) handleWsEvent(event);
+    const event = Schema.decodeUnknownEither(Schema.parseJson(JobEventSchema))(msg.data);
+
+    if (Either.isRight(event)) handleWsEvent(event.right);
     else void refresh();
   };
+
   next.onclose = () => {
     if (ws !== next) return;
     $connected.set(false);
     showTransient("error", "Disconnected from engine", { sticky: true });
   };
+
   next.onerror = () => {
     if (ws !== next) return;
     $connected.set(false);
@@ -104,6 +105,7 @@ export const startEngineClient = async (): Promise<void> => {
     baseUrl = await getBackendUrl();
     openSocket();
   })();
+
   return starting;
 };
 
@@ -113,6 +115,7 @@ export const reconnect = (): void => {
     ws = null;
     old.close();
   }
+
   openSocket();
 };
 
@@ -120,32 +123,37 @@ export const getBaseUrl = (): string | null => baseUrl;
 
 export const saveFolder = async (path: string): Promise<void> => {
   if (!baseUrl) throw new Error("Engine not connected");
-  await setFolder(baseUrl, path);
+  await api.setFolder(baseUrl, path);
   $folder.set(path);
 };
 
-export const saveSettingsCommand = async (publicKey: string, secretKey: string): Promise<boolean> => {
+export const saveSettingsCommand = async (
+  publicKey: string,
+  secretKey: string,
+): Promise<boolean> => {
   if (!baseUrl) throw new Error("Engine not connected");
-  const { valid } = await saveSettings(baseUrl, { publicKey, secretKey });
+  const { valid } = await api.saveSettings(baseUrl, { publicKey, secretKey });
   const cleared = publicKey === "" && secretKey === "";
   $settings.set({ publicKey, secretKey, valid: cleared ? null : valid });
+
   return valid;
 };
 
 export const removeJobById = async (id: string): Promise<void> => {
   if (!baseUrl) return;
-  await removeJob(baseUrl, id);
+  await api.removeJob(baseUrl, id);
 };
 
 export const retryJobById = async (id: string): Promise<void> => {
   if (!baseUrl) return;
-  await retryJob(baseUrl, id);
+  await api.retryJob(baseUrl, id);
 };
 
 export const commandClearFinished = async (): Promise<void> => {
   if (!baseUrl) return;
+
   try {
-    await clearFinished(baseUrl);
+    await api.clearFinished(baseUrl);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to clear finished jobs";
     showTransient("error", msg);
@@ -154,12 +162,21 @@ export const commandClearFinished = async (): Promise<void> => {
 
 export const commandClearAll = async (): Promise<void> => {
   if (!baseUrl) return;
-  const total = Object.values($jobs.get()).filter((j): j is NonNullable<typeof j> => j !== undefined).length;
+
+  const total = Object.values($jobs.get()).filter(
+    (j): j is NonNullable<typeof j> => j !== undefined,
+  ).length;
+
   if (total === 0) return;
-  const confirmed = window.confirm(`Remove all ${total} jobs and cancel any active downloads? Files on disk are kept.`);
+
+  const confirmed = window.confirm(
+    `Remove all ${total} jobs and cancel any active downloads? Files on disk are kept.`,
+  );
+
   if (!confirmed) return;
+
   try {
-    await clearAll(baseUrl);
+    await api.clearAll(baseUrl);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to clear all jobs";
     showTransient("error", msg);
@@ -173,12 +190,15 @@ const showFeedback = (feedback: ReturnType<typeof summarizeEnqueueFeedback>): vo
 
 export const handlePastedText = async (text: string): Promise<void> => {
   if (!baseUrl) return;
+
   if (!containsUrl(text)) {
     showFeedback(summarizeEnqueueFeedback([]));
+
     return;
   }
+
   try {
-    const { jobs } = await enqueueText(baseUrl, text);
+    const { jobs } = await api.enqueueText(baseUrl, text);
     showFeedback(summarizeEnqueueFeedback(jobs));
   } catch {
     // transport errors surface via the disconnect banner
@@ -188,6 +208,7 @@ export const handlePastedText = async (text: string): Promise<void> => {
 const isEditableTarget = (target: EventTarget | null): boolean => {
   if (!(target instanceof HTMLElement)) return false;
   const tag = target.tagName;
+
   return tag === "INPUT" || tag === "TEXTAREA" || target.isContentEditable;
 };
 
@@ -198,9 +219,11 @@ export const attachPasteHandler = (): void => {
   pasteHandler = (event: ClipboardEvent) => {
     if (isEditableTarget(event.target)) return;
     const text = event.clipboardData?.getData("text") ?? "";
+
     if (!text) return;
     void handlePastedText(text);
   };
+
   window.addEventListener("paste", pasteHandler);
 };
 
@@ -211,6 +234,9 @@ export const detachPasteHandler = (): void => {
 };
 
 export const __testing = {
+  setApi: (dependencies: typeof defaultApi): void => {
+    api = dependencies;
+  },
   setBaseUrl: (url: string | null): void => {
     baseUrl = url;
   },
@@ -221,6 +247,8 @@ export const __testing = {
       ws = null;
       old.close();
     }
+
+    api = defaultApi;
     baseUrl = null;
     starting = null;
     detachPasteHandler();

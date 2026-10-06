@@ -3,11 +3,10 @@ import { render } from "uhtml";
 import type { SettingsResponse } from "@scribd-dl/shared";
 
 const saveSettingsCommandMock = vi.fn(async (_pub: string, _sec: string) => true);
-vi.mock("@/engineClient", () => ({
-  saveSettingsCommand: saveSettingsCommandMock,
-}));
 
-const { settingsModal, $settingsError, $draftPublicKey, $draftSecretKey, $settingsValidity } = await import("@/views/settings-modal");
+const { settingsModal, $settingsError, $draftPublicKey, $draftSecretKey, $settingsValidity } =
+  await import("@/views/settings-modal");
+
 const { $settings, $modal, resetStores } = await import("@/store");
 
 type Props = {
@@ -23,14 +22,18 @@ const mount = (props: Props): HTMLElement => {
   document.body.appendChild(container);
   render(
     container,
-    settingsModal({
-      mode: props.mode,
-      publicKey: props.publicKey ?? "",
-      secretKey: props.secretKey ?? "",
-      validity: props.validity ?? "unverified",
-      error: props.error ?? null,
-    }),
+    settingsModal(
+      {
+        mode: props.mode,
+        publicKey: props.publicKey ?? "",
+        secretKey: props.secretKey ?? "",
+        validity: props.validity ?? "unverified",
+        error: props.error ?? null,
+      },
+      saveSettingsCommandMock,
+    ),
   );
+
   return container;
 };
 
@@ -70,12 +73,18 @@ describe("settingsModal()", () => {
     const saveBtn = (root: HTMLElement) => root.querySelector<HTMLButtonElement>(".btn-primary")!;
 
     // #then — exactly one filled → disabled
-    expect(saveBtn(mount({ mode: "settings", publicKey: "pub", secretKey: "" })).disabled).toBe(true);
+    expect(saveBtn(mount({ mode: "settings", publicKey: "pub", secretKey: "" })).disabled).toBe(
+      true,
+    );
     document.body.innerHTML = "";
-    expect(saveBtn(mount({ mode: "settings", publicKey: "", secretKey: "sec" })).disabled).toBe(true);
+    expect(saveBtn(mount({ mode: "settings", publicKey: "", secretKey: "sec" })).disabled).toBe(
+      true,
+    );
     document.body.innerHTML = "";
     // both filled → enabled
-    expect(saveBtn(mount({ mode: "settings", publicKey: "pub", secretKey: "sec" })).disabled).toBe(false);
+    expect(saveBtn(mount({ mode: "settings", publicKey: "pub", secretKey: "sec" })).disabled).toBe(
+      false,
+    );
     document.body.innerHTML = "";
     // both empty (clear) → enabled
     expect(saveBtn(mount({ mode: "settings", publicKey: "", secretKey: "" })).disabled).toBe(false);

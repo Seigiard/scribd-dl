@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Effect, Exit } from "effect";
+import { Cause, Chunk, Effect, Exit } from "effect";
 import { BrowserLaunchFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
 
 describe("DomainErrors", () => {
@@ -20,19 +20,12 @@ describe("DomainErrors", () => {
     const cause = new Error("x");
     const exit = await Effect.runPromiseExit(Effect.fail(new BrowserLaunchFailed({ cause })));
     expect(Exit.isFailure(exit)).toBe(true);
+
     if (Exit.isFailure(exit)) {
-      const failureOpt = exit.cause;
-      const failures = Array.from(
-        (function* walk(c: typeof failureOpt): Generator<unknown> {
-          if (c._tag === "Fail") yield (c as { error: unknown }).error;
-          else if (c._tag === "Sequential" || c._tag === "Parallel") {
-            yield* walk((c as { left: typeof failureOpt }).left);
-            yield* walk((c as { right: typeof failureOpt }).right);
-          }
-        })(failureOpt),
-      );
+      const failures = Chunk.toReadonlyArray(Cause.failures(exit.cause));
+
       expect(failures.length).toBeGreaterThan(0);
-      const first = failures[0] as { _tag: string };
+      const first = failures[0]!;
       expect(first._tag).toBe("BrowserLaunchFailed");
     }
   });

@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { EngineSnapshot, Job, JobId } from "@scribd-dl/shared";
+import type { EngineSnapshot, Job } from "@scribd-dl/shared";
 import { computeFocusable } from "../src/tui/focus";
 
 const job = (id: string, status: Job["status"], extra: Partial<Job> = {}): Job => ({
-  id: id as JobId,
+  id,
   url: `https://scribd.com/${id}`,
   domain: "scribd",
   displayTitle: id,
@@ -36,12 +36,26 @@ describe("computeFocusable", () => {
   });
 
   test("Failed retryable=true adds a retry slot after removes", () => {
-    const { slots } = computeFocusable(snap(job("a", "Failed", { failure: { reason: "x", retryable: true } }), job("b", "Queued")), null);
-    expect(slots.map((s) => s.kind)).toEqual(["change", "clearFinished", "clearAll", "remove", "retry"]);
+    const { slots } = computeFocusable(
+      snap(job("a", "Failed", { failure: { reason: "x", retryable: true } }), job("b", "Queued")),
+      null,
+    );
+
+    expect(slots.map((s) => s.kind)).toEqual([
+      "change",
+      "clearFinished",
+      "clearAll",
+      "remove",
+      "retry",
+    ]);
   });
 
   test("Failed retryable=false produces only clearFinished, no retry slot", () => {
-    const { slots } = computeFocusable(snap(job("a", "Failed", { failure: { reason: "x", retryable: false } })), null);
+    const { slots } = computeFocusable(
+      snap(job("a", "Failed", { failure: { reason: "x", retryable: false } })),
+      null,
+    );
+
     expect(slots.map((s) => s.kind)).toEqual(["change", "clearFinished", "clearAll"]);
   });
 });

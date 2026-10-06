@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Match } from "effect";
 import {
   fetchSettings,
   fetchSnapshot,
@@ -42,8 +43,10 @@ export const useEngineState = (
 
     const refresh = async () => {
       if (!alive) return;
+
       try {
         const snap = await fetchSnapshot(baseUrl);
+
         if (alive) setSnapshot(snap);
       } catch {
         // ignore — connection errors surface via onWsClose
@@ -52,8 +55,10 @@ export const useEngineState = (
 
     const refreshSettings = async () => {
       if (!alive) return;
+
       try {
         const s = await fetchSettings(baseUrl);
+
         if (alive) setSettings(s);
       } catch {
         // ignore — settings are non-critical; the popup seeds from null
@@ -62,15 +67,12 @@ export const useEngineState = (
 
     const onEvent = (event: JobEvent) => {
       if (!alive) return;
-      if (event._tag === "OutputFolderChanged") {
-        setFolder(event.path);
-        return;
-      }
-      if (event._tag === "SnapshotReplaced") {
-        setSnapshot(event.snapshot);
-        return;
-      }
-      void refresh();
+
+      Match.value(event).pipe(
+        Match.tag("OutputFolderChanged", ({ path }) => setFolder(path)),
+        Match.tag("SnapshotReplaced", ({ snapshot }) => setSnapshot(snapshot)),
+        Match.orElse(() => void refresh()),
+      );
     };
 
     void refresh();

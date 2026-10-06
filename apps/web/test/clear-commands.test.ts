@@ -1,20 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as api from "@/lib/api";
 
 const clearFinishedMock = vi.fn(async () => 0);
+
 const clearAllMock = vi.fn(async () => 0);
 
-vi.mock("@/lib/api", () => ({
-  enqueueText: vi.fn(),
-  fetchSnapshot: vi.fn(async () => ({ jobs: [] })),
-  fetchFolder: vi.fn(async () => "/tmp/out"),
-  removeJob: vi.fn(),
-  retryJob: vi.fn(),
-  setFolder: vi.fn(),
-  clearFinished: clearFinishedMock,
-  clearAll: clearAllMock,
-}));
-
 const { __testing, commandClearAll, commandClearFinished } = await import("@/engineClient");
+
 const { $jobs, $transient, resetStores } = await import("@/store");
 
 const FAKE_URL = "http://engine.test";
@@ -22,6 +14,7 @@ const FAKE_URL = "http://engine.test";
 describe("commandClearFinished", () => {
   beforeEach(() => {
     resetStores();
+    __testing.setApi({ ...api, clearFinished: clearFinishedMock, clearAll: clearAllMock });
     clearFinishedMock.mockReset();
     clearFinishedMock.mockResolvedValue(0);
     __testing.setBaseUrl(FAKE_URL);
@@ -55,6 +48,7 @@ describe("commandClearFinished", () => {
 describe("commandClearAll", () => {
   beforeEach(() => {
     resetStores();
+    __testing.setApi({ ...api, clearFinished: clearFinishedMock, clearAll: clearAllMock });
     clearAllMock.mockReset();
     clearAllMock.mockResolvedValue(0);
     __testing.setBaseUrl(FAKE_URL);
@@ -73,7 +67,7 @@ describe("commandClearAll", () => {
         domain: "scribd",
         displayTitle: `${i}`,
         status: "Queued",
-      } as never);
+      });
     }
   };
 

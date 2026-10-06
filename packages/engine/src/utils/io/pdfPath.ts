@@ -11,11 +11,14 @@ export const resolvePdfPath = ({ folder, displayTitle, fallbackId }: PdfPathInpu
   const sanitized = sanitize(displayTitle);
   const identifier = sanitized === "" ? fallbackId : sanitized;
   const cleanFolder = folder.replace(/\/+$/, "");
+
   return `${cleanFolder}/${identifier}.pdf`;
 };
 
 export const scribdIdFromUrl = (url: string): string | null => {
   const match = scribdRegex.DOCUMENT.exec(url) ?? scribdRegex.EMBED.exec(url);
+
   if (!match) return null;
+
   return scribdRegex.DOCUMENT.exec(url) ? match[2]! : match[1]!;
 };

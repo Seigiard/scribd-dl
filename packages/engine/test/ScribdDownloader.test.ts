@@ -1,6 +1,7 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { Effect, Exit, Layer } from "effect";
-import type { Page } from "puppeteer";
+import { beforeEach, describe, expect, mock, spyOn, test, type Mock } from "bun:test";
+import { Cause, Chunk, Effect, Exit, Layer, Predicate } from "effect";
+import puppeteer, { type Page } from "puppeteer";
+import type { ScraperEvent } from "../src/service/Scraper";
 import { ScribdDownloader, ScribdDownloaderLive } from "../src/service/ScribdDownloader";
 import { PuppeteerSg, type PuppeteerSgService } from "../src/utils/request/PuppeteerSg";
 import { PdfGenerator, type PdfGeneratorService } from "../src/utils/io/PdfGenerator";
@@ -22,12 +23,12 @@ interface MockState {
   isSlideshow: boolean;
   slideshowVisible: Array<{ id: string; width: number; height: number } | null>;
   slideshowClickOutcomes: Array<"changed" | "disabled" | "no-next" | "no-change">;
-  resolve: ReturnType<typeof mock>;
-  getPage: ReturnType<typeof mock>;
-  generatePDF: ReturnType<typeof mock>;
-  merge: ReturnType<typeof mock>;
-  dirCreate: ReturnType<typeof mock>;
-  dirRemove: ReturnType<typeof mock>;
+  resolve: Mock<TitleResolverService["resolve"]>;
+  getPage: Mock<PuppeteerSgService["getPage"]>;
+  generatePDF: Mock<PuppeteerSgService["generatePDF"]>;
+  merge: Mock<PdfGeneratorService["merge"]>;
+  dirCreate: Mock<DirectoryIoService["create"]>;
+  dirRemove: Mock<DirectoryIoService["remove"]>;
   config: ConfigData;
 }
 
@@ -59,34 +60,49 @@ const resetState = () => {
   state.slideshowVisible = [];
   state.slideshowClickOutcomes = [];
   state.page = {
-    evaluate: mock(async (fn: unknown, ..._args: unknown[]) => {
-      if (state.processPageThrows) throw new Error("evaluate failed");
-      // Dispatch by inspecting the evaluated function source. Each ScribdDownloader
-      // page.evaluate site carries a unique marker substring; the mock returns the
-      // matching fixture so unit tests don't need a real browser.
-      const src = String(fn);
-      if (src.includes("removeSelectorAll") || src.includes("removeMarginSelectorAll")) {
+    evaluate: mock(
+      async (fn: Parameters<Page["evaluate"]>[0], ...args: Parameters<Page["evaluate"]>[1][]) => {
+        if (state.processPageThrows) throw new Error("evaluate failed");
+        // Dispatch by inspecting the evaluated function source. Each ScribdDownloader
+        // page.evaluate site carries a unique marker substring; the mock returns the
+        // matching fixture so unit tests don't need a real browser.
+        const src = String(fn);
+
+        if (src.includes("removeSelectorAll") || src.includes("removeMarginSelectorAll")) {
+          return state.processPageResult;
+        }
+
+        if (src.includes("next.click()")) {
+          return args.length === 0
+            ? { visible: state.slideshowVisible.shift() ?? null, outcome: null }
+            : { visible: null, outcome: state.slideshowClickOutcomes.shift() ?? "no-next" };
+        }
+
+        if (src.includes("naturalWidth")) {
+          return undefined;
+        }
+
+        if (src.includes("getBoundingClientRect")) {
+          return state.slideshowVisible.shift() ?? null;
+        }
+
+        if (src.includes("querySelector(selector)")) {
+          return state.isSlideshow;
+        }
+
         return state.processPageResult;
-      }
-      if (src.includes("next.click()")) {
-        return state.slideshowClickOutcomes.shift() ?? "no-next";
-      }
-      if (src.includes("naturalWidth")) {
-        return undefined;
-      }
-      if (src.includes("getBoundingClientRect")) {
-        return state.slideshowVisible.shift() ?? null;
-      }
-      if (src.includes("querySelector(selector)")) {
-        return state.isSlideshow;
-      }
-      return state.processPageResult;
-    }),
+      },
+    ),
     close: mock(async () => {}),
     content: mock(async () => "<html><body>fake content</body></html>"),
   };
   state.resolve = mock((_url: string, _id: string) => Effect.succeed(state.resolvedTitle));
-  state.getPage = mock((_url: string) => Effect.succeed(state.page as unknown as Page));
+  const pageMethods: Partial<Page> = state.page;
+
+  // SAFETY: The downloader only calls evaluate, content and close on this injected
+  // page. The fixture implements those methods; no browser-owned Page APIs run.
+  const page = pageMethods as Page;
+  state.getPage = mock((_url: string) => Effect.succeed(page));
   state.generatePDF = mock(() => Effect.void);
   state.merge = mock(() => Effect.void);
   state.dirCreate = mock(() => Effect.void);
@@ -99,20 +115,24 @@ const resetState = () => {
 
 const buildLayer = () => {
   const puppeteerSvc: PuppeteerSgService = {
-    getPage: (url) => state.getPage(url) as ReturnType<PuppeteerSgService["getPage"]>,
-    generatePDF: (page, path, opts) => state.generatePDF(page, path, opts) as ReturnType<PuppeteerSgService["generatePDF"]>,
+    getPage: (url) => state.getPage(url),
+    generatePDF: (page, path, opts) => state.generatePDF(page, path, opts),
   };
+
   const pdfSvc: PdfGeneratorService = {
-    merge: (inputs, output) => state.merge(inputs, output) as ReturnType<PdfGeneratorService["merge"]>,
+    merge: (inputs, output) => state.merge(inputs, output),
     setTitle: () => Effect.void,
   };
+
   const dirSvc: DirectoryIoService = {
-    create: (p) => state.dirCreate(p) as ReturnType<DirectoryIoService["create"]>,
-    remove: (p) => state.dirRemove(p) as ReturnType<DirectoryIoService["remove"]>,
+    create: (p) => state.dirCreate(p),
+    remove: (p) => state.dirRemove(p),
   };
+
   const titleSvc: TitleResolverService = {
-    resolve: (url, id) => state.resolve(url, id) as ReturnType<TitleResolverService["resolve"]>,
+    resolve: (url, id) => state.resolve(url, id),
   };
+
   return Layer.provide(
     ScribdDownloaderLive,
     Layer.mergeAll(
@@ -172,16 +192,9 @@ describe("ScribdDownloader", () => {
 
     // #then
     expect(Exit.isFailure(exit)).toBe(true);
+
     if (Exit.isFailure(exit)) {
-      const failures: Array<{ _tag: string }> = [];
-      const walk = (c: { _tag: string } & Record<string, unknown>): void => {
-        if (c._tag === "Fail") failures.push((c as unknown as { error: { _tag: string } }).error);
-        else if (c._tag === "Sequential" || c._tag === "Parallel") {
-          walk(c.left as never);
-          walk(c.right as never);
-        }
-      };
-      walk(exit.cause as never);
+      const failures = Chunk.toReadonlyArray(Cause.failures(exit.cause));
       expect(failures[0]!._tag).toBe("UnsupportedUrl");
     }
   });
@@ -203,7 +216,7 @@ describe("ScribdDownloader", () => {
     // #then
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(state.generatePDF).toHaveBeenCalledTimes(1);
-    expect(state.generatePDF).toHaveBeenCalledWith(state.page as unknown as Page, "/tmp/out/doc.pdf", {
+    expect(state.generatePDF).toHaveBeenCalledWith(state.page, "/tmp/out/doc.pdf", {
       width: 800,
       height: 600,
     });
@@ -274,7 +287,7 @@ describe("ScribdDownloader", () => {
 
     // #then
     expect(Exit.isSuccess(exit)).toBe(true);
-    const pdfPath = state.generatePDF.mock.calls[0]![1] as string;
+    const pdfPath = state.generatePDF.mock.calls[0]![1];
     expect(pdfPath).not.toContain("/bar");
     expect(pdfPath).not.toContain("*");
     expect(pdfPath).toContain("foobarbaz");
@@ -301,20 +314,24 @@ describe("ScribdDownloader", () => {
         { id: "p2", width: 800, height: 600 },
       ],
     };
-    const captured: Array<{ _tag: string }> = [];
-    const onEvent = (e: { _tag: string }) => Effect.sync(() => void captured.push(e));
+    const captured: ScraperEvent[] = [];
+    const onEvent = (e: ScraperEvent) => Effect.sync(() => void captured.push(e));
 
     // #when
     const exit = await Effect.runPromiseExit(
       Effect.gen(function* () {
         const svc = yield* ScribdDownloader;
-        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", onEvent as Parameters<typeof svc.execute>[2]);
+        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", onEvent);
       }).pipe(Effect.provide(buildLayer())),
     );
 
     // #then
     expect(Exit.isSuccess(exit)).toBe(true);
-    expect(captured.map((e) => e._tag)).toEqual(["TitleResolved", "ScrapeProgress", "RenderProgress"]);
+    expect(captured.map((e) => e._tag)).toEqual([
+      "TitleResolved",
+      "ScrapeProgress",
+      "RenderProgress",
+    ]);
   });
 
   test("emits RenderProgress N times for N groups (multi-dim)", async () => {
@@ -327,19 +344,19 @@ describe("ScribdDownloader", () => {
         { id: "p3", width: 1200, height: 800 },
       ],
     };
-    const captured: Array<{ _tag: string }> = [];
-    const onEvent = (e: { _tag: string }) => Effect.sync(() => void captured.push(e));
+    const captured: ScraperEvent[] = [];
+    const onEvent = (e: ScraperEvent) => Effect.sync(() => void captured.push(e));
 
     // #when
     await Effect.runPromise(
       Effect.gen(function* () {
         const svc = yield* ScribdDownloader;
-        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", onEvent as Parameters<typeof svc.execute>[2]);
+        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", onEvent);
       }).pipe(Effect.provide(buildLayer())),
     );
 
     // #then — 1 Title + 1 Scrape + 3 Render
-    const renderCount = captured.filter((e) => e._tag === "RenderProgress").length;
+    const renderCount = captured.filter(Predicate.isTagged("RenderProgress")).length;
     expect(renderCount).toBe(3);
   });
 
@@ -352,12 +369,13 @@ describe("ScribdDownloader", () => {
         { id: "p2", width: 1000, height: 700 },
       ],
     };
-    const originalWrite = process.stdout.write.bind(process.stdout);
     const writes: string[] = [];
-    process.stdout.write = ((chunk: string | Uint8Array) => {
-      writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+
+    const writeSpy = spyOn(process.stdout, "write").mockImplementation((chunk) => {
+      writes.push(Predicate.isString(chunk) ? chunk : Buffer.from(chunk).toString());
+
       return true;
-    }) as typeof process.stdout.write;
+    });
 
     // #when
     try {
@@ -368,7 +386,7 @@ describe("ScribdDownloader", () => {
         }).pipe(Effect.provide(buildLayer())),
       );
     } finally {
-      process.stdout.write = originalWrite;
+      writeSpy.mockRestore();
     }
 
     // #then
@@ -397,6 +415,7 @@ describe("ScribdDownloader", () => {
       Effect.runPromise(
         Effect.gen(function* () {
           const svc = yield* ScribdDownloader;
+
           return svc.canHandle(url);
         }).pipe(Effect.provide(buildLayer())),
       );
@@ -428,6 +447,7 @@ describe("ScribdDownloader", () => {
       const id = await Effect.runPromise(
         Effect.gen(function* () {
           const svc = yield* ScribdDownloader;
+
           return svc.id;
         }).pipe(Effect.provide(buildLayer())),
       );
@@ -438,18 +458,21 @@ describe("ScribdDownloader", () => {
   });
 
   describe("debug=true behavior", () => {
-    const withBunWriteSpy = async (run: (writes: Array<{ path: string; data: string }>) => Promise<void>) => {
+    const withBunWriteSpy = async (
+      run: (writes: Array<{ path: string; data: string }>) => Promise<void>,
+    ) => {
       const writes: Array<{ path: string; data: string }> = [];
-      const originalBunWrite = Bun.write;
-      Bun.write = (async (path: unknown, data: unknown) => {
+
+      const writeSpy = spyOn(Bun, "write").mockImplementation(async (path, data) => {
         writes.push({ path: String(path), data: String(data) });
+
         return String(data).length;
-      }) as typeof Bun.write;
+      });
 
       try {
         await run(writes);
       } finally {
-        Bun.write = originalBunWrite;
+        writeSpy.mockRestore();
       }
     };
 
@@ -527,6 +550,82 @@ describe("ScribdDownloader", () => {
   });
 
   describe("slideshow detection and click-through", () => {
+    test("captures every visible slide once when Next changes the outer container asynchronously", async () => {
+      // #given
+      const browser = await puppeteer.launch({ headless: true });
+
+      try {
+        const page = await browser.newPage();
+        await page.setContent(`
+          <style>
+            .not_visible { display: none !important; }
+            .newpage { width: 800px; height: 600px; }
+          </style>
+          <div class="outer_page_container">
+            <div class="outer_page not_visible" id="outer_page_0">
+              <div class="newpage" id="hidden_content">Hidden preview</div>
+            </div>
+            <div class="outer_page" id="outer_page_1">
+              <div class="newpage" id="content_a">Introduction</div>
+            </div>
+            <div class="outer_page not_visible" id="outer_page_2">
+              <div class="newpage" id="content_b">Evidence</div>
+            </div>
+            <div class="outer_page not_visible" id="outer_page_3">
+              <div class="newpage" id="content_c">Conclusion</div>
+            </div>
+          </div>
+          <button class="right_arrow toolbar_btn" aria-label="Next page">Next</button>
+          <script>
+            const image = 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="1" height="1"/>';
+            document.querySelectorAll('.newpage').forEach(slide => {
+              const img = document.createElement('img');
+              img.src = image;
+              slide.appendChild(img);
+            });
+            let current = 1;
+            const next = document.querySelector('button');
+            next.addEventListener('click', () => {
+              setTimeout(() => {
+                document.getElementById('outer_page_' + current).classList.add('not_visible');
+                current += 1;
+                document.getElementById('outer_page_' + current).classList.remove('not_visible');
+                if (current === 3) next.setAttribute('aria-disabled', 'true');
+              }, 200);
+            });
+          </script>
+        `);
+        state.getPage = mock(() => Effect.succeed(page));
+        const captures = new Map<string, string>();
+        let mergedSlides: string[] = [];
+        state.generatePDF = mock((renderPage, path) =>
+          Effect.promise(async () => {
+            const text = await renderPage.evaluate(() => {
+              const slide = document.querySelector(".outer_page:not(.not_visible) .newpage");
+
+              return slide?.textContent ?? "";
+            });
+
+            captures.set(path, text);
+          }),
+        );
+        state.merge = mock((inputs) =>
+          Effect.sync(() => {
+            mergedSlides = inputs.map((path) => captures.get(path) ?? "missing capture");
+          }),
+        );
+
+        // #when
+        const exit = await runExecute("https://www.scribd.com/doc/999/deck");
+
+        // #then
+        expect(Exit.isSuccess(exit)).toBe(true);
+        expect(mergedSlides).toEqual(["Introduction", "Evidence", "Conclusion"]);
+      } finally {
+        await browser.close();
+      }
+    });
+
     test("slideshow path: per-page generatePDF + merge, scrollable processPage never runs", async () => {
       // #given
       state.resolvedTitle = "deck";
@@ -545,16 +644,18 @@ describe("ScribdDownloader", () => {
       // #then
       expect(Exit.isSuccess(exit)).toBe(true);
       expect(state.generatePDF).toHaveBeenCalledTimes(3);
+
       for (const call of state.generatePDF.mock.calls) {
         expect(call[2]).toEqual({ width: 1000, height: 773, pageRanges: "1" });
       }
+
       expect(state.merge).toHaveBeenCalledTimes(1);
       const mergeCall = state.merge.mock.calls[0];
-      expect((mergeCall![0] as string[]).length).toBe(3);
+      expect(mergeCall![0].length).toBe(3);
       // temp dir is created and removed (non-debug).
       const createCalls = state.dirCreate.mock.calls.map((c) => c[0]);
       expect(createCalls).toContain("/tmp/out");
-      expect(createCalls.some((p) => (p as string).endsWith("_temp"))).toBe(true);
+      expect(createCalls.some((p) => p.endsWith("_temp"))).toBe(true);
       expect(state.dirRemove).toHaveBeenCalledTimes(1);
     });
 
@@ -586,19 +687,14 @@ describe("ScribdDownloader", () => {
 
       // #then
       expect(Exit.isFailure(exit)).toBe(true);
+
       if (Exit.isFailure(exit)) {
-        const failures = Array.from(
-          (function* walk(c: { _tag: string } & Record<string, unknown>): Generator<unknown> {
-            if (c._tag === "Fail") yield (c as unknown as { error: unknown }).error;
-            else if (c._tag === "Sequential" || c._tag === "Parallel") {
-              yield* walk(c.left as never);
-              yield* walk(c.right as never);
-            }
-          })(exit.cause as never),
-        );
-        const first = failures[0] as { _tag: string };
+        const failures = Chunk.toReadonlyArray(Cause.failures(exit.cause));
+
+        const first = failures[0]!;
         expect(first._tag).toBe("PageProcessFailed");
       }
+
       expect(state.merge).toHaveBeenCalledTimes(0);
     });
 

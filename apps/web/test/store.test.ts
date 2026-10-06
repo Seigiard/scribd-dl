@@ -1,16 +1,21 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EngineSnapshot, Job, JobId } from "@scribd-dl/shared";
-import { $jobs, $transient, applySnapshot, dismissSticky, resetStores, showTransient } from "@/store";
+import {
+  $jobs,
+  $transient,
+  applySnapshot,
+  dismissSticky,
+  resetStores,
+  showTransient,
+} from "@/store";
 
 const job = (overrides: Partial<Job> & { id: JobId }): Job => ({
+  ...overrides,
   id: overrides.id,
   url: overrides.url ?? `https://example.com/${overrides.id}`,
   domain: overrides.domain ?? "scribd",
   displayTitle: overrides.displayTitle ?? `Doc ${overrides.id}`,
   status: overrides.status ?? "Queued",
-  ...(overrides.failure !== undefined ? { failure: overrides.failure } : {}),
-  ...(overrides.progress !== undefined ? { progress: overrides.progress } : {}),
-  ...(overrides.compression !== undefined ? { compression: overrides.compression } : {}),
 });
 
 const snapshot = (jobs: Job[]): EngineSnapshot => ({ jobs });
@@ -26,15 +31,15 @@ describe("store", () => {
   });
 
   it("adds a new job into the map", () => {
-    const a = job({ id: "a" as JobId });
+    const a = job({ id: "a" });
     applySnapshot(snapshot([a]));
     expect($jobs.get().a).toEqual(a);
   });
 
   it("snapshot preserves newest-first order (engine-authoritative)", () => {
     // #given — first snapshot adds A, B
-    const a = job({ id: "a" as JobId });
-    const b = job({ id: "b" as JobId });
+    const a = job({ id: "a" });
+    const b = job({ id: "b" });
     applySnapshot(snapshot([a, b]));
     expect(Object.keys($jobs.get())).toEqual(["a", "b"]);
 
@@ -46,8 +51,8 @@ describe("store", () => {
   });
 
   it("status change on existing job updates content", () => {
-    const a = job({ id: "a" as JobId, status: "Queued" });
-    const b = job({ id: "b" as JobId, status: "Queued" });
+    const a = job({ id: "a", status: "Queued" });
+    const b = job({ id: "b", status: "Queued" });
     applySnapshot(snapshot([a, b]));
 
     const aDownloading = { ...a, status: "Downloading" as const };
@@ -59,26 +64,36 @@ describe("store", () => {
 
   it("detects a compression-only change (compressing → failed → cleared)", () => {
     // #given
-    const a = job({ id: "a" as JobId, status: "Downloading", compression: { status: "compressing" } });
+    const a = job({
+      id: "a",
+      status: "Downloading",
+      compression: { status: "compressing" },
+    });
+
     applySnapshot(snapshot([a]));
     expect($jobs.get().a?.compression).toEqual({ status: "compressing" });
 
     // #when — compression fails on the Downloaded job
-    const failed = job({ id: "a" as JobId, status: "Downloaded", compression: { status: "failed", reason: "network error" } });
+    const failed = job({
+      id: "a",
+      status: "Downloaded",
+      compression: { status: "failed", reason: "network error" },
+    });
+
     applySnapshot(snapshot([failed]));
     // #then
     expect($jobs.get().a?.compression).toEqual({ status: "failed", reason: "network error" });
 
     // #when — a later download of the same job clears compression
-    const cleared = job({ id: "a" as JobId, status: "Downloaded" });
+    const cleared = job({ id: "a", status: "Downloaded" });
     applySnapshot(snapshot([cleared]));
     // #then
     expect($jobs.get().a?.compression).toBeUndefined();
   });
 
   it("removes a job whose id disappeared from the snapshot", () => {
-    const a = job({ id: "a" as JobId });
-    const b = job({ id: "b" as JobId });
+    const a = job({ id: "a" });
+    const b = job({ id: "b" });
     applySnapshot(snapshot([a, b]));
     applySnapshot(snapshot([a]));
 

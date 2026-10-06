@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option, Schema } from "effect";
 import * as fs from "node:fs/promises";
 import * as path from "node:path";
 import ILovePDFApi from "@ilovepdf/ilovepdf-nodejs";
@@ -12,15 +12,14 @@ export interface CompressionKeys {
   readonly secretKey: string;
 }
 
-// Structural view of the iLovePDF compress task — avoids a brittle deep import of
-// `@ilovepdf/ilovepdf-js-core/tasks/CompressTask` (KTD6).
+// Only completion matters for these commands; the adapter consumes provider responses.
 interface CompressTaskLike {
-  // start() returns { remaining_files } and populates this getter; quota is only
+  // start() populates this getter from remaining_files; quota is only
   // decremented at process(), so reading it after start() is a free pre-flight check.
-  readonly remainingFiles?: number;
-  start(): Promise<unknown>;
-  addFile(file: unknown): Promise<unknown>;
-  process(params: { compression_level: "low" }): Promise<unknown>;
+  readonly remainingFiles?: number | undefined;
+  start(): Promise<void>;
+  addFile(file: ILovePDFFile): Promise<void>;
+  process(params: { compression_level: "low" }): Promise<void>;
   download(): Promise<Uint8Array>;
 }
 
@@ -29,14 +28,23 @@ interface ILovePDFApiLike {
 }
 
 export type ApiFactory = (publicKey: string, secretKey: string) => ILovePDFApiLike;
-export type FileFactory = (absolutePath: string) => unknown;
+
+export type FileFactory = (absolutePath: string) => ILovePDFFile;
 
 export interface PdfCompressorService {
-  readonly compress: (pdfPath: string, keys: CompressionKeys) => Effect.Effect<void, CompressionFailed, never>;
+  readonly compress: (
+    pdfPath: string,
+    keys: CompressionKeys,
+  ) => Effect.Effect<void, CompressionFailed, never>;
   readonly validate: (keys: CompressionKeys) => Effect.Effect<boolean, never, never>;
 }
 
-export class PdfCompressor extends Context.Tag("PdfCompressor")<PdfCompressor, PdfCompressorService>() {}
+export class PdfCompressor extends Context.Tag("PdfCompressor")<
+  PdfCompressor,
+  PdfCompressorService
+>() {}
+
+export const PdfCompressorTag: Context.Tag<PdfCompressor, PdfCompressorService> = PdfCompressor;
 
 class InvalidResponseError extends Error {
   constructor() {
@@ -52,68 +60,102 @@ class QuotaExhaustedError extends Error {
   }
 }
 
-const isPdfBytes = (bytes: Uint8Array): boolean => bytes.length >= PDF_MAGIC.length && PDF_MAGIC.every((b, i) => bytes[i] === b);
+const isPdfBytes = (bytes: Uint8Array): boolean =>
+  bytes.length >= PDF_MAGIC.length && PDF_MAGIC.every((b, i) => bytes[i] === b);
 
-const statusOf = (cause: unknown): number | undefined => {
-  const status = (cause as { response?: { status?: unknown } } | null)?.response?.status;
-  return typeof status === "number" ? status : undefined;
-};
-
-const messageOf = (cause: unknown): string => {
-  const msg = (cause as { message?: unknown } | null)?.message;
-  return typeof msg === "string" ? msg : "";
-};
+const ProviderFailure = Schema.Struct({
+  message: Schema.optionalWith(Schema.String, { default: () => "" }),
+  response: Schema.optional(Schema.Struct({ status: Schema.Number })),
+});
 
 // Maps a raw failure to a fixed, sanitized user-facing reason plus a scrubbed cause.
 // Never surfaces raw library text (which could carry provider internals) and never
 // retains the raw AxiosError (whose headers carry the bearer token).
-const classifyFailure = (cause: unknown): { reason: string; cause: { message: string; status: number | undefined } } => {
-  const status = statusOf(cause);
-  const scrubbed = { message: messageOf(cause), status };
+const classifyFailure = (cause: Error, status: number | undefined) => {
+  const scrubbed = { message: cause.message, status };
 
-  if (cause instanceof InvalidResponseError) return { reason: "invalid response from compressor", cause: scrubbed };
+  if (cause instanceof InvalidResponseError)
+    return { reason: "invalid response from compressor", cause: scrubbed };
+
   if (cause instanceof QuotaExhaustedError) return { reason: "quota exceeded", cause: scrubbed };
+
   if (status === 401) return { reason: "invalid credentials", cause: scrubbed };
+
   if (status === 402 || status === 429) return { reason: "quota exceeded", cause: scrubbed };
+
   if (status === undefined) {
     // No HTTP response: either a network error, or a local JWT-signing throw from a
     // malformed secret key (KTD5) — the latter is a credentials problem, not network.
-    if (/jwt|sign|token/i.test(scrubbed.message)) return { reason: "invalid credentials", cause: scrubbed };
+    if (/jwt|sign|token/i.test(scrubbed.message))
+      return { reason: "invalid credentials", cause: scrubbed };
+
     return { reason: "network error", cause: scrubbed };
   }
+
   return { reason: "compression failed", cause: scrubbed };
 };
 
-export const makePdfCompressor = (makeApi: ApiFactory, makeFile: FileFactory): Layer.Layer<PdfCompressor, never, never> =>
+export const makePdfCompressor = (
+  makeApi: ApiFactory,
+  makeFile: FileFactory,
+  io: Pick<typeof fs, "writeFile" | "rename"> = fs,
+): Layer.Layer<PdfCompressor, never, never> =>
   Layer.succeed(PdfCompressor, {
     compress: (pdfPath, keys) => {
       const absPath = path.resolve(pdfPath);
-      return Effect.tryPromise({
-        try: async () => {
-          const api = makeApi(keys.publicKey, keys.secretKey);
-          const task = api.newTask("compress");
-          await task.start();
-          // Pre-flight: start() reports the account's remaining allowance without
-          // consuming it. Bail before uploading if the monthly quota is spent.
-          if (typeof task.remainingFiles === "number" && task.remainingFiles <= 0) {
+
+      const attempt = <A>(operation: () => Promise<A>) =>
+        Effect.tryPromise({
+          try: operation,
+          catch: (cause) => cause,
+        });
+
+      return Effect.gen(function* () {
+        const task = yield* attempt(async () =>
+          makeApi(keys.publicKey, keys.secretKey).newTask("compress"),
+        );
+
+        yield* attempt(() => task.start());
+
+        // Pre-flight: start() reports the account's remaining allowance without
+        // consuming it. Bail before uploading if the monthly quota is spent.
+        yield* attempt(async () => {
+          if (task.remainingFiles !== undefined && task.remainingFiles <= 0) {
             throw new QuotaExhaustedError();
           }
-          await task.addFile(makeFile(absPath));
-          await task.process({ compression_level: "low" });
-          const bytes = await task.download();
-          if (!isPdfBytes(bytes)) throw new InvalidResponseError();
-          // Atomic write: tmp + rename so a partial write, crash, or bad 200 never
-          // corrupts the original (KTD8). The source bytes are already in memory
-          // (ILovePDFFile reads them at construction), so the rename is safe.
-          const tmpPath = `${absPath}.tmp`;
-          await fs.writeFile(tmpPath, bytes);
-          await fs.rename(tmpPath, absPath);
-        },
-        catch: (cause) => {
-          const { reason, cause: scrubbed } = classifyFailure(cause);
+        });
+
+        yield* attempt(() => task.addFile(makeFile(absPath)));
+        yield* attempt(() => task.process({ compression_level: "low" }));
+        const bytes = yield* attempt(() => task.download());
+
+        if (!isPdfBytes(bytes)) return yield* Effect.fail(new InvalidResponseError());
+        // Atomic write: tmp + rename so a partial write, crash, or bad 200 never
+        // corrupts the original (KTD8). The source bytes are already in memory
+        // (ILovePDFFile reads them at construction), so the rename is safe.
+        // Interruption must wait for a started transaction before another job uses this path.
+        yield* Effect.uninterruptible(
+          attempt(async () => {
+            const tmpPath = `${absPath}.tmp`;
+            await io.writeFile(tmpPath, bytes);
+            await io.rename(tmpPath, absPath);
+          }),
+        );
+      }).pipe(
+        Effect.mapError((cause) => {
+          const decoded = Schema.decodeUnknownOption(ProviderFailure)(cause);
+          const status = Option.isSome(decoded) ? decoded.value.response?.status : undefined;
+
+          const error =
+            cause instanceof Error
+              ? cause
+              : new Error(Option.isSome(decoded) ? decoded.value.message : "");
+
+          const { reason, cause: scrubbed } = classifyFailure(error, status);
+
           return new CompressionFailed({ path: absPath, reason, cause: scrubbed });
-        },
-      });
+        }),
+      );
     },
     validate: (keys) =>
       Effect.tryPromise(async () => {
@@ -125,7 +167,35 @@ export const makePdfCompressor = (makeApi: ApiFactory, makeFile: FileFactory): L
       ),
   });
 
-const liveApiFactory: ApiFactory = (publicKey, secretKey) => new ILovePDFApi(publicKey, secretKey) as unknown as ILovePDFApiLike;
+const liveApiFactory: ApiFactory = (publicKey, secretKey) => {
+  const api = new ILovePDFApi(publicKey, secretKey);
+
+  return {
+    newTask: (tool) => {
+      const task = api.newTask(tool);
+
+      return {
+        get remainingFiles() {
+          return task.remainingFiles;
+        },
+        start: async () => {
+          await task.start();
+        },
+        addFile: async (file) => {
+          await task.addFile(file);
+        },
+        process: async (params) => {
+          await task.process(params);
+        },
+        download: () => task.download(),
+      };
+    },
+  };
+};
+
 const liveFileFactory: FileFactory = (absolutePath) => new ILovePDFFile(absolutePath);
 
-export const PdfCompressorLive: Layer.Layer<PdfCompressor, never, never> = makePdfCompressor(liveApiFactory, liveFileFactory);
+export const PdfCompressorLive: Layer.Layer<PdfCompressor, never, never> = makePdfCompressor(
+  liveApiFactory,
+  liveFileFactory,
+);

@@ -15,7 +15,8 @@ type Focus = "public" | "secret" | "cancel" | "save";
 
 const order: ReadonlyArray<Focus> = ["public", "secret", "cancel", "save"];
 
-const validityFromFlag = (valid: boolean | null): SettingsValidity => (valid === null ? "unverified" : valid ? "valid" : "invalid");
+const validityFromFlag = (valid: boolean | null): SettingsValidity =>
+  valid === null ? "unverified" : valid ? "valid" : "invalid";
 
 const VALIDITY_LABEL: Record<SettingsValidity, string> = {
   unverified: "Not verified yet",
@@ -31,9 +32,16 @@ const VALIDITY_COLOR: Record<SettingsValidity, string> = {
   invalid: "red",
 };
 
-const oneFilled = (pub: string, sec: string): boolean => (pub.trim() === "") !== (sec.trim() === "");
+const oneFilled = (pub: string, sec: string): boolean =>
+  (pub.trim() === "") !== (sec.trim() === "");
 
-export const SettingsPopup = ({ initialPublicKey, initialSecretKey, initialValid, onSave, onCancel }: SettingsPopupProps) => {
+export const SettingsPopup = ({
+  initialPublicKey,
+  initialSecretKey,
+  initialValid,
+  onSave,
+  onCancel,
+}: SettingsPopupProps) => {
   const [publicKey, setPublicKey] = useState(initialPublicKey);
   const [secretKey, setSecretKey] = useState(initialSecretKey);
   const [focus, setFocus] = useState<Focus>("public");
@@ -42,6 +50,7 @@ export const SettingsPopup = ({ initialPublicKey, initialSecretKey, initialValid
   const save = (): void => {
     const pub = publicKey.trim();
     const sec = secretKey.trim();
+
     // Both-empty clears; exactly-one-filled is incomplete and inert (never validated).
     if (oneFilled(pub, sec)) return;
     setValidity("validating");
@@ -56,24 +65,33 @@ export const SettingsPopup = ({ initialPublicKey, initialSecretKey, initialValid
   useInput((input, key) => {
     if (key.escape) {
       onCancel();
+
       return;
     }
+
     if (key.tab) {
       const idx = order.indexOf(focus);
       setFocus(order[(idx + 1) % order.length]!);
+
       return;
     }
+
     if (key.return) {
       if (focus === "cancel") onCancel();
       else save();
+
       return;
     }
+
     if (focus !== "public" && focus !== "secret") return;
     const setter = focus === "public" ? setPublicKey : setSecretKey;
+
     if (key.backspace || key.delete) {
       setter((v) => v.slice(0, -1));
+
       return;
     }
+
     if (input && !key.ctrl && !key.meta) {
       setter((v) => v + input);
     }
@@ -82,7 +100,9 @@ export const SettingsPopup = ({ initialPublicKey, initialSecretKey, initialValid
   return (
     <Box borderStyle="round" paddingX={2} paddingY={1} flexDirection="column" width="100%">
       <Text bold>iLovePDF compression keys</Text>
-      <Text dimColor>Downloads are uploaded to iLovePDF for compression when both keys are valid.</Text>
+      <Text dimColor>
+        Downloads are uploaded to iLovePDF for compression when both keys are valid.
+      </Text>
       <Field label="Public key" value={publicKey} focused={focus === "public"} />
       <Field label="Secret key" value={secretKey} focused={focus === "secret"} />
       <Box marginTop={1}>
@@ -99,7 +119,13 @@ export const SettingsPopup = ({ initialPublicKey, initialSecretKey, initialValid
 const Field = ({ label, value, focused }: { label: string; value: string; focused: boolean }) => (
   <Box marginTop={1} flexDirection="column">
     <Text dimColor>{label}</Text>
-    <Box paddingX={1} width="100%" borderStyle="single" borderColor={focused ? "cyan" : undefined} borderDimColor={!focused}>
+    <Box
+      paddingX={1}
+      width="100%"
+      borderStyle="single"
+      borderColor={focused ? "cyan" : undefined}
+      borderDimColor={!focused}
+    >
       <Text>{value}</Text>
       <Text color="cyan">{focused ? "▎" : " "}</Text>
     </Box>
@@ -114,5 +140,6 @@ const Button = ({ label, focused }: { label: string; focused: boolean }) => {
       </Text>
     );
   }
+
   return <Text dimColor>[{label}]</Text>;
 };
