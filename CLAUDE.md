@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Runtime and commands
 
-Runtime is **Bun 1.3.14** (ESM-only, `"type": "module"`). Source is TypeScript; Bun runs `.ts` natively — no separate build step. Do not introduce Node-specific build steps or a different package manager.
+Runtime is **Bun 1.4.2** (ESM-only, `"type": "module"`). Source is TypeScript; Bun runs `.ts` natively — no separate build step. Do not introduce Node-specific build steps or a different package manager.
 
 Repository is a **Bun workspaces monorepo** — one root `bun.lock`, one hoisted `node_modules/`. Workspaces are wired in the root `package.json` as `["packages/*", "apps/*"]`.
 
@@ -48,22 +48,22 @@ Internal versioning between workspaces uses `"@scribd-dl/shared": "workspace:*"`
 
 Scribd-only product. Slideshare and Everand support was removed.
 
-The single entry point is `packages/engine/engine.ts` — `@effect/cli` parses one option (`--port`) and starts the HTTP/WS sidecar via `BunRuntime.runMain`. There is no standalone CLI download mode; all clients (Ink TUI, Vite SPA, future Tauri desktop) talk to the engine over HTTP/WS.
+The single entry point is `packages/engine/engine.ts` — `effect/cli` parses one option (`--port`) and starts the HTTP/WS sidecar via `BunRuntime.runMain`. There is no standalone CLI download mode; all clients (Ink TUI, Vite SPA, Tauri desktop) talk to the engine over HTTP/WS.
 
-The downloader runs on [Effect.ts](https://effect.website/) with **Layer-based dependency injection** instead of singleton instances. Each component is a `Context.Tag` with a `*Live` Layer:
+The downloader runs on **Effect 4** with **Layer-based dependency injection** instead of singleton instances. Each component is a `Context.Service` with a `*Live` Layer. CLI modules come from `effect/cli`, HTTP modules from `effect/http`, and Bun services from `@effect/platform-bun`:
 
-- `DownloadEngine` (`packages/engine/src/service/DownloadEngine.ts`) — event-driven job queue. `enqueue(text)` extracts URLs and classifies scribd vs unsupported, supported go to a single-fiber worker, unsupported immediately become Failed Jobs (`retryable: false`). Exposes `remove / retry / snapshot / events / outputFolder / setOutputFolder`. Other UIs plug into the same `Context.Tag` without changing the engine.
+- `DownloadEngine` (`packages/engine/src/service/DownloadEngine.ts`) — event-driven job queue. `enqueue(text)` extracts URLs and classifies scribd vs unsupported, supported go to a single-fiber worker, unsupported immediately become Failed Jobs (`retryable: false`). Exposes `remove / retry / snapshot / events / outputFolder / setOutputFolder`. Other UIs plug into the same `Context.Service` without changing the engine.
 - `ConfigStore` (`packages/engine/src/service/ConfigStore.ts`) — persistent `outputFolder` setting backed by `~/.config/scribd-dl/settings.json`. Atomic write via tmp+rename. Corrupt/missing files fall back to defaults with a warning.
 - `JobStore` (`packages/engine/src/service/JobStore.ts`) — persistent state-snapshot of the queue backed by `~/.config/scribd-dl/jobs.jsonl` (one JSON-encoded `Job` per line). Atomic write serialized by a Semaphore. On read, `Downloading` is normalized to `Queued` (with `progress` dropped) so a kill-mid-flight engine resumes work on next start.
 - `ScribdDownloader` (`packages/engine/src/service/ScribdDownloader.ts`) — Effect-based scraping + PDF generation, consumed by `DownloadEngine`'s worker as the executor of one job.
-- `PuppeteerSg` (`packages/engine/src/utils/request/PuppeteerSg.ts`) — `Layer.scoped` over `Effect.acquireRelease(puppeteer.launch, browser.close)`. **Scope guarantees browser cleanup** on success, error, and interrupt — no `process.on("exit")` best-effort logic.
+- `PuppeteerSg` (`packages/engine/src/utils/request/PuppeteerSg.ts`) — `Layer.effect` over `Effect.acquireRelease(puppeteer.launch, browser.close)`. Effect 4 layers provide the acquisition scope. **Scope guarantees browser cleanup** on success, error, and interrupt.
 - `PdfGenerator` (`packages/engine/src/utils/io/PdfGenerator.ts`) — Effect wrapper over `pdf-lib` (`merge` only; image-flow `generate` was removed with Slideshare).
-- `ConfigLoader` (`packages/engine/src/utils/io/ConfigLoader.ts`) — `Context.Tag` exposing the *static defaults* (`DEFAULT_CONFIG`: `rendertime`, `filename`, default `outputFolder`). `makeConfigLoader(data)` returns a `Layer.succeed`. Persistent overrides live in `ConfigStore`; `ConfigLoader` is the floor.
+- `ConfigLoader` (`packages/engine/src/utils/io/ConfigLoader.ts`) — `Context.Service` exposing the *static defaults* (`DEFAULT_CONFIG`: `rendertime`, `filename`, default `outputFolder`). `makeConfigLoader(data)` returns a `Layer.succeed`. Persistent overrides live in `ConfigStore`; `ConfigLoader` is the floor.
 - `DirectoryIo` (`packages/engine/src/utils/io/DirectoryIo.ts`) — `fs.promises.mkdir/rm` wrapped in tagged errors (`DirectoryIoFailed`).
 
 Domain errors live in `packages/engine/src/errors/DomainErrors.ts` as `Data.TaggedError` classes. Each `*Live` Layer fails into one of them; consumers see typed error channels.
 
-**Persistence behavior.** `DownloadEngine` reads `ConfigStore` and `JobStore` once during its `Layer.scoped` acquire, seeds its `Ref<Map>` + `Ref<folder>` from them, and writes back on every status / title / folder mutation. `JobProgress` events are broadcast on WS but **never** persisted — only state that survives a restart hits disk. Persist errors are logged but never fail the operation that caused them.
+**Persistence behavior.** `DownloadEngine` reads `ConfigStore` and `JobStore` once during its `Layer.effect` acquisition, seeds its `Ref<Map>` + `Ref<folder>` from them, and writes back on every status / title / folder mutation. `JobProgress` events are broadcast on WS but **never** persisted — only state that survives a restart hits disk. Persist errors are logged but never fail the operation that caused them.
 
 Configuration: there are no CLI flags for `outputFolder` / `filename` / `rendertime`. `outputFolder` is mutated via `POST /folder` (or persisted on startup); `filename` and `rendertime` are constants in `DEFAULT_CONFIG`.
 
@@ -71,13 +71,14 @@ Configuration: there are no CLI flags for `outputFolder` / `filename` / `rendert
 
 ## Web SPA architecture
 
-`apps/web` is **uhtml v4 + vanilla nanostores islands**. There are no Custom Elements, no `nanotags`, no `customElements.define` calls.
+`apps/web` is **uhtml v5 + vanilla nanostores islands**. There are no Custom Elements, no `nanotags`, no `customElements.define` calls.
 
 - `index.html` carries the page layout with empty `.mount-*` containers (`.mount-header`, `.mount-banner`, `.mount-queue`, `.mount-statusbar`, `.mount-modal`). Each mount is the island boundary.
-- `src/views/*.ts` exports a **pure render function** per view (`statusbar`, `disconnectBanner`, `header`, `queueItem`, `queue`, `folderModal`) that returns `Hole` from `uhtml`. Views take props, never read stores directly.
+- `src/views/*.ts` exports a **pure render function** per view. The return type is `ReturnType<typeof html>` because uhtml 5 can return either a template or a DOM node. Views take props, never read stores directly.
 - `src/main.ts` wires each mount: `store.listen(render)` + an explicit initial `render()` call. Multi-store views subscribe to every dependency they consume.
+- Use `render(container, () => view(props))` for repeated rendering. The callback enables template updates and preserves DOM identity and focus. Conditional nested templates use arrays (``condition ? [html`…`] : []``) so an update can safely remove the template.
 - Event handlers are inline closures inside the view template via `@event=${fn}`. They may import command functions from `engineClient` and may set stores (e.g., `$modal.set("folder")`) — that is business logic, not store wiring.
-- List rendering uses uhtml's auto-keyed diff — just `list.map(item => view(item))`. Do **not** add `key=` attributes; uhtml keys on template identity.
+- List rendering uses `list.map(item => view(item))`. uhtml updates matching templates by list position.
 - Per-view local state (e.g., modal error) lives in a module-level nanostore atom inside the view file, exported for `main.ts` to subscribe to alongside the other stores.
 - CSS classes have no `sd-` prefix (that was only required because Custom Element names must contain a dash). Class names match the view's root (`.queue`, `.queue-item`, `.folder-modal`, `.statusbar`).
 
@@ -96,7 +97,7 @@ When adding a new view, follow the existing files — do not reintroduce `nanota
 - **TypeScript everywhere.** All source and tests are `.ts`. Bun runs them natively; per-workspace `tsconfig.json` has `noEmit: true` and `moduleResolution: "bundler"`.
 - **Extensionless ESM imports.** Relative imports omit the extension: `from "./service/ScribdDownloader"`, not `.js` and not `.ts`. Bun + `moduleResolution: "bundler"` resolves to the `.ts` file. The `.js` convention from the pre-TS era is gone.
 - **Cross-package types live in `@scribd-dl/shared`.** Engine-internal types (scraping `DocumentMeta`, `PageDimensions`, Tag/Service/Layer types) stay inside `packages/engine`. Anything that crosses the wire (engine ↔ SPA ↔ desktop) goes in shared.
-- **No singleton pattern in new code.** Add new services as `Context.Tag` + `Layer.*` (effect/succeed/scoped). Do not reintroduce `if (!Class.instance)` / lowercase-instance exports.
+- **No singleton pattern in new code.** Add new services as `Context.Service` + `Layer.effect` or `Layer.succeed`. Use `Effect.acquireRelease` for scoped resources inside layers.
 - **Tests use `bun:test` + `Layer.succeed`/`Layer.test` mocks.** Mock services at the Layer boundary (`Layer.succeed(PuppeteerSg, { ... })`); do not `spyOn` singletons (there are none).
 - Lint and format are oxlint + oxfmt. Run `bun run format` before committing — oxfmt has opinions about line length and will reflow array literals.
 - The `output/` directory and `page_html.txt` are working artifacts, not committed source.
@@ -104,3 +105,17 @@ When adding a new view, follow the existing files — do not reintroduce `nanota
 ## Legal scope
 
 Per `README.md`: this tool is for content the user is legally authorized to download. Do not add features whose primary purpose is bypassing paywalls, DRM, auth, or platform ToS — those are out of scope by project intent, not technical limitation.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live in GitHub Issues. Before reading or publishing tickets, read `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+The five canonical triage roles use their default label names. Before applying triage labels, read `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context layout: root `GLOSSARY.md` and `docs/adr/`. Before exploring the codebase, read `docs/agents/domain.md`.
