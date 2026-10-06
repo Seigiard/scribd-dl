@@ -8,6 +8,7 @@ import React from "react";
 import { App } from "./src/tui/App";
 
 const DEFAULT_ENGINE_URL = "http://localhost:4747";
+
 const EMBEDDED_ENGINE_PORT = 4747;
 
 const engineUrlOpt = Options.text("engine-url").pipe(
@@ -31,6 +32,7 @@ const runUi = (baseUrl: string, initialFolder: string) =>
   Effect.acquireUseRelease(
     Effect.sync(() => {
       process.stdout.write("\x1b[?1049h\x1b[H");
+
       return render(React.createElement(App, { baseUrl, initialFolder }));
     }),
     (instance) => Effect.promise(() => instance.waitUntilExit()),
@@ -43,16 +45,23 @@ const runUi = (baseUrl: string, initialFolder: string) =>
 const ensureEngine = (engineUrl: string) =>
   Effect.gen(function* () {
     const reachable = yield* Effect.either(healthCheck(engineUrl));
+
     if (reachable._tag === "Right") return engineUrl;
-    process.stderr.write(`scribd-dl-tui: no external engine at ${engineUrl}, starting embedded engine on :${EMBEDDED_ENGINE_PORT}\n`);
+    process.stderr.write(
+      `scribd-dl-tui: no external engine at ${engineUrl}, starting embedded engine on :${EMBEDDED_ENGINE_PORT}\n`,
+    );
+
     const embeddedUrl = yield* runEmbeddedEngine(EMBEDDED_ENGINE_PORT).pipe(
       Effect.tapError((e) =>
         Effect.sync(() => {
-          process.stderr.write(`scribd-dl-tui: embedded engine failed to start: ${e instanceof Error ? e.message : String(e)}\n`);
+          process.stderr.write(
+            `scribd-dl-tui: embedded engine failed to start: ${e instanceof Error ? e.message : String(e)}\n`,
+          );
           process.exit(1);
         }),
       ),
     );
+
     return embeddedUrl;
   });
 
@@ -63,9 +72,9 @@ const program = (engineUrl: string) =>
     yield* runUi(activeUrl, folder);
   });
 
-const command = Command.make("scribd-dl-tui", { engineUrl: engineUrlOpt }, ({ engineUrl }) => program(engineUrl)).pipe(
-  Command.withDescription("Interactive TUI client for the scribd-dl engine sidecar."),
-);
+const command = Command.make("scribd-dl-tui", { engineUrl: engineUrlOpt }, ({ engineUrl }) =>
+  program(engineUrl),
+).pipe(Command.withDescription("Interactive TUI client for the scribd-dl engine sidecar."));
 
 const cli = Command.run(command, {
   name: "Scribd Downloader TUI",

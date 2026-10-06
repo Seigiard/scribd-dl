@@ -11,7 +11,12 @@ import { PdfCompressor, type PdfCompressorService } from "../src/service/PdfComp
 import { Scrapers, type Scraper } from "../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
 import { PdfGenerator, type PdfGeneratorService } from "../src/utils/io/PdfGenerator";
-import { CompressionFailed, PageLoadFailed, PdfMetadataFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
+import {
+  CompressionFailed,
+  PageLoadFailed,
+  PdfMetadataFailed,
+  UnsupportedUrl,
+} from "../src/errors/DomainErrors";
 
 const emptySettings: Settings = {
   outputFolder: "/tmp/out",
@@ -58,35 +63,50 @@ const defaultConfig: ConfigData = {
   directory: { output: "/tmp/out", filename: "title" },
 };
 
-const buildLayer = (config: ConfigData = defaultConfig, extraScrapers: ReadonlyArray<Scraper> = []) => {
+const buildLayer = (
+  config: ConfigData = defaultConfig,
+  extraScrapers: ReadonlyArray<Scraper> = [],
+) => {
   const scribdScraper: Scraper = {
     id: "scribd",
     canHandle: (url) => /scribd\.com/.test(url),
     deriveDisplayTitle: (url) => {
       const doc = /scribd\.com\/document\/(\d+)/.exec(url);
+
       if (doc) return `Scribd document ${doc[1]}`;
       const embed = /scribd\.com\/embeds\/(\d+)/.exec(url);
+
       if (embed) return `Scribd document ${embed[1]}`;
+
       return "Scribd document";
     },
-    execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+    execute: (url, folder, onEvent, debug) =>
+      state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
   };
+
   const configStoreSvc: ConfigStoreService = {
     read: Effect.sync(() => state.initialSettings),
     write: (s) => state.configStoreWrite(s) as Effect.Effect<void, never, never>,
   };
+
   const jobStoreSvc: JobStoreService = {
     read: Effect.sync(() => state.restoredJobs),
     write: (jobs) => state.jobStoreWrite(jobs) as Effect.Effect<void, never, never>,
   };
+
   const pdfCompressorSvc: PdfCompressorService = {
-    compress: (pdfPath, keys) => state.compressCompress(pdfPath, keys) as ReturnType<PdfCompressorService["compress"]>,
-    validate: (keys) => state.compressValidate(keys) as ReturnType<PdfCompressorService["validate"]>,
+    compress: (pdfPath, keys) =>
+      state.compressCompress(pdfPath, keys) as ReturnType<PdfCompressorService["compress"]>,
+    validate: (keys) =>
+      state.compressValidate(keys) as ReturnType<PdfCompressorService["validate"]>,
   };
+
   const pdfGeneratorSvc: PdfGeneratorService = {
     merge: () => Effect.void,
-    setTitle: (pdfPath, title) => state.pdfSetTitle(pdfPath, title) as ReturnType<PdfGeneratorService["setTitle"]>,
+    setTitle: (pdfPath, title) =>
+      state.pdfSetTitle(pdfPath, title) as ReturnType<PdfGeneratorService["setTitle"]>,
   };
+
   return Layer.provide(
     DownloadEngineLive,
     Layer.mergeAll(
@@ -105,7 +125,8 @@ const makeCustomScraper = (customExecute: ReturnType<typeof mock>): Scraper => (
   id: "custom",
   canHandle: (url) => url.includes("example.com"),
   deriveDisplayTitle: (url) => `Custom ${url}`,
-  execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+  execute: (url, folder, onEvent, debug) =>
+    customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
 });
 
 const runScoped = <A, E>(program: Effect.Effect<A, E, DownloadEngine>) =>
@@ -119,21 +140,26 @@ const waitForQuiet = (engine: ReturnType<typeof DownloadEngine.of>) =>
     for (let i = 0; i < 200; i++) {
       const snap = yield* engine.snapshot;
       const pending = snap.jobs.filter((j) => j.status === "Queued" || j.status === "Downloading");
+
       if (pending.length === 0) {
         return snap;
       }
+
       yield* Effect.sleep("5 millis");
     }
+
     return yield* engine.snapshot;
   });
 
 const firstFailureTag = (exit: Exit.Exit<unknown, unknown>): string | undefined => {
   if (Exit.isFailure(exit)) {
     const failure = Cause.failureOption(exit.cause);
+
     if (failure._tag === "Some") {
       return (failure.value as { _tag: string })._tag;
     }
   }
+
   return undefined;
 };
 
@@ -157,6 +183,7 @@ describe("DownloadEngine", () => {
           expect(created[0]!.status).toBe("Queued");
           expect(created[0]!.url).toBe(url);
           expect(created[0]!.domain).toBe("scribd");
+
           return yield* engine.snapshot;
         }),
       );
@@ -169,6 +196,7 @@ describe("DownloadEngine", () => {
     test("paste-blob with multiple URLs, comments, garbage → URLs extracted in order", async () => {
       // #given
       state.scribdExecute = mock(() => Effect.never);
+
       const text = [
         "# comment line",
         "  https://www.scribd.com/document/1/a  ",
@@ -182,6 +210,7 @@ describe("DownloadEngine", () => {
       const created = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.enqueue(text);
         }),
       );
@@ -202,6 +231,7 @@ describe("DownloadEngine", () => {
       const created = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.enqueue("https://example.com/foo");
         }),
       );
@@ -217,13 +247,16 @@ describe("DownloadEngine", () => {
     test("mixed scribd + unsupported → both created, only scribd queued for worker", async () => {
       // #given
       state.scribdExecute = mock(() => Effect.void);
-      const text = "https://www.scribd.com/document/1/a\nhttps://example.com/foo\nhttps://www.scribd.com/document/2/b";
+
+      const text =
+        "https://www.scribd.com/document/1/a\nhttps://example.com/foo\nhttps://www.scribd.com/document/2/b";
 
       // #when
       const snap = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue(text);
+
           return yield* waitForQuiet(engine);
         }),
       );
@@ -247,6 +280,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const created = yield* engine.enqueue("\n\n# only comments\n   \n");
           const snap = yield* engine.snapshot;
+
           return { created, snap };
         }),
       );
@@ -264,6 +298,7 @@ describe("DownloadEngine", () => {
       const created = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.enqueue("https://www.scribd.com/document/123/foo");
         }),
       );
@@ -280,6 +315,7 @@ describe("DownloadEngine", () => {
       const created = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.enqueue("https://example.com/foo");
         }),
       );
@@ -300,6 +336,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue(url);
+
           return yield* waitForQuiet(engine);
         }),
       );
@@ -307,18 +344,26 @@ describe("DownloadEngine", () => {
       // #then
       expect(snap.jobs[0]!.status).toBe("Downloaded");
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
-      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function), undefined);
+      expect(state.scribdExecute).toHaveBeenCalledWith(
+        url,
+        "/tmp/out",
+        expect.any(Function),
+        undefined,
+      );
     });
 
     test("ScribdDownloader failure → Failed with retryable: true", async () => {
       // #given
-      state.scribdExecute = mock((url: string) => Effect.fail(new PageLoadFailed({ url, cause: "boom" })));
+      state.scribdExecute = mock((url: string) =>
+        Effect.fail(new PageLoadFailed({ url, cause: "boom" })),
+      );
 
       // #when
       const snap = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
           return yield* waitForQuiet(engine);
         }),
       );
@@ -345,7 +390,9 @@ describe("DownloadEngine", () => {
       await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
+          yield* engine.enqueue(
+            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
+          );
           yield* waitForQuiet(engine);
         }),
       );
@@ -369,8 +416,13 @@ describe("DownloadEngine", () => {
       const snap = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          const created = yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
+
+          const created = yield* engine.enqueue(
+            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
+          );
+
           yield* engine.remove(created[1]!.id);
+
           return yield* engine.snapshot;
         }),
       );
@@ -391,6 +443,7 @@ describe("DownloadEngine", () => {
           const [job] = yield* engine.enqueue("https://www.scribd.com/document/1/a");
           yield* waitForQuiet(engine);
           yield* engine.remove(job!.id);
+
           return yield* engine.snapshot;
         }),
       );
@@ -409,6 +462,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const [job] = yield* engine.enqueue("https://example.com/foo");
           yield* engine.remove(job!.id);
+
           return yield* engine.snapshot;
         }),
       );
@@ -426,12 +480,15 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           const [job] = yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
           // wait until the job transitions to Downloading
           for (let i = 0; i < 100; i++) {
             const snap = yield* engine.snapshot;
+
             if (snap.jobs[0]?.status === "Downloading") break;
             yield* Effect.sleep("5 millis");
           }
+
           yield* engine.remove(job!.id);
         }),
       );
@@ -472,7 +529,11 @@ describe("DownloadEngine", () => {
       await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          const created = yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
+
+          const created = yield* engine.enqueue(
+            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
+          );
+
           // wait until first is Downloading
           yield* Effect.sleep("10 millis");
           yield* engine.remove(created[1]!.id);
@@ -492,17 +553,22 @@ describe("DownloadEngine", () => {
       let calls = 0;
       state.scribdExecute = mock((url: string) => {
         calls += 1;
+
         if (url.includes("/2/")) return Effect.fail(new PageLoadFailed({ url, cause: "x" }));
+
         return Effect.never; // /1/ stays Downloading
       });
+
       // Enqueue: /1/ blocks (Downloading), /2/ fails, plus an unsupported (immediately Failed)
-      const text = "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b\nhttps://example.com/foo";
+      const text =
+        "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b\nhttps://example.com/foo";
 
       // #when
       const result = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue(text);
+
           // wait for /2/ to fail (one downloader call started)
           for (let i = 0; i < 100 && calls < 2; i++) yield* Effect.sleep("5 millis");
           // also wait a bit longer to ensure /1/ has transitioned to Downloading
@@ -512,6 +578,7 @@ describe("DownloadEngine", () => {
           // (skip — we'll cover that path in HTTP test)
           const removed = yield* engine.clearCompleted;
           const snap = yield* engine.snapshot;
+
           return { removed, snap };
         }),
       );
@@ -524,9 +591,27 @@ describe("DownloadEngine", () => {
       // #given — restore three jobs of different statuses
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
-        { id: "a" as Job["id"], url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "1", status: "Queued" },
-        { id: "b" as Job["id"], url: "https://www.scribd.com/document/2/y", domain: "scribd", displayTitle: "2", status: "Downloaded" },
-        { id: "c" as Job["id"], url: "https://www.scribd.com/document/3/z", domain: "scribd", displayTitle: "3", status: "Downloaded" },
+        {
+          id: "a" as Job["id"],
+          url: "https://www.scribd.com/document/1/x",
+          domain: "scribd",
+          displayTitle: "1",
+          status: "Queued",
+        },
+        {
+          id: "b" as Job["id"],
+          url: "https://www.scribd.com/document/2/y",
+          domain: "scribd",
+          displayTitle: "2",
+          status: "Downloaded",
+        },
+        {
+          id: "c" as Job["id"],
+          url: "https://www.scribd.com/document/3/z",
+          domain: "scribd",
+          displayTitle: "3",
+          status: "Downloaded",
+        },
         {
           id: "d" as Job["id"],
           url: "https://www.scribd.com/document/4/w",
@@ -543,6 +628,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const removed = yield* engine.clearCompleted;
           const snap = yield* engine.snapshot;
+
           return { removed, snap };
         }),
       );
@@ -560,8 +646,20 @@ describe("DownloadEngine", () => {
       // #given
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
-        { id: "a" as Job["id"], url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "1", status: "Queued" },
-        { id: "b" as Job["id"], url: "https://www.scribd.com/document/2/y", domain: "scribd", displayTitle: "2", status: "Downloaded" },
+        {
+          id: "a" as Job["id"],
+          url: "https://www.scribd.com/document/1/x",
+          domain: "scribd",
+          displayTitle: "1",
+          status: "Queued",
+        },
+        {
+          id: "b" as Job["id"],
+          url: "https://www.scribd.com/document/2/y",
+          domain: "scribd",
+          displayTitle: "2",
+          status: "Downloaded",
+        },
         {
           id: "c" as Job["id"],
           url: "https://www.scribd.com/document/3/z",
@@ -578,6 +676,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const removed = yield* engine.clearFailed;
           const snap = yield* engine.snapshot;
+
           return { removed, snap };
         }),
       );
@@ -591,18 +690,37 @@ describe("DownloadEngine", () => {
       // #given
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
-        { id: "a" as Job["id"], url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "1", status: "Downloaded" },
-        { id: "b" as Job["id"], url: "https://www.scribd.com/document/2/y", domain: "scribd", displayTitle: "2", status: "Downloaded" },
+        {
+          id: "a" as Job["id"],
+          url: "https://www.scribd.com/document/1/x",
+          domain: "scribd",
+          displayTitle: "1",
+          status: "Downloaded",
+        },
+        {
+          id: "b" as Job["id"],
+          url: "https://www.scribd.com/document/2/y",
+          domain: "scribd",
+          displayTitle: "2",
+          status: "Downloaded",
+        },
       ];
 
       // #when
       const tags = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          const collector = yield* engine.events.pipe(Stream.take(2), Stream.runCollect, Effect.fork);
+
+          const collector = yield* engine.events.pipe(
+            Stream.take(2),
+            Stream.runCollect,
+            Effect.fork,
+          );
+
           yield* Effect.sleep("10 millis");
           yield* engine.clearCompleted;
           const chunk = yield* collector;
+
           return Chunk.toReadonlyArray(chunk).map((e: JobEvent) => e._tag);
         }),
       );
@@ -619,6 +737,7 @@ describe("DownloadEngine", () => {
       const removed = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.clearAll;
         }),
       );
@@ -640,6 +759,7 @@ describe("DownloadEngine", () => {
           );
           const removed = yield* engine.clearAll;
           const snap = yield* engine.snapshot;
+
           return { removed, snap };
         }),
       );
@@ -653,8 +773,20 @@ describe("DownloadEngine", () => {
       // #given
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
-        { id: "a" as Job["id"], url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "1", status: "Queued" },
-        { id: "b" as Job["id"], url: "https://www.scribd.com/document/2/y", domain: "scribd", displayTitle: "2", status: "Downloaded" },
+        {
+          id: "a" as Job["id"],
+          url: "https://www.scribd.com/document/1/x",
+          domain: "scribd",
+          displayTitle: "1",
+          status: "Queued",
+        },
+        {
+          id: "b" as Job["id"],
+          url: "https://www.scribd.com/document/2/y",
+          domain: "scribd",
+          displayTitle: "2",
+          status: "Downloaded",
+        },
         {
           id: "c" as Job["id"],
           url: "https://www.scribd.com/document/3/z",
@@ -671,6 +803,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const removed = yield* engine.clearAll;
           const snap = yield* engine.snapshot;
+
           return { removed, snap };
         }),
       );
@@ -689,16 +822,20 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/active");
+
           // wait until worker has picked up and started downloading
           for (let i = 0; i < 200; i++) {
             const snap = yield* engine.snapshot;
+
             if (snap.jobs.some((j) => j.status === "Downloading")) break;
             yield* Effect.sleep("5 millis");
           }
+
           const removed = yield* engine.clearAll;
           // give worker time to settle if anything else fires
           yield* Effect.sleep("50 millis");
           const snap = yield* engine.snapshot;
+
           return { removed, snap };
         }),
       );
@@ -720,6 +857,7 @@ describe("DownloadEngine", () => {
           yield* engine.clearAll;
           yield* engine.enqueue("https://www.scribd.com/document/2/b");
           yield* waitForQuiet(engine);
+
           return yield* engine.snapshot;
         }),
       );
@@ -736,7 +874,10 @@ describe("DownloadEngine", () => {
       let attempt = 0;
       state.scribdExecute = mock((_url: string) => {
         attempt += 1;
-        return attempt === 1 ? Effect.fail(new PageLoadFailed({ url: _url, cause: "first" })) : Effect.void;
+
+        return attempt === 1
+          ? Effect.fail(new PageLoadFailed({ url: _url, cause: "first" }))
+          : Effect.void;
       });
 
       // #when
@@ -746,6 +887,7 @@ describe("DownloadEngine", () => {
           const [job] = yield* engine.enqueue("https://www.scribd.com/document/1/a");
           yield* waitForQuiet(engine);
           yield* engine.retry(job!.id);
+
           return yield* waitForQuiet(engine);
         }),
       );
@@ -816,6 +958,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const created = yield* engine.enqueue(`${url}\n${url}`);
           const snap = yield* engine.snapshot;
+
           return { created, snap };
         }),
       );
@@ -845,6 +988,7 @@ describe("DownloadEngine", () => {
             yield* Effect.promise(() => fs.writeFile(expectedPath, "fake-pdf"));
             const second = yield* engine.enqueue(url);
             yield* waitForQuiet(engine);
+
             return { first, second, snap: yield* engine.snapshot };
           }),
         );
@@ -871,6 +1015,7 @@ describe("DownloadEngine", () => {
           yield* waitForQuiet(engine);
           const second = yield* engine.enqueue(url);
           yield* waitForQuiet(engine);
+
           return { first, second, snap: yield* engine.snapshot };
         }),
       );
@@ -884,7 +1029,9 @@ describe("DownloadEngine", () => {
 
     test("re-enqueue after Failed retryable=true → same id, implicit retry", async () => {
       // #given
-      state.scribdExecute = mock((u: string) => Effect.fail(new PageLoadFailed({ url: u, cause: "boom" })));
+      state.scribdExecute = mock((u: string) =>
+        Effect.fail(new PageLoadFailed({ url: u, cause: "boom" })),
+      );
       const url = "https://www.scribd.com/document/1/a";
 
       // #when
@@ -895,6 +1042,7 @@ describe("DownloadEngine", () => {
           yield* waitForQuiet(engine);
           const [second] = yield* engine.enqueue(url);
           yield* waitForQuiet(engine);
+
           return { first, second };
         }),
       );
@@ -916,6 +1064,7 @@ describe("DownloadEngine", () => {
           const [first] = yield* engine.enqueue(url);
           yield* engine.remove(first!.id);
           const [second] = yield* engine.enqueue(url);
+
           return { first, second };
         }),
       );
@@ -936,6 +1085,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const first = yield* engine.enqueue(`${url1}\n${url2}`);
           const second = yield* engine.enqueue(url2);
+
           return { first, second };
         }),
       );
@@ -955,6 +1105,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
           yield* engine.enqueue("https://WWW.scribd.com/document/1/a/");
+
           return yield* engine.snapshot;
         }),
       );
@@ -973,6 +1124,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const [first] = yield* engine.enqueue(url);
           const [second] = yield* engine.enqueue(url);
+
           return { first, second, snap: yield* engine.snapshot };
         }),
       );
@@ -996,6 +1148,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
           yield* engine.enqueue("https://www.scribd.com/document/2/b");
+
           return yield* engine.snapshot;
         }),
       );
@@ -1016,6 +1169,7 @@ describe("DownloadEngine", () => {
           yield* engine.enqueue(
             "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b\nhttps://www.scribd.com/document/3/c",
           );
+
           return yield* engine.snapshot;
         }),
       );
@@ -1043,6 +1197,7 @@ describe("DownloadEngine", () => {
           yield* engine.enqueue(
             "https://www.scribd.com/document/new1/a\nhttps://www.scribd.com/document/dup/x\nhttps://www.scribd.com/document/new2/b",
           );
+
           return yield* engine.snapshot;
         }),
       );
@@ -1061,7 +1216,11 @@ describe("DownloadEngine", () => {
     test("TitleResolved → JobTitleUpdated published + displayTitle updated", async () => {
       // #given
       state.scribdExecute = mock(
-        (_url: string, _folder: string, onEvent: (e: { _tag: string; title?: string }) => Effect.Effect<void, never, never>) =>
+        (
+          _url: string,
+          _folder: string,
+          onEvent: (e: { _tag: string; title?: string }) => Effect.Effect<void, never, never>,
+        ) =>
           Effect.gen(function* () {
             yield* onEvent({ _tag: "TitleResolved", title: "Into the Odd" });
           }),
@@ -1071,16 +1230,19 @@ describe("DownloadEngine", () => {
       const result = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           const tagsFork = yield* engine.events.pipe(
             Stream.filter((e) => e._tag === "JobTitleUpdated"),
             Stream.take(1),
             Stream.runCollect,
             Effect.fork,
           );
+
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
           const chunk = yield* tagsFork;
           const snap = yield* waitForQuiet(engine);
+
           return { events: Chunk.toReadonlyArray(chunk), snap };
         }),
       );
@@ -1097,7 +1259,11 @@ describe("DownloadEngine", () => {
         (
           _url: string,
           _folder: string,
-          onEvent: (e: { _tag: string; done?: number; total?: number }) => Effect.Effect<void, never, never>,
+          onEvent: (e: {
+            _tag: string;
+            done?: number;
+            total?: number;
+          }) => Effect.Effect<void, never, never>,
         ) =>
           Effect.gen(function* () {
             yield* onEvent({ _tag: "ScrapeProgress", done: 10, total: 10 });
@@ -1110,16 +1276,19 @@ describe("DownloadEngine", () => {
       const result = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           const progFork = yield* engine.events.pipe(
             Stream.filter((e) => e._tag === "JobProgress"),
             Stream.take(3),
             Stream.runCollect,
             Effect.fork,
           );
+
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
           const chunk = yield* progFork;
           const snap = yield* waitForQuiet(engine);
+
           return { events: Chunk.toReadonlyArray(chunk), snap };
         }),
       );
@@ -1138,10 +1307,15 @@ describe("DownloadEngine", () => {
         (
           url: string,
           _folder: string,
-          onEvent: (e: { _tag: string; done?: number; total?: number }) => Effect.Effect<void, never, never>,
+          onEvent: (e: {
+            _tag: string;
+            done?: number;
+            total?: number;
+          }) => Effect.Effect<void, never, never>,
         ) =>
           Effect.gen(function* () {
             yield* onEvent({ _tag: "RenderProgress", done: 2, total: 5 });
+
             return yield* Effect.fail(new PageLoadFailed({ url, cause: "boom" }));
           }),
       );
@@ -1151,6 +1325,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
           return yield* waitForQuiet(engine);
         }),
       );
@@ -1171,16 +1346,19 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           const initial = yield* engine.outputFolder;
+
           const evtFork = yield* engine.events.pipe(
             Stream.filter((e) => e._tag === "OutputFolderChanged"),
             Stream.take(1),
             Stream.runCollect,
             Effect.fork,
           );
+
           yield* Effect.sleep("10 millis");
           yield* engine.setOutputFolder("/tmp/new");
           const chunk = yield* evtFork;
           const after = yield* engine.outputFolder;
+
           return { initial, after, events: Chunk.toReadonlyArray(chunk) };
         }),
       );
@@ -1222,6 +1400,7 @@ describe("DownloadEngine", () => {
       state.scribdExecute = mock((url: string, folder: string) =>
         Effect.gen(function* () {
           folders.push(folder);
+
           if (url.includes("/1/")) {
             firstStarted = true;
             yield* Effect.async<void>((cb) => {
@@ -1235,7 +1414,10 @@ describe("DownloadEngine", () => {
       await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
+          yield* engine.enqueue(
+            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
+          );
+
           // wait until first job is in-flight
           for (let i = 0; i < 100 && !firstStarted; i++) yield* Effect.sleep("5 millis");
           yield* engine.setOutputFolder("/tmp/new");
@@ -1258,6 +1440,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.setOutputFolder("   ");
+
           return yield* engine.outputFolder;
         }),
       );
@@ -1278,6 +1461,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const snap = yield* engine.snapshot;
           const folder = yield* engine.outputFolder;
+
           return { snap, folder };
         }),
       );
@@ -1291,8 +1475,20 @@ describe("DownloadEngine", () => {
       // #given — block worker so we observe restored state cleanly
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
-        { id: "a" as Job["id"], url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "doc 1", status: "Queued" },
-        { id: "b" as Job["id"], url: "https://www.scribd.com/document/2/y", domain: "scribd", displayTitle: "doc 2", status: "Downloaded" },
+        {
+          id: "a" as Job["id"],
+          url: "https://www.scribd.com/document/1/x",
+          domain: "scribd",
+          displayTitle: "doc 1",
+          status: "Queued",
+        },
+        {
+          id: "b" as Job["id"],
+          url: "https://www.scribd.com/document/2/y",
+          domain: "scribd",
+          displayTitle: "doc 2",
+          status: "Downloaded",
+        },
         {
           id: "c" as Job["id"],
           url: "https://www.scribd.com/document/3/z",
@@ -1307,6 +1503,7 @@ describe("DownloadEngine", () => {
       const snap = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.snapshot;
         }),
       );
@@ -1329,6 +1526,7 @@ describe("DownloadEngine", () => {
       const folder = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.outputFolder;
         }),
       );
@@ -1346,8 +1544,20 @@ describe("DownloadEngine", () => {
         }),
       );
       state.restoredJobs = [
-        { id: "a" as Job["id"], url: "https://www.scribd.com/document/1/x", domain: "scribd", displayTitle: "doc 1", status: "Queued" },
-        { id: "b" as Job["id"], url: "https://www.scribd.com/document/2/y", domain: "scribd", displayTitle: "doc 2", status: "Queued" },
+        {
+          id: "a" as Job["id"],
+          url: "https://www.scribd.com/document/1/x",
+          domain: "scribd",
+          displayTitle: "doc 1",
+          status: "Queued",
+        },
+        {
+          id: "b" as Job["id"],
+          url: "https://www.scribd.com/document/2/y",
+          domain: "scribd",
+          displayTitle: "doc 2",
+          status: "Queued",
+        },
       ];
 
       // #when
@@ -1359,7 +1569,10 @@ describe("DownloadEngine", () => {
       );
 
       // #then
-      expect(observed).toEqual(["https://www.scribd.com/document/1/x", "https://www.scribd.com/document/2/y"]);
+      expect(observed).toEqual([
+        "https://www.scribd.com/document/1/x",
+        "https://www.scribd.com/document/2/y",
+      ]);
     });
 
     test("enqueue triggers JobStore.write at least once", async () => {
@@ -1386,7 +1599,11 @@ describe("DownloadEngine", () => {
       await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          const created = yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
+
+          const created = yield* engine.enqueue(
+            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
+          );
+
           state.jobStoreWrite.mockClear();
           yield* engine.remove(created[1]!.id);
         }),
@@ -1420,7 +1637,12 @@ describe("DownloadEngine", () => {
         (
           _url: string,
           _folder: string,
-          onEvent: (e: { _tag: string; title?: string; done?: number; total?: number }) => Effect.Effect<void, never, never>,
+          onEvent: (e: {
+            _tag: string;
+            title?: string;
+            done?: number;
+            total?: number;
+          }) => Effect.Effect<void, never, never>,
         ) =>
           Effect.gen(function* () {
             yield* onEvent({ _tag: "TitleResolved", title: "Real Title" });
@@ -1438,9 +1660,11 @@ describe("DownloadEngine", () => {
           yield* waitForQuiet(engine);
         }),
       );
+
       // count writes whose snapshot contains the resolved title
       for (const call of state.jobStoreWrite.mock.calls) {
         const jobs = call[0] as ReadonlyArray<Job>;
+
         if (jobs.some((j) => j.displayTitle === "Real Title")) titleWrites += 1;
       }
 
@@ -1477,13 +1701,16 @@ describe("DownloadEngine", () => {
     test("persist failure does not crash the engine", async () => {
       // #given — JobStore.write always fails
       state.scribdExecute = mock(() => Effect.void);
-      state.jobStoreWrite = mock(() => Effect.fail({ _tag: "PersistenceFailed", path: "/x", op: "write", cause: "disk full" }));
+      state.jobStoreWrite = mock(() =>
+        Effect.fail({ _tag: "PersistenceFailed", path: "/x", op: "write", cause: "disk full" }),
+      );
 
       // #when
       const snap = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
           return yield* waitForQuiet(engine);
         }),
       );
@@ -1502,11 +1729,18 @@ describe("DownloadEngine", () => {
       const tags = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          const collector = yield* engine.events.pipe(Stream.take(4), Stream.runCollect, Effect.fork);
+
+          const collector = yield* engine.events.pipe(
+            Stream.take(4),
+            Stream.runCollect,
+            Effect.fork,
+          );
+
           // yield to let the subscription register before publishing
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
           const chunk = yield* collector;
+
           return Chunk.toReadonlyArray(chunk).map((e: JobEvent) => e._tag);
         }),
       );
@@ -1523,10 +1757,17 @@ describe("DownloadEngine", () => {
       const tags = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          const collector = yield* engine.events.pipe(Stream.take(2), Stream.runCollect, Effect.fork);
+
+          const collector = yield* engine.events.pipe(
+            Stream.take(2),
+            Stream.runCollect,
+            Effect.fork,
+          );
+
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://example.com/foo");
           const chunk = yield* collector;
+
           return Chunk.toReadonlyArray(chunk).map((e: JobEvent) => e._tag);
         }),
       );
@@ -1537,8 +1778,13 @@ describe("DownloadEngine", () => {
   });
 
   describe("scrapers registry extensibility", () => {
-    const runScopedWith = <A, E>(program: Effect.Effect<A, E, DownloadEngine>, extraScrapers: ReadonlyArray<Scraper>) =>
-      Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(buildLayer(defaultConfig, extraScrapers)))));
+    const runScopedWith = <A, E>(
+      program: Effect.Effect<A, E, DownloadEngine>,
+      extraScrapers: ReadonlyArray<Scraper>,
+    ) =>
+      Effect.runPromise(
+        Effect.scoped(program.pipe(Effect.provide(buildLayer(defaultConfig, extraScrapers)))),
+      );
 
     test("URL handled by extra scraper gets that scraper's id as domain", async () => {
       // #given
@@ -1549,6 +1795,7 @@ describe("DownloadEngine", () => {
       const created = await runScopedWith(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.enqueue("https://example.com/foo");
         }),
         [custom],
@@ -1570,6 +1817,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
           return yield* waitForQuiet(engine);
         }),
         [custom],
@@ -1591,12 +1839,14 @@ describe("DownloadEngine", () => {
         displayTitle: "Gone document",
         status: "Queued",
       };
+
       state.restoredJobs = [persistedJob];
 
       // #when worker picks it up against a registry that doesn't include 'gone'
       const snap = await runScopedWith(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* waitForQuiet(engine);
         }),
         [],
@@ -1618,6 +1868,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/something/weird");
+
           return yield* waitForQuiet(engine);
         }),
       );
@@ -1629,13 +1880,16 @@ describe("DownloadEngine", () => {
 
     test("transient scraper failure (PageLoadFailed) → retryable: true", async () => {
       // #given
-      state.scribdExecute = mock((url: string) => Effect.fail(new PageLoadFailed({ url, cause: "network blip" })));
+      state.scribdExecute = mock((url: string) =>
+        Effect.fail(new PageLoadFailed({ url, cause: "network blip" })),
+      );
 
       // #when
       const snap = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
           return yield* waitForQuiet(engine);
         }),
       );
@@ -1656,11 +1910,14 @@ describe("DownloadEngine", () => {
 
     const writingScraper = (filename: string) =>
       mock((_url: string, folder: string) =>
-        Effect.promise(() => fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46]))),
+        Effect.promise(() =>
+          fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46])),
+        ),
       );
 
     const withTmp = async (run: (tmp: string) => Promise<void>) => {
       const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "engine-compress-"));
+
       try {
         await run(tmp);
       } finally {
@@ -1680,6 +1937,7 @@ describe("DownloadEngine", () => {
           Effect.gen(function* () {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
             return yield* waitForQuiet(engine);
           }),
         );
@@ -1687,10 +1945,13 @@ describe("DownloadEngine", () => {
         // #then
         expect(snap.jobs[0]!.status).toBe("Downloaded");
         expect(snap.jobs[0]!.compression).toBeUndefined();
-        expect(state.compressCompress).toHaveBeenCalledWith(path.join(tmp, "Scribd document 1.pdf"), {
-          publicKey: "pub",
-          secretKey: "sec",
-        });
+        expect(state.compressCompress).toHaveBeenCalledWith(
+          path.join(tmp, "Scribd document 1.pdf"),
+          {
+            publicKey: "pub",
+            secretKey: "sec",
+          },
+        );
       });
     });
 
@@ -1699,13 +1960,16 @@ describe("DownloadEngine", () => {
         // #given
         state.initialSettings = validKeysSettings(tmp);
         state.scribdExecute = writingScraper("Scribd document 1.pdf");
-        state.compressCompress = mock(() => Effect.fail(new CompressionFailed({ path: "p", reason: "quota exceeded", cause: {} })));
+        state.compressCompress = mock(() =>
+          Effect.fail(new CompressionFailed({ path: "p", reason: "quota exceeded", cause: {} })),
+        );
 
         // #when
         const snap = await runScoped(
           Effect.gen(function* () {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
             return yield* waitForQuiet(engine);
           }),
         );
@@ -1728,6 +1992,7 @@ describe("DownloadEngine", () => {
           Effect.gen(function* () {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
             return yield* waitForQuiet(engine);
           }),
         );
@@ -1751,6 +2016,7 @@ describe("DownloadEngine", () => {
           Effect.gen(function* () {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
             return yield* waitForQuiet(engine);
           }),
         );
@@ -1773,13 +2039,17 @@ describe("DownloadEngine", () => {
           Effect.gen(function* () {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
             return yield* waitForQuiet(engine);
           }),
         );
 
         // #then
         expect(snap.jobs[0]!.status).toBe("Downloaded");
-        expect(snap.jobs[0]!.compression).toEqual({ status: "failed", reason: "output file not found" });
+        expect(snap.jobs[0]!.compression).toEqual({
+          status: "failed",
+          reason: "output file not found",
+        });
         expect(state.compressCompress).not.toHaveBeenCalled();
       });
     });
@@ -1791,10 +2061,17 @@ describe("DownloadEngine", () => {
         state.scribdExecute = mock((_url: string, folder: string) =>
           Effect.promise(async () => {
             const doc = /document\/(\d+)/.exec(_url)![1];
-            await fs.writeFile(path.join(folder, `Scribd document ${doc}.pdf`), new Uint8Array([0x25, 0x50, 0x44, 0x46]));
+            await fs.writeFile(
+              path.join(folder, `Scribd document ${doc}.pdf`),
+              new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+            );
           }),
         );
-        state.compressCompress = mock(() => Effect.fail(new CompressionFailed({ path: "p", reason: "invalid credentials", cause: {} })));
+        state.compressCompress = mock(() =>
+          Effect.fail(
+            new CompressionFailed({ path: "p", reason: "invalid credentials", cause: {} }),
+          ),
+        );
 
         // #when — first download flips validity, second (different URL) should skip
         const snap = await runScoped(
@@ -1803,6 +2080,7 @@ describe("DownloadEngine", () => {
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
             yield* waitForQuiet(engine);
             yield* engine.enqueue("https://www.scribd.com/document/2/b");
+
             return yield* waitForQuiet(engine);
           }),
         );
@@ -1826,9 +2104,11 @@ describe("DownloadEngine", () => {
         state.initialSettings = validKeysSettings(tmp);
         state.scribdExecute = writingScraper("Scribd document 1.pdf");
         let release: () => void = () => {};
+
         const gate = new Promise<void>((resolve) => {
           release = resolve;
         });
+
         state.compressCompress = mock(() => Effect.promise(() => gate));
 
         // #when
@@ -1837,17 +2117,22 @@ describe("DownloadEngine", () => {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
             let seen: Job | undefined;
+
             for (let i = 0; i < 200; i++) {
               const snap = yield* engine.snapshot;
               const job = snap.jobs[0];
+
               if (job?.compression?.status === "compressing") {
                 seen = job;
                 break;
               }
+
               yield* Effect.sleep("5 millis");
             }
+
             yield* Effect.sync(() => release());
             yield* waitForQuiet(engine);
+
             return seen;
           }),
         );
@@ -1867,6 +2152,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const valid = yield* engine.setSettings({ publicKey: "p", secretKey: "s" });
           const view = yield* engine.settings;
+
           return { valid, view };
         }),
       );
@@ -1893,6 +2179,7 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           const valid = yield* engine.setSettings({ publicKey: "", secretKey: "" });
           const view = yield* engine.settings;
+
           return { valid, view };
         }),
       );
@@ -1911,6 +2198,7 @@ describe("DownloadEngine", () => {
       const result = await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
+
           return yield* engine.setSettings({ publicKey: "p", secretKey: "" });
         }),
       );
@@ -1924,11 +2212,14 @@ describe("DownloadEngine", () => {
   describe("title metadata stamp", () => {
     const writingScraper = (filename: string) =>
       mock((_url: string, folder: string) =>
-        Effect.promise(() => fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46]))),
+        Effect.promise(() =>
+          fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46])),
+        ),
       );
 
     const withTmp = async (run: (tmp: string) => Promise<void>) => {
       const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "engine-title-"));
+
       try {
         await run(tmp);
       } finally {
@@ -1947,13 +2238,17 @@ describe("DownloadEngine", () => {
           Effect.gen(function* () {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
             return yield* waitForQuiet(engine);
           }),
         );
 
         // #then
         expect(snap.jobs[0]!.status).toBe("Downloaded");
-        expect(state.pdfSetTitle).toHaveBeenCalledWith(path.join(tmp, "Scribd document 1.pdf"), "Scribd document 1");
+        expect(state.pdfSetTitle).toHaveBeenCalledWith(
+          path.join(tmp, "Scribd document 1.pdf"),
+          "Scribd document 1",
+        );
       });
     });
 
@@ -1962,13 +2257,16 @@ describe("DownloadEngine", () => {
         // #given
         state.initialSettings = { ...emptySettings, outputFolder: tmp };
         state.scribdExecute = writingScraper("Scribd document 1.pdf");
-        state.pdfSetTitle = mock(() => Effect.fail(new PdfMetadataFailed({ path: "p", cause: new Error("boom") })));
+        state.pdfSetTitle = mock(() =>
+          Effect.fail(new PdfMetadataFailed({ path: "p", cause: new Error("boom") })),
+        );
 
         // #when
         const snap = await runScoped(
           Effect.gen(function* () {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
             return yield* waitForQuiet(engine);
           }),
         );
@@ -1988,6 +2286,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
+
           return yield* waitForQuiet(engine);
         }),
       );

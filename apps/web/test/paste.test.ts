@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const enqueueTextMock = vi.fn(async () => ({ jobs: [] }));
+
 const clearAllMock = vi.fn(async () => 0);
+
 const clearFinishedMock = vi.fn(async () => 0);
+
 const fetchSnapshotMock = vi.fn(async () => ({ jobs: [] }));
+
 const fetchFolderMock = vi.fn(async () => "/tmp/out");
+
 const removeJobMock = vi.fn(async () => {});
+
 const retryJobMock = vi.fn(async () => {});
+
 const setFolderMock = vi.fn(async () => {});
 
 vi.mock("@/lib/api", () => ({
@@ -20,7 +27,9 @@ vi.mock("@/lib/api", () => ({
   setFolder: setFolderMock,
 }));
 
-const { __testing, attachPasteHandler, detachPasteHandler, handlePastedText } = await import("@/engineClient");
+const { __testing, attachPasteHandler, detachPasteHandler, handlePastedText } =
+  await import("@/engineClient");
+
 const { $transient, resetStores } = await import("@/store");
 
 const FAKE_URL = "http://engine.test";
@@ -42,7 +51,10 @@ describe("paste handler", () => {
   it("posts the pasted text when at least one https URL is present", async () => {
     enqueueTextMock.mockResolvedValueOnce({ jobs: [{ id: "x" }] as never });
     await handlePastedText("look at this https://scribd.com/doc/123");
-    expect(enqueueTextMock).toHaveBeenCalledWith(FAKE_URL, "look at this https://scribd.com/doc/123");
+    expect(enqueueTextMock).toHaveBeenCalledWith(
+      FAKE_URL,
+      "look at this https://scribd.com/doc/123",
+    );
     expect($transient.get()).toBeNull();
   });
 
@@ -80,6 +92,7 @@ describe("paste handler", () => {
     Object.defineProperty(evt, "clipboardData", {
       value: { getData: (type: string) => (type === "text" ? text : "") },
     });
+
     return evt;
   };
 

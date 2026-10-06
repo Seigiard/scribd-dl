@@ -6,7 +6,8 @@ import * as path from "node:path";
 import { ConfigStore, makeConfigStore, type Settings } from "../src/service/ConfigStore";
 import { DEFAULT_CONFIG, makeConfigLoader } from "../src/utils/io/ConfigLoader";
 
-const buildLayer = (baseDir: string) => Layer.provide(makeConfigStore(baseDir), makeConfigLoader(DEFAULT_CONFIG));
+const buildLayer = (baseDir: string) =>
+  Layer.provide(makeConfigStore(baseDir), makeConfigLoader(DEFAULT_CONFIG));
 
 const defaults = (outputFolder: string): Settings => ({
   outputFolder,
@@ -20,6 +21,7 @@ const runRead = (baseDir: string) =>
     Effect.provide(
       Effect.gen(function* () {
         const store = yield* ConfigStore;
+
         return yield* store.read;
       }),
       buildLayer(baseDir),
@@ -31,6 +33,7 @@ const runWrite = (baseDir: string, settings: Settings) =>
     Effect.provide(
       Effect.gen(function* () {
         const store = yield* ConfigStore;
+
         return yield* store.write(settings);
       }),
       buildLayer(baseDir),
@@ -51,7 +54,10 @@ describe("ConfigStore", () => {
   describe("read", () => {
     test("returns parsed outputFolder when settings.json exists and is valid", async () => {
       // #given
-      await fs.writeFile(path.join(tmpDir, "settings.json"), JSON.stringify({ outputFolder: "/tmp/foo" }));
+      await fs.writeFile(
+        path.join(tmpDir, "settings.json"),
+        JSON.stringify({ outputFolder: "/tmp/foo" }),
+      );
 
       // #when
       const settings = await runRead(tmpDir);
@@ -115,7 +121,10 @@ describe("ConfigStore", () => {
 
     test("expands ~ in outputFolder relative to homedir", async () => {
       // #given
-      await fs.writeFile(path.join(tmpDir, "settings.json"), JSON.stringify({ outputFolder: "~/scribd-out" }));
+      await fs.writeFile(
+        path.join(tmpDir, "settings.json"),
+        JSON.stringify({ outputFolder: "~/scribd-out" }),
+      );
 
       // #when
       const settings = await runRead(tmpDir);
@@ -126,7 +135,10 @@ describe("ConfigStore", () => {
 
     test("legacy settings.json with only outputFolder reads back with empty keys and valid false", async () => {
       // #given — a pre-feature settings file that predates the iLovePDF keys
-      await fs.writeFile(path.join(tmpDir, "settings.json"), JSON.stringify({ outputFolder: "/tmp/legacy" }));
+      await fs.writeFile(
+        path.join(tmpDir, "settings.json"),
+        JSON.stringify({ outputFolder: "/tmp/legacy" }),
+      );
 
       // #when
       const settings = await runRead(tmpDir);
@@ -210,6 +222,7 @@ describe("ConfigStore", () => {
         ilovepdfSecretKey: "sec_def",
         ilovepdfKeysValid: true,
       };
+
       await runWrite(tmpDir, full);
 
       // #when

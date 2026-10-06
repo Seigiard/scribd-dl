@@ -5,9 +5,11 @@ import { invokeTauri, isTauri } from "@/lib/backendUrl";
 import { $folder, $modal, type ModalMode } from "@/store";
 
 const EMPTY_ERROR = "Path cannot be empty";
+
 const SAVE_ERROR = "Failed to save";
 
 export const $modalError = atom<string | null>(null);
+
 export const $draftFolder = atom<string>("");
 
 export type FolderModalProps = {
@@ -23,10 +25,13 @@ const close = (): void => {
 
 const trySave = async (): Promise<void> => {
   const val = $draftFolder.get().trim();
+
   if (!val) {
     $modalError.set(EMPTY_ERROR);
+
     return;
   }
+
   try {
     await saveFolder(val);
     $modalError.set(null);
@@ -49,6 +54,7 @@ const tryBrowse = async (): Promise<void> => {
     const picked = await invokeTauri<string | null>("pick_folder", {
       defaultPath: $draftFolder.get() || null,
     });
+
     if (picked) $draftFolder.set(picked);
   } catch {
     // native picker errors are non-fatal — leave draft untouched
@@ -63,8 +69,10 @@ const onInputKeydown = (e: KeyboardEvent): void => {
   if (e.key === "Enter") {
     e.preventDefault();
     void trySave();
+
     return;
   }
+
   if (e.key === "Escape") {
     e.preventDefault();
     close();
@@ -85,6 +93,7 @@ const attachEscape = (): void => {
     e.stopPropagation();
     close();
   };
+
   window.addEventListener("keydown", escapeHandler, { capture: true });
 };
 
@@ -123,6 +132,7 @@ $modal.listen((mode) => {
 
 export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
   if (mode !== "folder") return html``;
+
   return html`<div class="folder-modal" @click=${onBackdropClick}>
     <article class="terminal-card">
       <header>Change download folder</header>
@@ -143,7 +153,14 @@ export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
           <button type="button" class="btn btn-default" @click=${close}>Cancel</button>
           ${
             isTauri()
-              ? html`<button type="button" class="btn btn-default" data-action="browse" @click=${onBrowseClick}>Browse…</button>`
+              ? html`<button
+                  type="button"
+                  class="btn btn-default"
+                  data-action="browse"
+                  @click=${onBrowseClick}
+                >
+                  Browse…
+                </button>`
               : null
           }
           <button type="button" class="btn btn-primary" @click=${onSaveClick}>Save</button>

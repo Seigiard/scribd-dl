@@ -19,9 +19,13 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
 const ENTRY = resolve(ROOT, "apps/tui/tui.ts");
+
 const DIST = resolve(ROOT, "dist");
+
 const BUNDLE = resolve(DIST, "tui-bundle.mjs");
+
 const BINARY = resolve(DIST, "scribd-dl-tui");
 
 mkdirSync(DIST, { recursive: true });
@@ -29,7 +33,11 @@ mkdirSync(DIST, { recursive: true });
 await $`bun build ${ENTRY} --target=bun --format=esm --outfile=${BUNDLE} --external react-devtools-core`;
 
 const original = readFileSync(BUNDLE, "utf8");
-const patched = original.replace(/^\s*import\s+\w+\s+from\s+["']react-devtools-core["'];?\s*$/gm, "");
+
+const patched = original.replace(
+  /^\s*import\s+\w+\s+from\s+["']react-devtools-core["'];?\s*$/gm,
+  "",
+);
 
 if (patched === original) {
   console.error("[build-tui] expected to strip a react-devtools-core import but none was found");

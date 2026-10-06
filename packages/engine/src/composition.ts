@@ -14,14 +14,25 @@ import type { BrowserLaunchFailed } from "./errors/DomainErrors";
 
 const ConfigLayer = makeConfigLoader(DEFAULT_CONFIG);
 
-export const makeScrapersLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never>) => {
-  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, puppeteerLayer, TitleResolverLive);
+export const makeScrapersLayer = (
+  puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never>,
+) => {
+  const InfraLayer = Layer.mergeAll(
+    PdfGeneratorLive,
+    ConfigLayer,
+    DirectoryIoLive,
+    puppeteerLayer,
+    TitleResolverLive,
+  );
+
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
+
   return Layer.provide(
     Layer.effect(
       Scrapers,
       Effect.gen(function* () {
         const scribd = yield* ScribdDownloader;
+
         return [scribd];
       }),
     ),
@@ -29,10 +40,21 @@ export const makeScrapersLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, Brows
   );
 };
 
-export const buildDownloadEngineLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> = PuppeteerSgLive) => {
+export const buildDownloadEngineLayer = (
+  puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> = PuppeteerSgLive,
+) => {
   const ScrapersLayer = makeScrapersLayer(puppeteerLayer);
   const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
-  const EngineDeps = Layer.mergeAll(ScrapersLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive, PdfCompressorLive, PdfGeneratorLive);
+
+  const EngineDeps = Layer.mergeAll(
+    ScrapersLayer,
+    ConfigLayer,
+    ConfigStoreLayer,
+    JobStoreLive,
+    PdfCompressorLive,
+    PdfGeneratorLive,
+  );
+
   return Layer.provide(DownloadEngineLive, EngineDeps);
 };
 

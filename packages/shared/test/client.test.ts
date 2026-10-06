@@ -7,6 +7,7 @@ interface FetchCall {
 }
 
 const originalFetch = globalThis.fetch;
+
 let calls: FetchCall[] = [];
 
 const installFetch = (responder: (url: string) => { status: number; body: unknown }): void => {
@@ -15,6 +16,7 @@ const installFetch = (responder: (url: string) => { status: number; body: unknow
     const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
     calls.push({ url, init });
     const { status, body } = responder(url);
+
     return new Response(JSON.stringify(body), { status });
   }) as typeof fetch;
 };
@@ -34,7 +36,9 @@ describe("clearFinished", () => {
     // #given
     installFetch((url) => {
       if (url.endsWith("/jobs/completed")) return { status: 200, body: { removed: 2 } };
+
       if (url.endsWith("/jobs/failed")) return { status: 200, body: { removed: 3 } };
+
       return { status: 500, body: {} };
     });
 
@@ -51,6 +55,7 @@ describe("clearFinished", () => {
     // #given
     installFetch((url) => {
       if (url.endsWith("/jobs/completed")) return { status: 200, body: { removed: 1 } };
+
       return { status: 500, body: {} };
     });
 

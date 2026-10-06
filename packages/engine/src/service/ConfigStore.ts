@@ -35,7 +35,9 @@ const parseSettings = (raw: string): Settings | null => {
       ilovepdfSecretKey?: unknown;
       ilovepdfKeysValid?: unknown;
     };
+
     if (typeof parsed.outputFolder !== "string") return null;
+
     return {
       outputFolder: expandHome(parsed.outputFolder),
       ilovepdfPublicKey: coerceString(parsed.ilovepdfPublicKey),
@@ -66,16 +68,23 @@ export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never
         try {
           const raw = fsSync.readFileSync(filePath, "utf8");
           const parsed = parseSettings(raw);
+
           if (!parsed) {
-            console.warn(`[ConfigStore] ${filePath} malformed or missing outputFolder; using defaults`);
+            console.warn(
+              `[ConfigStore] ${filePath} malformed or missing outputFolder; using defaults`,
+            );
+
             return fallback();
           }
+
           return parsed;
         } catch (cause) {
           const err = cause as NodeJS.ErrnoException;
+
           if (err.code !== "ENOENT") {
             console.warn(`[ConfigStore] failed to read ${filePath} (${err.code}); using defaults`);
           }
+
           return fallback();
         }
       });
@@ -84,6 +93,7 @@ export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never
         Effect.tryPromise({
           try: async () => {
             await fs.mkdir(baseDir, { recursive: true });
+
             const body = `${JSON.stringify(
               {
                 outputFolder: settings.outputFolder,
@@ -94,6 +104,7 @@ export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never
               null,
               2,
             )}\n`;
+
             // File holds the iLovePDF secret key — keep it owner-only (0o600).
             await fs.writeFile(tmpPath, body, { encoding: "utf8", mode: 0o600 });
             await fs.rename(tmpPath, filePath);
@@ -106,4 +117,5 @@ export const makeConfigStore = (baseDir: string): Layer.Layer<ConfigStore, never
     }),
   );
 
-export const ConfigStoreLive: Layer.Layer<ConfigStore, never, ConfigLoader> = makeConfigStore(defaultBaseDir());
+export const ConfigStoreLive: Layer.Layer<ConfigStore, never, ConfigLoader> =
+  makeConfigStore(defaultBaseDir());

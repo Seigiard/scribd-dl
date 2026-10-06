@@ -10,8 +10,11 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
 const ENGINE_PORT = process.env.SCRIBD_DL_ENGINE_PORT ?? "4747";
+
 const LOG_PATH = resolve(ROOT, ".dev-tui-engine.log");
+
 const READY_TIMEOUT_MS = 10_000;
 
 const log = createWriteStream(LOG_PATH, { flags: "w" });
@@ -23,9 +26,11 @@ const engine = spawn("bun", ["packages/engine/engine.ts", "--port", ENGINE_PORT]
 });
 
 let killed = false;
+
 const killEngine = () => {
   if (killed) return;
   killed = true;
+
   if (!engine.killed) engine.kill("SIGTERM");
   setTimeout(() => {
     if (!engine.killed) engine.kill("SIGKILL");
@@ -33,7 +38,9 @@ const killEngine = () => {
 };
 
 process.on("SIGINT", () => killEngine());
+
 process.on("SIGTERM", () => killEngine());
+
 process.on("exit", () => killEngine());
 
 engine.stderr.pipe(log);
@@ -41,11 +48,17 @@ engine.stderr.pipe(log);
 const waitForReady = () =>
   new Promise<void>((resolveReady, rejectReady) => {
     let buf = "";
-    const timeout = setTimeout(() => rejectReady(new Error(`engine did not emit READY within ${READY_TIMEOUT_MS}ms`)), READY_TIMEOUT_MS);
+
+    const timeout = setTimeout(
+      () => rejectReady(new Error(`engine did not emit READY within ${READY_TIMEOUT_MS}ms`)),
+      READY_TIMEOUT_MS,
+    );
+
     engine.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");
       log.write(text);
       buf += text;
+
       if (buf.includes("READY")) {
         clearTimeout(timeout);
         resolveReady();
@@ -68,6 +81,7 @@ try {
 // Detach engine stdout from this process now that we're handing the terminal to TUI;
 // further engine output keeps streaming to the log file.
 engine.stdout.removeAllListeners("data");
+
 engine.stdout.pipe(log);
 
 const tui = spawn("bun", ["apps/tui/tui.ts", "--engine-url", `http://localhost:${ENGINE_PORT}`], {

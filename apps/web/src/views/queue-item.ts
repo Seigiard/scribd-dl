@@ -11,19 +11,24 @@ const pickAction = (job: Job): Action | null => {
   if (job.status === "Failed" && job.failure?.retryable) {
     return { kind: "retry", href: "#icon-retry", label: "Retry" };
   }
+
   if (job.status === "Queued" || job.status === "Failed") {
     return { kind: "remove", href: "#icon-delete", label: "Remove" };
   }
+
   return null;
 };
 
 const actionButton = (job: Job): Hole | null => {
   const action = pickAction(job);
+
   if (!action) return null;
+
   const onClick = (): void => {
     if (action.kind === "retry") void retryJobById(job.id);
     else void removeJobById(job.id);
   };
+
   return html`<button
     type="button"
     class="btn btn-default btn-ghost item-action"
@@ -40,20 +45,27 @@ const progressLine = (job: Job): Hole | null => {
   // compressing indicator replaces the progress line so the row shows one state.
   if (job.status !== "Downloading" || !job.progress || job.compression) return null;
   const { done, total, stage } = job.progress;
+
   return html`<div class="item-progress">${done} / ${total} (${stage})</div>`;
 };
 
 const compressionLine = (job: Job): Hole | null => {
   const c = job.compression;
+
   if (!c) return null;
+
   if (c.status === "compressing") {
     return html`<div class="item-compressing">Compressing…</div>`;
   }
-  return html`<div class="item-compression-failed" title=${c.reason}>⚠ Compression failed, file kept — ${c.reason}</div>`;
+
+  return html`<div class="item-compression-failed" title=${c.reason}>
+    ⚠ Compression failed, file kept — ${c.reason}
+  </div>`;
 };
 
 const reasonLine = (job: Job): Hole | null => {
   if (job.status !== "Failed" || !job.failure) return null;
+
   return html`<div class="item-reason">Reason: ${job.failure.reason}</div>`;
 };
 

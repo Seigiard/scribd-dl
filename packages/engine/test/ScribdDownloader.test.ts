@@ -65,21 +65,27 @@ const resetState = () => {
       // page.evaluate site carries a unique marker substring; the mock returns the
       // matching fixture so unit tests don't need a real browser.
       const src = String(fn);
+
       if (src.includes("removeSelectorAll") || src.includes("removeMarginSelectorAll")) {
         return state.processPageResult;
       }
+
       if (src.includes("next.click()")) {
         return state.slideshowClickOutcomes.shift() ?? "no-next";
       }
+
       if (src.includes("naturalWidth")) {
         return undefined;
       }
+
       if (src.includes("getBoundingClientRect")) {
         return state.slideshowVisible.shift() ?? null;
       }
+
       if (src.includes("querySelector(selector)")) {
         return state.isSlideshow;
       }
+
       return state.processPageResult;
     }),
     close: mock(async () => {}),
@@ -100,19 +106,25 @@ const resetState = () => {
 const buildLayer = () => {
   const puppeteerSvc: PuppeteerSgService = {
     getPage: (url) => state.getPage(url) as ReturnType<PuppeteerSgService["getPage"]>,
-    generatePDF: (page, path, opts) => state.generatePDF(page, path, opts) as ReturnType<PuppeteerSgService["generatePDF"]>,
+    generatePDF: (page, path, opts) =>
+      state.generatePDF(page, path, opts) as ReturnType<PuppeteerSgService["generatePDF"]>,
   };
+
   const pdfSvc: PdfGeneratorService = {
-    merge: (inputs, output) => state.merge(inputs, output) as ReturnType<PdfGeneratorService["merge"]>,
+    merge: (inputs, output) =>
+      state.merge(inputs, output) as ReturnType<PdfGeneratorService["merge"]>,
     setTitle: () => Effect.void,
   };
+
   const dirSvc: DirectoryIoService = {
     create: (p) => state.dirCreate(p) as ReturnType<DirectoryIoService["create"]>,
     remove: (p) => state.dirRemove(p) as ReturnType<DirectoryIoService["remove"]>,
   };
+
   const titleSvc: TitleResolverService = {
     resolve: (url, id) => state.resolve(url, id) as ReturnType<TitleResolverService["resolve"]>,
   };
+
   return Layer.provide(
     ScribdDownloaderLive,
     Layer.mergeAll(
@@ -172,8 +184,10 @@ describe("ScribdDownloader", () => {
 
     // #then
     expect(Exit.isFailure(exit)).toBe(true);
+
     if (Exit.isFailure(exit)) {
       const failures: Array<{ _tag: string }> = [];
+
       const walk = (c: { _tag: string } & Record<string, unknown>): void => {
         if (c._tag === "Fail") failures.push((c as unknown as { error: { _tag: string } }).error);
         else if (c._tag === "Sequential" || c._tag === "Parallel") {
@@ -181,6 +195,7 @@ describe("ScribdDownloader", () => {
           walk(c.right as never);
         }
       };
+
       walk(exit.cause as never);
       expect(failures[0]!._tag).toBe("UnsupportedUrl");
     }
@@ -203,10 +218,14 @@ describe("ScribdDownloader", () => {
     // #then
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(state.generatePDF).toHaveBeenCalledTimes(1);
-    expect(state.generatePDF).toHaveBeenCalledWith(state.page as unknown as Page, "/tmp/out/doc.pdf", {
-      width: 800,
-      height: 600,
-    });
+    expect(state.generatePDF).toHaveBeenCalledWith(
+      state.page as unknown as Page,
+      "/tmp/out/doc.pdf",
+      {
+        width: 800,
+        height: 600,
+      },
+    );
     expect(state.merge).not.toHaveBeenCalled();
     expect(state.dirCreate.mock.calls.some((c) => String(c[0]).includes("_temp"))).toBe(false);
   });
@@ -308,13 +327,21 @@ describe("ScribdDownloader", () => {
     const exit = await Effect.runPromiseExit(
       Effect.gen(function* () {
         const svc = yield* ScribdDownloader;
-        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", onEvent as Parameters<typeof svc.execute>[2]);
+        yield* svc.execute(
+          "https://www.scribd.com/embeds/123/content",
+          "/tmp/out",
+          onEvent as Parameters<typeof svc.execute>[2],
+        );
       }).pipe(Effect.provide(buildLayer())),
     );
 
     // #then
     expect(Exit.isSuccess(exit)).toBe(true);
-    expect(captured.map((e) => e._tag)).toEqual(["TitleResolved", "ScrapeProgress", "RenderProgress"]);
+    expect(captured.map((e) => e._tag)).toEqual([
+      "TitleResolved",
+      "ScrapeProgress",
+      "RenderProgress",
+    ]);
   });
 
   test("emits RenderProgress N times for N groups (multi-dim)", async () => {
@@ -334,7 +361,11 @@ describe("ScribdDownloader", () => {
     await Effect.runPromise(
       Effect.gen(function* () {
         const svc = yield* ScribdDownloader;
-        yield* svc.execute("https://www.scribd.com/embeds/123/content", "/tmp/out", onEvent as Parameters<typeof svc.execute>[2]);
+        yield* svc.execute(
+          "https://www.scribd.com/embeds/123/content",
+          "/tmp/out",
+          onEvent as Parameters<typeof svc.execute>[2],
+        );
       }).pipe(Effect.provide(buildLayer())),
     );
 
@@ -356,6 +387,7 @@ describe("ScribdDownloader", () => {
     const writes: string[] = [];
     process.stdout.write = ((chunk: string | Uint8Array) => {
       writes.push(typeof chunk === "string" ? chunk : Buffer.from(chunk).toString());
+
       return true;
     }) as typeof process.stdout.write;
 
@@ -397,6 +429,7 @@ describe("ScribdDownloader", () => {
       Effect.runPromise(
         Effect.gen(function* () {
           const svc = yield* ScribdDownloader;
+
           return svc.canHandle(url);
         }).pipe(Effect.provide(buildLayer())),
       );
@@ -428,6 +461,7 @@ describe("ScribdDownloader", () => {
       const id = await Effect.runPromise(
         Effect.gen(function* () {
           const svc = yield* ScribdDownloader;
+
           return svc.id;
         }).pipe(Effect.provide(buildLayer())),
       );
@@ -438,11 +472,14 @@ describe("ScribdDownloader", () => {
   });
 
   describe("debug=true behavior", () => {
-    const withBunWriteSpy = async (run: (writes: Array<{ path: string; data: string }>) => Promise<void>) => {
+    const withBunWriteSpy = async (
+      run: (writes: Array<{ path: string; data: string }>) => Promise<void>,
+    ) => {
       const writes: Array<{ path: string; data: string }> = [];
       const originalBunWrite = Bun.write;
       Bun.write = (async (path: unknown, data: unknown) => {
         writes.push({ path: String(path), data: String(data) });
+
         return String(data).length;
       }) as typeof Bun.write;
 
@@ -545,9 +582,11 @@ describe("ScribdDownloader", () => {
       // #then
       expect(Exit.isSuccess(exit)).toBe(true);
       expect(state.generatePDF).toHaveBeenCalledTimes(3);
+
       for (const call of state.generatePDF.mock.calls) {
         expect(call[2]).toEqual({ width: 1000, height: 773, pageRanges: "1" });
       }
+
       expect(state.merge).toHaveBeenCalledTimes(1);
       const mergeCall = state.merge.mock.calls[0];
       expect((mergeCall![0] as string[]).length).toBe(3);
@@ -586,6 +625,7 @@ describe("ScribdDownloader", () => {
 
       // #then
       expect(Exit.isFailure(exit)).toBe(true);
+
       if (Exit.isFailure(exit)) {
         const failures = Array.from(
           (function* walk(c: { _tag: string } & Record<string, unknown>): Generator<unknown> {
@@ -596,9 +636,11 @@ describe("ScribdDownloader", () => {
             }
           })(exit.cause as never),
         );
+
         const first = failures[0] as { _tag: string };
         expect(first._tag).toBe("PageProcessFailed");
       }
+
       expect(state.merge).toHaveBeenCalledTimes(0);
     });
 

@@ -16,6 +16,7 @@ export class JobStore extends Context.Tag("JobStore")<JobStore, JobStoreService>
 const JOBS_FILENAME = "jobs.jsonl";
 
 const VALID_DOMAINS: ReadonlyArray<JobDomain> = ["scribd", "unsupported"];
+
 const VALID_STATUSES: ReadonlyArray<JobStatus> = ["Queued", "Downloading", "Downloaded", "Failed"];
 
 export const defaultBaseDir = (): string => path.join(os.homedir(), ".config", "scribd-dl");
@@ -23,26 +24,34 @@ export const defaultBaseDir = (): string => path.join(os.homedir(), ".config", "
 const isFailure = (value: unknown): value is JobFailure => {
   if (!value || typeof value !== "object") return false;
   const f = value as { reason?: unknown; retryable?: unknown };
+
   return typeof f.reason === "string" && typeof f.retryable === "boolean";
 };
 
 // Only a terminal `failed` compression on a `Downloaded` job survives to disk (KTD4):
 // a transient `compressing` flag is always dropped so a killed engine never resumes
 // with a stale in-flight marker.
-const isTerminalFailedCompression = (value: unknown, status: JobStatus): value is JobCompression => {
+const isTerminalFailedCompression = (
+  value: unknown,
+  status: JobStatus,
+): value is JobCompression => {
   if (status !== "Downloaded" || !value || typeof value !== "object") return false;
   const c = value as { status?: unknown; reason?: unknown };
+
   return c.status === "failed" && typeof c.reason === "string";
 };
 
 const parseJobLine = (raw: string): Job | null => {
   let parsed: unknown;
+
   try {
     parsed = JSON.parse(raw);
   } catch {
     return null;
   }
+
   if (!parsed || typeof parsed !== "object") return null;
+
   const j = parsed as {
     id?: unknown;
     url?: unknown;
@@ -52,13 +61,19 @@ const parseJobLine = (raw: string): Job | null => {
     failure?: unknown;
     compression?: unknown;
   };
+
   if (typeof j.id !== "string" || j.id === "") return null;
+
   if (typeof j.url !== "string" || j.url === "") return null;
+
   if (typeof j.displayTitle !== "string") return null;
+
   if (typeof j.domain !== "string" || !VALID_DOMAINS.includes(j.domain as JobDomain)) return null;
+
   if (typeof j.status !== "string" || !VALID_STATUSES.includes(j.status as JobStatus)) return null;
 
   const status = j.status as JobStatus;
+
   const base: Job = {
     id: j.id,
     url: j.url,
@@ -68,17 +83,20 @@ const parseJobLine = (raw: string): Job | null => {
     ...(isFailure(j.failure) ? { failure: j.failure } : {}),
     ...(isTerminalFailedCompression(j.compression, status) ? { compression: j.compression } : {}),
   };
+
   return base;
 };
 
 const forPersist = (job: Job): Job => {
   if (isTerminalFailedCompression(job.compression, job.status)) return job;
   const { compression: _drop, ...rest } = job;
+
   return rest;
 };
 
 const normalize = (job: Job): Job => {
   if (job.status !== "Downloading") return job;
+
   return {
     id: job.id,
     url: job.url,
@@ -99,31 +117,42 @@ export const makeJobStore = (baseDir: string): Layer.Layer<JobStore, never, neve
 
       const read: Effect.Effect<ReadonlyArray<Job>, never, never> = Effect.sync(() => {
         let raw: string;
+
         try {
           raw = fsSync.readFileSync(filePath, "utf8");
         } catch (cause) {
           const err = cause as NodeJS.ErrnoException;
+
           if (err.code !== "ENOENT") {
             console.warn(`[JobStore] failed to read ${filePath} (${err.code}); starting empty`);
           }
+
           return [];
         }
+
         const lines = raw.split("\n");
         const out: Job[] = [];
         lines.forEach((line, idx) => {
           const trimmed = line.trim();
+
           if (trimmed === "") return;
           const parsed = parseJobLine(trimmed);
+
           if (!parsed) {
             console.warn(`[JobStore] skipping malformed line ${idx + 1} in ${filePath}`);
+
             return;
           }
+
           out.push(normalize(parsed));
         });
+
         return out;
       });
 
-      const performWrite = (jobs: ReadonlyArray<Job>): Effect.Effect<void, PersistenceFailed, never> =>
+      const performWrite = (
+        jobs: ReadonlyArray<Job>,
+      ): Effect.Effect<void, PersistenceFailed, never> =>
         Effect.tryPromise({
           try: async () => {
             await fs.mkdir(baseDir, { recursive: true });

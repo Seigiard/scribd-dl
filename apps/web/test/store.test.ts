@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EngineSnapshot, Job, JobId } from "@scribd-dl/shared";
-import { $jobs, $transient, applySnapshot, dismissSticky, resetStores, showTransient } from "@/store";
+import {
+  $jobs,
+  $transient,
+  applySnapshot,
+  dismissSticky,
+  resetStores,
+  showTransient,
+} from "@/store";
 
 const job = (overrides: Partial<Job> & { id: JobId }): Job => ({
   id: overrides.id,
@@ -59,12 +66,22 @@ describe("store", () => {
 
   it("detects a compression-only change (compressing → failed → cleared)", () => {
     // #given
-    const a = job({ id: "a" as JobId, status: "Downloading", compression: { status: "compressing" } });
+    const a = job({
+      id: "a" as JobId,
+      status: "Downloading",
+      compression: { status: "compressing" },
+    });
+
     applySnapshot(snapshot([a]));
     expect($jobs.get().a?.compression).toEqual({ status: "compressing" });
 
     // #when — compression fails on the Downloaded job
-    const failed = job({ id: "a" as JobId, status: "Downloaded", compression: { status: "failed", reason: "network error" } });
+    const failed = job({
+      id: "a" as JobId,
+      status: "Downloaded",
+      compression: { status: "failed", reason: "network error" },
+    });
+
     applySnapshot(snapshot([failed]));
     // #then
     expect($jobs.get().a?.compression).toEqual({ status: "failed", reason: "network error" });

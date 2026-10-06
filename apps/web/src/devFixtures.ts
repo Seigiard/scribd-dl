@@ -13,7 +13,8 @@ const FAKE_JOBS: ReadonlyArray<Job> = [
     id: "fake-queued-long",
     url: "https://www.scribd.com/document/222222222/queued-long",
     domain: "scribd",
-    displayTitle: "Queued: A Very Very Very Long Title That Should Test Truncation, Wrapping, And Other Layout Edge Cases In The UI Row",
+    displayTitle:
+      "Queued: A Very Very Very Long Title That Should Test Truncation, Wrapping, And Other Layout Edge Cases In The UI Row",
     status: "Queued",
   },
   {
@@ -80,6 +81,7 @@ const FAKE_JOBS: ReadonlyArray<Job> = [
 export const installFakeJobs = (): void => {
   const unsubscribe = $jobs.listen(() => {
     unsubscribe();
+
     for (const job of FAKE_JOBS) $jobs.setKey(job.id, job);
   });
 };

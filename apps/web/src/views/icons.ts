@@ -10,5 +10,6 @@ export const STATUS_ICON: Record<JobStatus, string> = {
 
 export const icon = (href: string, extraClass = ""): Hole => {
   const cls = extraClass ? `item-icon ${extraClass}` : "item-icon";
+
   return html`<svg class=${cls} aria-hidden="true"><use href=${href} /></svg>`;
 };

@@ -10,8 +10,15 @@ describe("SettingsPopup", () => {
   test("pre-fills both keys as plain text", async () => {
     // #given
     const ui = render(
-      <SettingsPopup initialPublicKey="pub123" initialSecretKey="sec456" initialValid={null} onSave={noop} onCancel={() => {}} />,
+      <SettingsPopup
+        initialPublicKey="pub123"
+        initialSecretKey="sec456"
+        initialValid={null}
+        onSave={noop}
+        onCancel={() => {}}
+      />,
     );
+
     await flush();
 
     // #then
@@ -23,7 +30,16 @@ describe("SettingsPopup", () => {
 
   test("shows persisted validity on open (valid)", async () => {
     // #given
-    const ui = render(<SettingsPopup initialPublicKey="p" initialSecretKey="s" initialValid={true} onSave={noop} onCancel={() => {}} />);
+    const ui = render(
+      <SettingsPopup
+        initialPublicKey="p"
+        initialSecretKey="s"
+        initialValid={true}
+        onSave={noop}
+        onCancel={() => {}}
+      />,
+    );
+
     await flush();
 
     // #then
@@ -33,7 +49,16 @@ describe("SettingsPopup", () => {
 
   test("shows unverified when validity is null", async () => {
     // #given
-    const ui = render(<SettingsPopup initialPublicKey="" initialSecretKey="" initialValid={null} onSave={noop} onCancel={() => {}} />);
+    const ui = render(
+      <SettingsPopup
+        initialPublicKey=""
+        initialSecretKey=""
+        initialValid={null}
+        onSave={noop}
+        onCancel={() => {}}
+      />,
+    );
+
     await flush();
 
     // #then
@@ -43,7 +68,16 @@ describe("SettingsPopup", () => {
 
   test("typing appends to the focused (public) field", async () => {
     // #given
-    const ui = render(<SettingsPopup initialPublicKey="p" initialSecretKey="" initialValid={null} onSave={noop} onCancel={() => {}} />);
+    const ui = render(
+      <SettingsPopup
+        initialPublicKey="p"
+        initialSecretKey=""
+        initialValid={null}
+        onSave={noop}
+        onCancel={() => {}}
+      />,
+    );
+
     await flush();
 
     // #when
@@ -59,9 +93,17 @@ describe("SettingsPopup", () => {
     // #given
     const onSave = mock<(p: string, s: string) => Promise<boolean>>(async () => true);
     const onCancel = mock(() => {});
+
     const ui = render(
-      <SettingsPopup initialPublicKey="pub" initialSecretKey="sec" initialValid={null} onSave={onSave} onCancel={onCancel} />,
+      <SettingsPopup
+        initialPublicKey="pub"
+        initialSecretKey="sec"
+        initialValid={null}
+        onSave={onSave}
+        onCancel={onCancel}
+      />,
     );
+
     await flush();
 
     // #when — focus order: public → secret → cancel → save
@@ -84,7 +126,17 @@ describe("SettingsPopup", () => {
   test("Save with both keys empty clears without error and stays open", async () => {
     // #given
     const onSave = mock<(p: string, s: string) => Promise<boolean>>(async () => false);
-    const ui = render(<SettingsPopup initialPublicKey="" initialSecretKey="" initialValid={null} onSave={onSave} onCancel={() => {}} />);
+
+    const ui = render(
+      <SettingsPopup
+        initialPublicKey=""
+        initialSecretKey=""
+        initialValid={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
+    );
+
     await flush();
 
     // #when — Tab×3 → Save, Enter
@@ -101,9 +153,17 @@ describe("SettingsPopup", () => {
   test("Save is inert when exactly one key is filled", async () => {
     // #given — only the public key filled
     const onSave = mock<(p: string, s: string) => Promise<boolean>>(async () => true);
+
     const ui = render(
-      <SettingsPopup initialPublicKey="only-public" initialSecretKey="" initialValid={null} onSave={onSave} onCancel={() => {}} />,
+      <SettingsPopup
+        initialPublicKey="only-public"
+        initialSecretKey=""
+        initialValid={null}
+        onSave={onSave}
+        onCancel={() => {}}
+      />,
     );
+
     await flush();
 
     // #when — Tab×3 → Save, Enter
@@ -120,7 +180,17 @@ describe("SettingsPopup", () => {
   test("Esc calls onCancel", async () => {
     // #given
     const onCancel = mock(() => {});
-    const ui = render(<SettingsPopup initialPublicKey="" initialSecretKey="" initialValid={null} onSave={noop} onCancel={onCancel} />);
+
+    const ui = render(
+      <SettingsPopup
+        initialPublicKey=""
+        initialSecretKey=""
+        initialValid={null}
+        onSave={noop}
+        onCancel={onCancel}
+      />,
+    );
+
     await flush();
 
     // #when

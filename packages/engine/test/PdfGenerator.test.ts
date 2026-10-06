@@ -8,9 +8,11 @@ import { PdfGenerator, PdfGeneratorLive } from "../src/utils/io/PdfGenerator";
 
 const createPdf = async (filePath: string, pageCount: number): Promise<void> => {
   const doc = await PDFDocument.create();
+
   for (let i = 0; i < pageCount; i++) {
     doc.addPage([612, 792]);
   }
+
   const bytes = await doc.save();
   await fs.writeFile(filePath, bytes);
 };
@@ -41,11 +43,14 @@ const failureTag = (exit: Exit.Exit<unknown, unknown>): string | undefined => {
   if (!Exit.isFailure(exit)) {
     return undefined;
   }
+
   const failure = Cause.failureOption(exit.cause);
+
   return failure._tag === "Some" ? (failure.value as { _tag?: string })._tag : undefined;
 };
 
-const isPdfMergeFailure = (exit: Exit.Exit<unknown, unknown>): boolean => failureTag(exit) === "PdfMergeFailed";
+const isPdfMergeFailure = (exit: Exit.Exit<unknown, unknown>): boolean =>
+  failureTag(exit) === "PdfMergeFailed";
 
 describe("PdfGenerator.merge", () => {
   let tmpDir: string;

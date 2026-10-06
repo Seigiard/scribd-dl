@@ -11,6 +11,7 @@ const runRead = (baseDir: string) =>
     Effect.provide(
       Effect.gen(function* () {
         const store = yield* JobStore;
+
         return yield* store.read;
       }),
       makeJobStore(baseDir),
@@ -22,6 +23,7 @@ const runWrite = (baseDir: string, jobs: ReadonlyArray<Job>) =>
     Effect.provide(
       Effect.gen(function* () {
         const store = yield* JobStore;
+
         return yield* store.write(jobs);
       }),
       makeJobStore(baseDir),
@@ -62,7 +64,12 @@ describe("JobStore", () => {
   describe("read", () => {
     test("returns jobs in file order when all lines are valid", async () => {
       // #given
-      const jobs = [job("a", "Queued"), job("b", "Downloaded"), job("c", "Failed", { failure: { reason: "x", retryable: true } })];
+      const jobs = [
+        job("a", "Queued"),
+        job("b", "Downloaded"),
+        job("c", "Failed", { failure: { reason: "x", retryable: true } }),
+      ];
+
       const body = jobs.map((j) => JSON.stringify(j)).join("\n") + "\n";
       await fs.writeFile(path.join(tmpDir, "jobs.jsonl"), body);
 
@@ -128,7 +135,10 @@ describe("JobStore", () => {
     test("skips line missing required fields", async () => {
       // #given
       const warn = spyOn(console, "warn").mockImplementation(() => {});
-      await fs.writeFile(path.join(tmpDir, "jobs.jsonl"), `{"id":"x"}\n${JSON.stringify(job("a", "Queued"))}\n`);
+      await fs.writeFile(
+        path.join(tmpDir, "jobs.jsonl"),
+        `{"id":"x"}\n${JSON.stringify(job("a", "Queued"))}\n`,
+      );
 
       // #when
       const result = await runRead(tmpDir);
@@ -145,6 +155,7 @@ describe("JobStore", () => {
         ...job("d", "Downloading"),
         progress: { done: 5, total: 10, stage: "scrape" },
       };
+
       await fs.writeFile(path.join(tmpDir, "jobs.jsonl"), `${JSON.stringify(stale)}\n`);
 
       // #when
@@ -231,7 +242,9 @@ describe("JobStore", () => {
   describe("compression persistence (KTD4)", () => {
     test("a Downloaded job with a failed compression survives write then read", async () => {
       // #given
-      const jobs = [job("a", "Downloaded", { compression: { status: "failed", reason: "network error" } })];
+      const jobs = [
+        job("a", "Downloaded", { compression: { status: "failed", reason: "network error" } }),
+      ];
 
       // #when
       await runWrite(tmpDir, jobs);
@@ -255,7 +268,9 @@ describe("JobStore", () => {
 
     test("a failed compression on a non-Downloaded job is dropped", async () => {
       // #given — only terminal (Downloaded) failed compression is retained
-      const jobs = [job("a", "Queued", { compression: { status: "failed", reason: "network error" } })];
+      const jobs = [
+        job("a", "Queued", { compression: { status: "failed", reason: "network error" } }),
+      ];
 
       // #when
       await runWrite(tmpDir, jobs);

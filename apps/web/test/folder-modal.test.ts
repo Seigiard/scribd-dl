@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "uhtml";
 
 const saveFolderMock = vi.fn(async (_path: string) => {});
+
 vi.mock("@/engineClient", () => ({
   saveFolder: saveFolderMock,
 }));
 
 const { folderModal, $modalError, $draftFolder } = await import("@/views/folder-modal");
+
 const { $folder, $modal, resetStores } = await import("@/store");
 
 type ModalProps = {
@@ -20,6 +22,7 @@ const mountModal = (props: ModalProps): HTMLElement => {
   const container = document.createElement("div");
   document.body.appendChild(container);
   render(container, folderModal({ draft: "", ...props }));
+
   return container;
 };
 
@@ -49,12 +52,14 @@ describe("folderModal()", () => {
 
     // #when — opening triggers seed + needsFocus flag, then render attaches focus
     $modal.set("folder");
+
     const root = mountModal({
       mode: "folder",
       folder: "/home/me/Downloads",
       error: null,
       draft: $draftFolder.get(),
     });
+
     await flush();
 
     // #then
@@ -85,7 +90,13 @@ describe("folderModal()", () => {
   });
 
   it("renders modal with input value from draft when open", () => {
-    const root = mountModal({ mode: "folder", folder: null, error: null, draft: "/home/me/Downloads" });
+    const root = mountModal({
+      mode: "folder",
+      folder: null,
+      error: null,
+      draft: "/home/me/Downloads",
+    });
+
     const input = root.querySelector<HTMLInputElement>(".folder-modal-input")!;
     expect(root.querySelector(".folder-modal")).not.toBeNull();
     expect(input.value).toBe("/home/me/Downloads");
@@ -318,7 +329,10 @@ describe("folderModal()", () => {
     $draftFolder.set("/my-draft");
     const container = document.createElement("div");
     document.body.appendChild(container);
-    render(container, folderModal({ mode: "folder", folder: "/old", error: null, draft: $draftFolder.get() }));
+    render(
+      container,
+      folderModal({ mode: "folder", folder: "/old", error: null, draft: $draftFolder.get() }),
+    );
     const input = container.querySelector<HTMLInputElement>(".folder-modal-input")!;
     expect(input.value).toBe("/my-draft");
 
@@ -326,7 +340,10 @@ describe("folderModal()", () => {
     $folder.set("/external");
 
     // #then — draft survives the external change; next render keeps user input
-    render(container, folderModal({ mode: "folder", folder: "/external", error: null, draft: $draftFolder.get() }));
+    render(
+      container,
+      folderModal({ mode: "folder", folder: "/external", error: null, draft: $draftFolder.get() }),
+    );
     expect(input.value).toBe("/my-draft");
     expect($draftFolder.get()).toBe("/my-draft");
   });

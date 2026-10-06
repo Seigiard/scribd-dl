@@ -20,8 +20,10 @@ describe("DomainErrors", () => {
     const cause = new Error("x");
     const exit = await Effect.runPromiseExit(Effect.fail(new BrowserLaunchFailed({ cause })));
     expect(Exit.isFailure(exit)).toBe(true);
+
     if (Exit.isFailure(exit)) {
       const failureOpt = exit.cause;
+
       const failures = Array.from(
         (function* walk(c: typeof failureOpt): Generator<unknown> {
           if (c._tag === "Fail") yield (c as { error: unknown }).error;
@@ -31,6 +33,7 @@ describe("DomainErrors", () => {
           }
         })(failureOpt),
       );
+
       expect(failures.length).toBeGreaterThan(0);
       const first = failures[0] as { _tag: string };
       expect(first._tag).toBe("BrowserLaunchFailed");

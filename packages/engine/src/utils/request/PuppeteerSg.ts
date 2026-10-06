@@ -1,7 +1,11 @@
 import { Context, Effect, Layer } from "effect";
 import puppeteer from "puppeteer";
 import type { LaunchOptions, Page, PDFOptions } from "puppeteer";
-import { BrowserLaunchFailed, PageLoadFailed, PdfGenerationFailed } from "../../errors/DomainErrors";
+import {
+  BrowserLaunchFailed,
+  PageLoadFailed,
+  PdfGenerationFailed,
+} from "../../errors/DomainErrors";
 
 const PAGE_BUFFER_MS = 1000;
 
@@ -61,7 +65,11 @@ export interface PuppeteerPdfOptions {
 
 export interface PuppeteerSgService {
   readonly getPage: (url: string) => Effect.Effect<Page, PageLoadFailed, never>;
-  readonly generatePDF: (page: Page, path: string, options?: PuppeteerPdfOptions) => Effect.Effect<void, PdfGenerationFailed, never>;
+  readonly generatePDF: (
+    page: Page,
+    path: string,
+    options?: PuppeteerPdfOptions,
+  ) => Effect.Effect<void, PdfGenerationFailed, never>;
 }
 
 export class PuppeteerSg extends Context.Tag("PuppeteerSg")<PuppeteerSg, PuppeteerSgService>() {}
@@ -73,10 +81,13 @@ export interface PuppeteerSgOptions {
 const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
   const useNoSandbox = process.env.CI === "true" || process.env.PUPPETEER_NO_SANDBOX === "true";
   const args: string[] = [];
+
   if (useNoSandbox) {
     args.push("--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage");
   }
+
   const executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+
   const options: LaunchOptions = {
     headless: !opts.headful,
     defaultViewport: null,
@@ -88,13 +99,17 @@ const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
     // to let heavy documents finish without false timeouts.
     ...(opts.headful ? { protocolTimeout: 0 } : {}),
   };
+
   if (executablePath) {
     return { ...options, executablePath };
   }
+
   return options;
 };
 
-export const makePuppeteerSgLive = (opts: PuppeteerSgOptions): Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> =>
+export const makePuppeteerSgLive = (
+  opts: PuppeteerSgOptions,
+): Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> =>
   Layer.scoped(
     PuppeteerSg,
     Effect.gen(function* () {
@@ -112,6 +127,7 @@ export const makePuppeteerSgLive = (opts: PuppeteerSgOptions): Layer.Layer<Puppe
             try: () => browser.newPage(),
             catch: (cause) => new PageLoadFailed({ url, cause }),
           });
+
           yield* Effect.tryPromise({
             try: () => page.goto(url, { waitUntil: "load" }),
             catch: (cause) => new PageLoadFailed({ url, cause }),
@@ -124,11 +140,18 @@ export const makePuppeteerSgLive = (opts: PuppeteerSgOptions): Layer.Layer<Puppe
             try: () => page.evaluate(BROWSER_HELPERS_SOURCE),
             catch: (cause) => new PageLoadFailed({ url, cause }),
           });
-          yield* Effect.promise(() => new Promise<void>((resolve) => setTimeout(resolve, PAGE_BUFFER_MS)));
+          yield* Effect.promise(
+            () => new Promise<void>((resolve) => setTimeout(resolve, PAGE_BUFFER_MS)),
+          );
+
           return page;
         });
 
-      const generatePDF = (page: Page, pdfPath: string, options?: PuppeteerPdfOptions): Effect.Effect<void, PdfGenerationFailed, never> =>
+      const generatePDF = (
+        page: Page,
+        pdfPath: string,
+        options?: PuppeteerPdfOptions,
+      ): Effect.Effect<void, PdfGenerationFailed, never> =>
         Effect.tryPromise({
           try: () => {
             const pdfOptions: PDFOptions = {
@@ -137,6 +160,7 @@ export const makePuppeteerSgLive = (opts: PuppeteerSgOptions): Layer.Layer<Puppe
               timeout: 0,
               ...options,
             };
+
             return page.pdf(pdfOptions).then(() => undefined);
           },
           catch: (cause) => new PdfGenerationFailed({ path: pdfPath, cause }),

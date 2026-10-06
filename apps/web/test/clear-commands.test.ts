@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const clearFinishedMock = vi.fn(async () => 0);
+
 const clearAllMock = vi.fn(async () => 0);
 
 vi.mock("@/lib/api", () => ({
@@ -15,6 +16,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 const { __testing, commandClearAll, commandClearFinished } = await import("@/engineClient");
+
 const { $jobs, $transient, resetStores } = await import("@/store");
 
 const FAKE_URL = "http://engine.test";

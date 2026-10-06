@@ -43,6 +43,7 @@ const resetState = () => {
   state.page = {
     goto: mock(async () => {
       if (state.gotoShouldThrow) throw new Error("goto failed");
+
       return null;
     }),
     emulateMediaType: mock(async () => {}),
@@ -56,6 +57,7 @@ const resetState = () => {
   };
   state.launch = mock(async (opts: unknown) => {
     state.lastLaunchOptions = opts;
+
     return state.browser;
   });
   state.lastLaunchOptions = undefined;
@@ -71,7 +73,8 @@ await mock.module("puppeteer", () => ({
   launch: (opts: unknown) => state.launch(opts),
 }));
 
-const { PuppeteerSg, PuppeteerSgLive, makePuppeteerSgLive } = await import("../src/utils/request/PuppeteerSg");
+const { PuppeteerSg, PuppeteerSgLive, makePuppeteerSgLive } =
+  await import("../src/utils/request/PuppeteerSg");
 
 describe("PuppeteerSg", () => {
   const savedEnv: Record<string, string | undefined> = {};
@@ -99,9 +102,11 @@ describe("PuppeteerSg", () => {
         const svc = yield* PuppeteerSg;
         const page = yield* svc.getPage("about:blank");
         expect(page).toBe(state.page as never);
+
         return page;
       }).pipe(Effect.provide(PuppeteerSgLive)),
     );
+
     const exit = await Effect.runPromiseExit(program);
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(state.browser.close).toHaveBeenCalledTimes(1);
@@ -112,14 +117,18 @@ describe("PuppeteerSg", () => {
 
   test("getPage error still triggers browser cleanup", async () => {
     state.gotoShouldThrow = true;
+
     const program = Effect.scoped(
       Effect.gen(function* () {
         const svc = yield* PuppeteerSg;
+
         return yield* svc.getPage("about:blank");
       }).pipe(Effect.provide(PuppeteerSgLive)),
     );
+
     const exit = await Effect.runPromiseExit(program);
     expect(Exit.isFailure(exit)).toBe(true);
+
     if (Exit.isFailure(exit)) {
       const failures = Array.from(
         (function* walk(c: { _tag: string } & Record<string, unknown>): Generator<unknown> {
@@ -130,20 +139,25 @@ describe("PuppeteerSg", () => {
           }
         })(exit.cause as never),
       );
+
       const first = failures[0] as { _tag: string };
       expect(first._tag).toBe("PageLoadFailed");
     }
+
     expect(state.browser.close).toHaveBeenCalledTimes(1);
   });
 
   test("interrupt invokes browser cleanup", async () => {
     state.browser.newPage = mock(() => new Promise(() => {}));
+
     const program = Effect.scoped(
       Effect.gen(function* () {
         const svc = yield* PuppeteerSg;
+
         return yield* svc.getPage("about:blank");
       }).pipe(Effect.provide(PuppeteerSgLive)),
     );
+
     const fiber = Effect.runFork(program);
     await new Promise((resolve) => setTimeout(resolve, 30));
     await Effect.runPromise(Fiber.interrupt(fiber));
@@ -154,7 +168,9 @@ describe("PuppeteerSg", () => {
     process.env.PUPPETEER_EXECUTABLE_PATH = "/fake/chrome";
     const program = Effect.scoped(Effect.void.pipe(Effect.provide(PuppeteerSgLive)));
     await Effect.runPromise(program);
-    expect((state.lastLaunchOptions as { executablePath?: string }).executablePath).toBe("/fake/chrome");
+    expect((state.lastLaunchOptions as { executablePath?: string }).executablePath).toBe(
+      "/fake/chrome",
+    );
   });
 
   test("PUPPETEER_NO_SANDBOX adds sandbox args", async () => {
@@ -162,7 +178,11 @@ describe("PuppeteerSg", () => {
     const program = Effect.scoped(Effect.void.pipe(Effect.provide(PuppeteerSgLive)));
     await Effect.runPromise(program);
     const opts = state.lastLaunchOptions as { args: string[] };
-    expect(opts.args).toEqual(["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]);
+    expect(opts.args).toEqual([
+      "--no-sandbox",
+      "--disable-setuid-sandbox",
+      "--disable-dev-shm-usage",
+    ]);
   });
 
   describe("headful parameterization", () => {
@@ -179,7 +199,9 @@ describe("PuppeteerSg", () => {
 
     test("makePuppeteerSgLive({ headful: true }) uses headless: false", async () => {
       // #given
-      const program = Effect.scoped(Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: true }))));
+      const program = Effect.scoped(
+        Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: true }))),
+      );
 
       // #when
       await Effect.runPromise(program);
@@ -190,7 +212,9 @@ describe("PuppeteerSg", () => {
 
     test("makePuppeteerSgLive({ headful: false }) uses headless: true", async () => {
       // #given
-      const program = Effect.scoped(Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: false }))));
+      const program = Effect.scoped(
+        Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: false }))),
+      );
 
       // #when
       await Effect.runPromise(program);
@@ -208,6 +232,7 @@ describe("PuppeteerSg", () => {
         yield* svc.generatePDF(page, "/tmp/out.pdf", { width: 100, height: 200, pageRanges: "1" });
       }).pipe(Effect.provide(PuppeteerSgLive)),
     );
+
     const exit = await Effect.runPromiseExit(program);
     expect(Exit.isSuccess(exit)).toBe(true);
     expect(state.page.pdf).toHaveBeenCalledWith({

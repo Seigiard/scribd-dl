@@ -12,4 +12,5 @@ export const DEFAULT_CONFIG: ConfigData = {
   directory: { output: "output", filename: "title" },
 };
 
-export const makeConfigLoader = (config: ConfigData): Layer.Layer<ConfigLoader, never, never> => Layer.succeed(ConfigLoader, config);
+export const makeConfigLoader = (config: ConfigData): Layer.Layer<ConfigLoader, never, never> =>
+  Layer.succeed(ConfigLoader, config);

@@ -24,7 +24,9 @@ const statusColor = (status: JobStatus): string | undefined => {
 
 const actionLabel = (action?: QueueItemAction): string | null => {
   if (action === "remove") return "[Remove]";
+
   if (action === "retry") return "[Retry]";
+
   return null;
 };
 
@@ -34,6 +36,7 @@ const renderBar = (done: number, total: number): string => {
   if (total <= 0) return "";
   const ratio = Math.max(0, Math.min(1, done / total));
   const filled = Math.round(ratio * BAR_WIDTH);
+
   return `[${"█".repeat(filled)}${"░".repeat(BAR_WIDTH - filled)}] ${done}/${total}`;
 };
 
@@ -45,6 +48,7 @@ export const QueueItem = ({ job, action, focused }: QueueItemProps) => {
   // the progress bar so the row shows a single state.
   const showProgress = job.status === "Downloading" && job.progress && !job.compression;
   const compressionFailed = job.compression?.status === "failed" ? job.compression.reason : null;
+
   return (
     <Box flexDirection="column" marginBottom={1}>
       <Box>

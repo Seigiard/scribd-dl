@@ -15,13 +15,16 @@ const queuedJob: Job = {
 };
 
 const downloadingJob: Job = { ...queuedJob, id: jobId("b"), status: "Downloading" };
+
 const downloadedJob: Job = { ...queuedJob, id: jobId("c"), status: "Downloaded" };
+
 const failedRetryable: Job = {
   ...queuedJob,
   id: jobId("d"),
   status: "Failed",
   failure: { reason: "PageLoadFailed: timeout", retryable: true },
 };
+
 const failedUnsupported: Job = {
   id: jobId("e"),
   url: "https://example.com/doc",
@@ -85,7 +88,12 @@ describe("QueueItem", () => {
 
   test("compressing: shows compressing marker and no progress bar", () => {
     // #given — compression runs while status is still Downloading (KTD3)
-    const job: Job = { ...downloadingJob, progress: { done: 3, total: 3, stage: "render" }, compression: { status: "compressing" } };
+    const job: Job = {
+      ...downloadingJob,
+      progress: { done: 3, total: 3, stage: "render" },
+      compression: { status: "compressing" },
+    };
+
     const ui = render(<QueueItem job={job} />);
     const frame = ui.lastFrame() ?? "";
 
@@ -97,7 +105,11 @@ describe("QueueItem", () => {
 
   test("compression failed: shows subordinate marker + reason, no red Failed reason line", () => {
     // #given
-    const job: Job = { ...downloadedJob, compression: { status: "failed", reason: "quota exceeded" } };
+    const job: Job = {
+      ...downloadedJob,
+      compression: { status: "failed", reason: "quota exceeded" },
+    };
+
     const ui = render(<QueueItem job={job} />);
     const frame = ui.lastFrame() ?? "";
 

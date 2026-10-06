@@ -8,7 +8,9 @@ import { makePuppeteerSgLive } from "./src/utils/request/PuppeteerSg";
 
 const DEBUG_OUTPUT_FOLDER = DEFAULT_CONFIG.directory.output;
 
-const urlArg = Args.text({ name: "url" }).pipe(Args.withDescription("Scraper URL to debug (e.g. Scribd document URL)."));
+const urlArg = Args.text({ name: "url" }).pipe(
+  Args.withDescription("Scraper URL to debug (e.g. Scribd document URL)."),
+);
 
 const logEvent: OnEvent = (event) =>
   Effect.sync(() => {
@@ -32,10 +34,14 @@ const program = (url: string) =>
   Effect.gen(function* () {
     const scrapers = yield* Scrapers;
     const scraper = findScraperForUrl(scrapers, url);
+
     if (!scraper) {
       return yield* Effect.fail(new NoScraperForUrl(url));
     }
-    console.log(`[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms`);
+
+    console.log(
+      `[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms`,
+    );
     yield* scraper.execute(url, DEBUG_OUTPUT_FOLDER, logEvent, true);
     console.log(`[debug] done. Artifacts in ${DEBUG_OUTPUT_FOLDER}/`);
   }).pipe(

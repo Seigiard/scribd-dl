@@ -28,6 +28,7 @@ describe("StatusZone", () => {
         transient: { severity: "warning", message: "Unsupported domain", sticky: false },
       }),
     );
+
     const frame = ui.lastFrame()!;
     expect(frame).toContain("Unsupported domain");
     expect(frame).not.toContain("[Clear Finished]");
@@ -42,6 +43,7 @@ describe("StatusZone", () => {
         transient: { severity: "error", message: "Disconnected from engine", sticky: true },
       }),
     );
+
     expect(ui.lastFrame()).toContain("Disconnected from engine");
     ui.unmount();
   });
@@ -54,6 +56,7 @@ describe("StatusZone", () => {
         clearAllEnabled: false,
       }),
     );
+
     const frame = ui.lastFrame()!;
     expect(frame).toContain("[Clear Finished]");
     expect(frame).toContain("[Clear All]");
@@ -69,6 +72,7 @@ describe("StatusZone", () => {
         clearFinishedFocused: true,
       }),
     );
+
     expect(ui.lastFrame()).toContain("[Clear Finished]");
     ui.unmount();
   });

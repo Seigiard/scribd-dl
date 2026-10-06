@@ -30,9 +30,11 @@ class FakeWebSocket {
 }
 
 const originalFetch = globalThis.fetch;
+
 const originalWs = globalThis.WebSocket;
 
 let snapshots: EngineSnapshot[] = [];
+
 let snapshotCalls = 0;
 
 const installFetchStub = (...frames: EngineSnapshot[]): void => {
@@ -41,10 +43,14 @@ const installFetchStub = (...frames: EngineSnapshot[]): void => {
   globalThis.fetch = (async (input: unknown) => {
     // useEngineState also GETs /settings on mount; keep it off the snapshot queue/count.
     if (String(input).endsWith("/settings")) {
-      return new Response(JSON.stringify({ publicKey: "", secretKey: "", valid: null }), { status: 200 });
+      return new Response(JSON.stringify({ publicKey: "", secretKey: "", valid: null }), {
+        status: 200,
+      });
     }
+
     const next = snapshots.shift() ?? { jobs: [] };
     snapshotCalls += 1;
+
     return new Response(JSON.stringify(next), { status: 200 });
   }) as unknown as typeof fetch;
 };
@@ -61,7 +67,12 @@ afterEach(() => {
 
 const Probe = ({ baseUrl }: { baseUrl: string }) => {
   const { snapshot, folder } = useEngineState(baseUrl, "/initial");
-  return React.createElement(Text, null, `count=${snapshot.jobs.length} folder=${folder ?? "null"}`);
+
+  return React.createElement(
+    Text,
+    null,
+    `count=${snapshot.jobs.length} folder=${folder ?? "null"}`,
+  );
 };
 
 describe("useEngineState (HTTP/WS client)", () => {
@@ -95,13 +106,20 @@ describe("useEngineState (HTTP/WS client)", () => {
 
   test("each WS message triggers a snapshot refetch", async () => {
     // #given
-    installFetchStub({ jobs: [] }, { jobs: [{ id: "a", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" }] });
+    installFetchStub(
+      { jobs: [] },
+      { jobs: [{ id: "a", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" }] },
+    );
     const ui = render(React.createElement(Probe, { baseUrl: BASE }));
     await flush();
     const callsBefore = snapshotCalls;
 
     // #when
-    const event: JobEvent = { _tag: "JobAdded", job: { id: "a", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" } };
+    const event: JobEvent = {
+      _tag: "JobAdded",
+      job: { id: "a", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" },
+    };
+
     FakeWebSocket.last!.onmessage!({ data: JSON.stringify(event) });
     await flush();
 
@@ -143,6 +161,7 @@ describe("useEngineState (HTTP/WS client)", () => {
         { id: "y", url: "u2", domain: "scribd", displayTitle: "t2", status: "Downloaded" },
       ],
     };
+
     const event: JobEvent = { _tag: "SnapshotReplaced", snapshot: next };
     FakeWebSocket.last!.onmessage!({ data: JSON.stringify(event) });
     await flush();
@@ -157,11 +176,13 @@ describe("useEngineState (HTTP/WS client)", () => {
     // #given
     installFetchStub({ jobs: [] });
     const events: string[] = [];
+
     const Host = () => {
       useEngineState(BASE, "/initial", {
         onWsOpen: () => events.push("open"),
         onWsClose: () => events.push("close"),
       });
+
       return React.createElement(Text, null, "host");
     };
 

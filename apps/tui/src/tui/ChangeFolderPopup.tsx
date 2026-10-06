@@ -18,27 +18,37 @@ export const ChangeFolderPopup = ({ initial, onSave, onCancel }: ChangeFolderPop
   useInput((input, key) => {
     if (key.escape) {
       onCancel();
+
       return;
     }
+
     if (key.tab) {
       const idx = order.indexOf(focus);
       setFocus(order[(idx + 1) % order.length]!);
+
       return;
     }
+
     if (key.return) {
       if (focus === "cancel") {
         onCancel();
       } else {
         const trimmed = value.trim();
+
         if (trimmed !== "") onSave(trimmed);
       }
+
       return;
     }
+
     if (focus !== "input") return;
+
     if (key.backspace || key.delete) {
       setValue((v) => v.slice(0, -1));
+
       return;
     }
+
     if (input && !key.ctrl && !key.meta) {
       setValue((v) => v + input);
     }

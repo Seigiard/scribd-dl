@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { JobEvent } from "@scribd-dl/shared";
 
 const fetchSnapshotMock = vi.fn(async () => ({ jobs: [] }));
+
 const fetchFolderMock = vi.fn(async () => "/tmp/out");
 
 vi.mock("@/lib/api", () => ({
@@ -14,6 +15,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 const { __testing } = await import("@/engineClient");
+
 const { $folder, resetStores } = await import("@/store");
 
 const FAKE_URL = "http://engine.test";

@@ -4,13 +4,17 @@ import { saveSettingsCommand } from "@/engineClient";
 import { $modal, $settings, type ModalMode } from "@/store";
 
 const SAVE_ERROR = "Failed to save";
+
 const INCOMPLETE_ERROR = "Enter both keys, or clear both";
 
 export type SettingsValidity = "unverified" | "validating" | "valid" | "invalid";
 
 export const $settingsError = atom<string | null>(null);
+
 export const $draftPublicKey = atom<string>("");
+
 export const $draftSecretKey = atom<string>("");
+
 export const $settingsValidity = atom<SettingsValidity>("unverified");
 
 export type SettingsModalProps = {
@@ -21,9 +25,11 @@ export type SettingsModalProps = {
   error: string | null;
 };
 
-const validityFromFlag = (valid: boolean | null): SettingsValidity => (valid === null ? "unverified" : valid ? "valid" : "invalid");
+const validityFromFlag = (valid: boolean | null): SettingsValidity =>
+  valid === null ? "unverified" : valid ? "valid" : "invalid";
 
-const oneFilled = (pub: string, sec: string): boolean => (pub.trim() === "") !== (sec.trim() === "");
+const oneFilled = (pub: string, sec: string): boolean =>
+  (pub.trim() === "") !== (sec.trim() === "");
 
 const close = (): void => {
   $modal.set("none");
@@ -32,12 +38,16 @@ const close = (): void => {
 const trySave = async (): Promise<void> => {
   const pub = $draftPublicKey.get().trim();
   const sec = $draftSecretKey.get().trim();
+
   if (oneFilled(pub, sec)) {
     $settingsError.set(INCOMPLETE_ERROR);
+
     return;
   }
+
   $settingsError.set(null);
   $settingsValidity.set("validating");
+
   try {
     const valid = await saveSettingsCommand(pub, sec);
     const cleared = pub === "" && sec === "";
@@ -70,6 +80,7 @@ const attachEscape = (): void => {
     e.stopPropagation();
     close();
   };
+
   window.addEventListener("keydown", escapeHandler, { capture: true });
 };
 
@@ -120,14 +131,23 @@ const VALIDITY_LABEL: Record<SettingsValidity, string> = {
 const validityLine = (validity: SettingsValidity): Hole =>
   html`<div class="settings-validity" data-validity=${validity}>${VALIDITY_LABEL[validity]}</div>`;
 
-export const settingsModal = ({ mode, publicKey, secretKey, validity, error }: SettingsModalProps): Hole => {
+export const settingsModal = ({
+  mode,
+  publicKey,
+  secretKey,
+  validity,
+  error,
+}: SettingsModalProps): Hole => {
   if (mode !== "settings") return html``;
   const saveDisabled = validity === "validating" || oneFilled(publicKey, secretKey);
+
   return html`<div class="settings-modal" @click=${onBackdropClick}>
     <article class="terminal-card">
       <header>iLovePDF compression keys</header>
       <div class="p-1">
-        <p class="settings-note">Downloads are uploaded to iLovePDF for compression when both keys are valid.</p>
+        <p class="settings-note">
+          Downloads are uploaded to iLovePDF for compression when both keys are valid.
+        </p>
         <div class="form-group">
           <label>Public key</label>
           <input
@@ -142,12 +162,26 @@ export const settingsModal = ({ mode, publicKey, secretKey, validity, error }: S
         </div>
         <div class="form-group">
           <label>Secret key</label>
-          <input class="settings-input" type="text" autocomplete="off" spellcheck="false" .value=${secretKey} @input=${onSecretInput} />
+          <input
+            class="settings-input"
+            type="text"
+            autocomplete="off"
+            spellcheck="false"
+            .value=${secretKey}
+            @input=${onSecretInput}
+          />
         </div>
         ${validityLine(validity)}
         <div class="modal-actions">
           <button type="button" class="btn btn-default" @click=${close}>Close</button>
-          <button type="button" class="btn btn-primary" ?disabled=${saveDisabled} @click=${onSaveClick}>Save</button>
+          <button
+            type="button"
+            class="btn btn-primary"
+            ?disabled=${saveDisabled}
+            @click=${onSaveClick}
+          >
+            Save
+          </button>
         </div>
         ${error ? html`<div class="terminal-alert terminal-alert-error">${error}</div>` : null}
       </div>

@@ -32,7 +32,8 @@ const scribdMockScraper: Scraper = {
   id: "scribd",
   canHandle: (url) => /scribd\.com/.test(url),
   deriveDisplayTitle: (url) => `Scribd ${url}`,
-  execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+  execute: (url, folder, onEvent, debug) =>
+    state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
 };
 
 const scrapersMockLayer = Layer.succeed(Scrapers, [scribdMockScraper]);
@@ -76,26 +77,32 @@ const buildEngineLayer = (config: ConfigData = defaultConfig) =>
   );
 
 let serverFiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;
+
 let baseUrl = "";
 
 const getServerPort = HttpServer.addressWith((address) => {
   if (address._tag !== "TcpAddress") return Effect.die("Expected TcpAddress");
+
   return Effect.succeed(address.port);
 });
 
 beforeAll(async () => {
   state.scribdExecute = mock(() => Effect.void);
+
   const portReady = new Promise<number>((resolve, reject) => {
     const ServerLayer = HttpServerLive(0).pipe(Layer.provide(buildEngineLayer()));
+
     const program = getServerPort.pipe(
       Effect.tap((port) => Effect.sync(() => resolve(port))),
       Effect.zipRight(Effect.never),
       Effect.provide(ServerLayer),
       Effect.scoped,
     );
+
     serverFiber = Effect.runFork(program);
     setTimeout(() => reject(new Error("server start timeout")), 5000);
   });
+
   const port = await portReady;
   baseUrl = `http://127.0.0.1:${port}`;
 });
@@ -107,6 +114,7 @@ afterAll(async () => {
 });
 
 const j = (body: object) => JSON.stringify(body);
+
 const ct = { "Content-Type": "application/json" };
 
 describe("HttpServer REST routes", () => {
@@ -118,16 +126,30 @@ describe("HttpServer REST routes", () => {
   });
 
   test("POST /enqueue with junk text returns empty jobs", async () => {
-    const res = await fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body: j({ text: "hello" }) });
+    const res = await fetch(`${baseUrl}/enqueue`, {
+      method: "POST",
+      headers: ct,
+      body: j({ text: "hello" }),
+    });
+
     expect(res.status).toBe(200);
     const body = (await res.json()) as { jobs: unknown[] };
     expect(body.jobs).toEqual([]);
   });
 
   test("POST /enqueue with unsupported URL returns Failed unsupported job", async () => {
-    const res = await fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body: j({ text: "https://example.com/x" }) });
+    const res = await fetch(`${baseUrl}/enqueue`, {
+      method: "POST",
+      headers: ct,
+      body: j({ text: "https://example.com/x" }),
+    });
+
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { jobs: Array<{ status: string; domain: string; failure: { retryable: boolean } }> };
+
+    const body = (await res.json()) as {
+      jobs: Array<{ status: string; domain: string; failure: { retryable: boolean } }>;
+    };
+
     expect(body.jobs).toHaveLength(1);
     expect(body.jobs[0]!.status).toBe("Failed");
     expect(body.jobs[0]!.domain).toBe("unsupported");
@@ -153,14 +175,24 @@ describe("HttpServer REST routes", () => {
   });
 
   test("POST /folder updates output", async () => {
-    const res = await fetch(`${baseUrl}/folder`, { method: "POST", headers: ct, body: j({ path: "/tmp/new-folder" }) });
+    const res = await fetch(`${baseUrl}/folder`, {
+      method: "POST",
+      headers: ct,
+      body: j({ path: "/tmp/new-folder" }),
+    });
+
     expect(res.status).toBe(204);
     const after = await fetch(`${baseUrl}/folder`);
     expect(await after.json()).toEqual({ path: "/tmp/new-folder" });
   });
 
   test("POST /folder with empty path returns 400 InvalidPath", async () => {
-    const res = await fetch(`${baseUrl}/folder`, { method: "POST", headers: ct, body: j({ path: "  " }) });
+    const res = await fetch(`${baseUrl}/folder`, {
+      method: "POST",
+      headers: ct,
+      body: j({ path: "  " }),
+    });
+
     expect(res.status).toBe(400);
     expect(await res.json()).toEqual({ error: "InvalidPath" });
   });
@@ -171,11 +203,13 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
     // Mock scribdExecute to never resolve so the job stays in Downloading after worker picks it up — except remove requires Queued.
     // We need Remove to happen BEFORE worker picks the job up. Use a paused mock.
     state.scribdExecute = mock(() => Effect.never);
+
     const enq = await fetch(`${baseUrl}/enqueue`, {
       method: "POST",
       headers: ct,
       body: j({ text: "https://www.scribd.com/document/1/test" }),
     });
+
     const body = (await enq.json()) as { jobs: Array<{ id: string; status: string }> };
     expect(body.jobs).toHaveLength(1);
     const job = body.jobs[0]!;
@@ -184,6 +218,7 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
     // Try remove; if it succeeds the job was Queued, if 409 it was Downloading. Either is acceptable signal.
     const del = await fetch(`${baseUrl}/jobs/${job.id}`, { method: "DELETE" });
     expect([204, 409]).toContain(del.status);
+
     if (del.status === 409) {
       const err = (await del.json()) as { error: string };
       expect(err.error).toBe("NotRemovable");
@@ -196,7 +231,9 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
     await fetch(`${baseUrl}/enqueue`, {
       method: "POST",
       headers: ct,
-      body: j({ text: "https://www.scribd.com/document/clear-all-1/x\nhttps://www.scribd.com/document/clear-all-2/y" }),
+      body: j({
+        text: "https://www.scribd.com/document/clear-all-1/x\nhttps://www.scribd.com/document/clear-all-2/y",
+      }),
     });
 
     // #when
@@ -207,12 +244,20 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
     const body = (await res.json()) as { removed: number };
     expect(body.removed).toBeGreaterThan(0);
 
-    const snap = await fetch(`${baseUrl}/snapshot`).then((r) => r.json() as Promise<{ jobs: unknown[] }>);
+    const snap = await fetch(`${baseUrl}/snapshot`).then(
+      (r) => r.json() as Promise<{ jobs: unknown[] }>,
+    );
+
     expect(snap.jobs).toHaveLength(0);
   });
 
   test("POST /jobs/:id/retry on non-retryable Failed returns 409 NotRetryable", async () => {
-    const enq = await fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body: j({ text: "https://example.com/x" }) });
+    const enq = await fetch(`${baseUrl}/enqueue`, {
+      method: "POST",
+      headers: ct,
+      body: j({ text: "https://example.com/x" }),
+    });
+
     const body = (await enq.json()) as { jobs: Array<{ id: string }> };
     const job = body.jobs[0]!;
     const retry = await fetch(`${baseUrl}/jobs/${job.id}/retry`, { method: "POST" });
@@ -221,32 +266,41 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
   });
 });
 
-const collectFrames = (url: string, opts: { after?: () => Promise<void>; timeoutMs?: number; minFrames?: number }) =>
+const collectFrames = (
+  url: string,
+  opts: { after?: () => Promise<void>; timeoutMs?: number; minFrames?: number },
+) =>
   new Promise<unknown[]>((resolve, reject) => {
     const frames: unknown[] = [];
     const ws = new WebSocket(url);
+
     const timeout = setTimeout(() => {
       ws.close();
       resolve(frames);
     }, opts.timeoutMs ?? 1500);
+
     ws.onopen = async () => {
       try {
         // give the server-side stream subscription a beat to settle before publishing
         await new Promise((r) => setTimeout(r, 50));
+
         if (opts.after) await opts.after();
       } catch (e) {
         clearTimeout(timeout);
         reject(e);
       }
     };
+
     ws.onmessage = (e) => {
       frames.push(JSON.parse(String(e.data)));
+
       if (opts.minFrames && frames.length >= opts.minFrames) {
         clearTimeout(timeout);
         ws.close();
         resolve(frames);
       }
     };
+
     ws.onerror = () => {
       clearTimeout(timeout);
       reject(new Error("ws error"));
@@ -255,12 +309,16 @@ const collectFrames = (url: string, opts: { after?: () => Promise<void>; timeout
 
 describe("WebSocket /events", () => {
   test("client connects, OPEN fires, no historical frames pushed before subscribe", async () => {
-    const frames = await collectFrames(`${baseUrl.replace("http", "ws")}/events`, { timeoutMs: 300 });
+    const frames = await collectFrames(`${baseUrl.replace("http", "ws")}/events`, {
+      timeoutMs: 300,
+    });
+
     expect(frames).toEqual([]);
   });
 
   test("POST /enqueue after WS open pushes JobAdded and JobFailed for unsupported", async () => {
     const wsUrl = `${baseUrl.replace("http", "ws")}/events`;
+
     const frames = await collectFrames(wsUrl, {
       after: async () => {
         await fetch(`${baseUrl}/enqueue`, {
@@ -271,6 +329,7 @@ describe("WebSocket /events", () => {
       },
       minFrames: 2,
     });
+
     expect(frames.length).toBeGreaterThanOrEqual(2);
     const tags = frames.map((f) => (f as { _tag: string })._tag);
     expect(tags).toContain("JobAdded");
@@ -279,12 +338,18 @@ describe("WebSocket /events", () => {
 
   test("POST /folder pushes OutputFolderChanged frame", async () => {
     const wsUrl = `${baseUrl.replace("http", "ws")}/events`;
+
     const frames = await collectFrames(wsUrl, {
       after: async () => {
-        await fetch(`${baseUrl}/folder`, { method: "POST", headers: ct, body: j({ path: "/tmp/changed-folder" }) });
+        await fetch(`${baseUrl}/folder`, {
+          method: "POST",
+          headers: ct,
+          body: j({ path: "/tmp/changed-folder" }),
+        });
       },
       minFrames: 1,
     });
+
     const change = frames.find((f) => (f as { _tag: string })._tag === "OutputFolderChanged");
     expect(change).toBeDefined();
     expect((change as { path: string }).path).toBe("/tmp/changed-folder");
@@ -292,8 +357,15 @@ describe("WebSocket /events", () => {
 
   test("two concurrent WS clients both receive frames for the same enqueue", async () => {
     const wsUrl = `${baseUrl.replace("http", "ws")}/events`;
+
     // Open both, wait briefly, then enqueue.
-    const trigger = () => fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body: j({ text: "https://example.com/y" }) });
+    const trigger = () =>
+      fetch(`${baseUrl}/enqueue`, {
+        method: "POST",
+        headers: ct,
+        body: j({ text: "https://example.com/y" }),
+      });
+
     const both = await Promise.all([
       collectFrames(wsUrl, {
         after: async () => {
@@ -303,9 +375,17 @@ describe("WebSocket /events", () => {
         timeoutMs: 1200,
       }),
       new Promise<unknown[]>((res) =>
-        setTimeout(() => collectFrames(wsUrl, { after: () => trigger().then(() => undefined), minFrames: 1 }).then(res), 100),
+        setTimeout(
+          () =>
+            collectFrames(wsUrl, {
+              after: () => trigger().then(() => undefined),
+              minFrames: 1,
+            }).then(res),
+          100,
+        ),
       ),
     ]);
+
     expect(both[0]!.length).toBeGreaterThanOrEqual(1);
     expect(both[1]!.length).toBeGreaterThanOrEqual(1);
   });
@@ -324,6 +404,7 @@ describe("HttpServer clear endpoints", () => {
       headers: ct,
       body: j({ text: "https://example.com/clear-failed-test" }),
     });
+
     const enqBody = (await enq.json()) as { jobs: Array<{ id: string; status: string }> };
     const newId = enqBody.jobs[0]!.id;
     expect(enqBody.jobs[0]!.status).toBe("Failed");
@@ -336,7 +417,10 @@ describe("HttpServer clear endpoints", () => {
     const body = (await res.json()) as { removed: number };
     expect(body.removed).toBeGreaterThanOrEqual(1);
 
-    const snap = (await (await fetch(`${baseUrl}/snapshot`)).json()) as { jobs: Array<{ id: string }> };
+    const snap = (await (await fetch(`${baseUrl}/snapshot`)).json()) as {
+      jobs: Array<{ id: string }>;
+    };
+
     expect(snap.jobs.find((jb) => jb.id === newId)).toBeUndefined();
   });
 
@@ -367,6 +451,7 @@ describe("HttpServer clear endpoints", () => {
       headers: ct,
       body: j({ text: "https://example.com/remove-failed-broaden-test" }),
     });
+
     const enqBody = (await enq.json()) as { jobs: Array<{ id: string; status: string }> };
     const newId = enqBody.jobs[0]!.id;
     expect(enqBody.jobs[0]!.status).toBe("Failed");
@@ -388,6 +473,7 @@ describe("CORS", () => {
         "Access-Control-Request-Method": "GET",
       },
     });
+
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-origin")).toBe("tauri://localhost");
   });
@@ -400,6 +486,7 @@ describe("CORS", () => {
         "Access-Control-Request-Method": "GET",
       },
     });
+
     expect(res.status).toBe(204);
     expect(res.headers.get("access-control-allow-origin")).toBe("http://localhost:5173");
   });
@@ -421,7 +508,11 @@ describe("HttpServer settings routes", () => {
     state.validateResult = true;
 
     // #when
-    const res = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body: j({ publicKey: "pub", secretKey: "sec" }) });
+    const res = await fetch(`${baseUrl}/settings`, {
+      method: "POST",
+      headers: ct,
+      body: j({ publicKey: "pub", secretKey: "sec" }),
+    });
 
     // #then
     expect(res.status).toBe(200);
@@ -435,7 +526,11 @@ describe("HttpServer settings routes", () => {
     state.validateResult = false;
 
     // #when
-    const res = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body: j({ publicKey: "bad", secretKey: "keys" }) });
+    const res = await fetch(`${baseUrl}/settings`, {
+      method: "POST",
+      headers: ct,
+      body: j({ publicKey: "bad", secretKey: "keys" }),
+    });
 
     // #then
     expect(await res.json()).toEqual({ valid: false });
@@ -448,7 +543,11 @@ describe("HttpServer settings routes", () => {
     state.validateResult = true;
 
     // #when
-    const res = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body: j({ publicKey: "", secretKey: "" }) });
+    const res = await fetch(`${baseUrl}/settings`, {
+      method: "POST",
+      headers: ct,
+      body: j({ publicKey: "", secretKey: "" }),
+    });
 
     // #then — returns false (not validated) and clears to the unverified state
     expect(await res.json()).toEqual({ valid: false });
@@ -461,7 +560,11 @@ describe("HttpServer settings routes", () => {
     state.validateResult = true;
 
     // #when
-    const res = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body: j({ publicKey: "only-public", secretKey: "" }) });
+    const res = await fetch(`${baseUrl}/settings`, {
+      method: "POST",
+      headers: ct,
+      body: j({ publicKey: "only-public", secretKey: "" }),
+    });
 
     // #then
     expect(await res.json()).toEqual({ valid: false });

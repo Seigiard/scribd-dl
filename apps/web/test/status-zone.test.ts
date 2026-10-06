@@ -3,6 +3,7 @@ import { render } from "uhtml";
 import type { Job, JobId } from "@scribd-dl/shared";
 
 const clearFinishedMock = vi.fn();
+
 const clearAllMock = vi.fn();
 
 vi.mock("@/engineClient", () => ({
@@ -26,6 +27,7 @@ const job = (id: string, status: Job["status"]): Job =>
 const renderTo = (props: Parameters<typeof statusZone>[0]): HTMLDivElement => {
   const container = document.createElement("div");
   render(container, statusZone(props));
+
   return container;
 };
 
@@ -86,6 +88,7 @@ describe("statusZone view", () => {
       transient: null,
       jobs: { a: job("a", "Downloaded"), b: job("b", "Failed"), c: job("c", "Queued") },
     });
+
     const buttons = c.querySelectorAll("button");
 
     // #then

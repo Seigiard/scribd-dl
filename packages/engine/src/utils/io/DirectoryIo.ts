@@ -23,4 +23,7 @@ const remove = (path: string): Effect.Effect<void, DirectoryIoFailed, never> =>
     catch: (cause) => new DirectoryIoFailed({ path, op: "remove", cause }),
   });
 
-export const DirectoryIoLive: Layer.Layer<DirectoryIo, never, never> = Layer.succeed(DirectoryIo, { create, remove });
+export const DirectoryIoLive: Layer.Layer<DirectoryIo, never, never> = Layer.succeed(DirectoryIo, {
+  create,
+  remove,
+});

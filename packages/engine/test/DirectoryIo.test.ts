@@ -10,6 +10,7 @@ const runCreate = (target: string) =>
     Effect.provide(
       Effect.gen(function* () {
         const svc = yield* DirectoryIo;
+
         return yield* svc.create(target);
       }),
       DirectoryIoLive,
@@ -21,21 +22,29 @@ const runRemove = (target: string) =>
     Effect.provide(
       Effect.gen(function* () {
         const svc = yield* DirectoryIo;
+
         return yield* svc.remove(target);
       }),
       DirectoryIoLive,
     ),
   );
 
-const isDirectoryIoFailed = (exit: Exit.Exit<unknown, unknown>, op: "create" | "remove"): boolean => {
+const isDirectoryIoFailed = (
+  exit: Exit.Exit<unknown, unknown>,
+  op: "create" | "remove",
+): boolean => {
   if (!Exit.isFailure(exit)) {
     return false;
   }
+
   const failure = Cause.failureOption(exit.cause);
+
   if (failure._tag === "None") {
     return false;
   }
+
   const err = failure.value as { _tag?: string; op?: string; path?: string };
+
   return err._tag === "DirectoryIoFailed" && err.op === op && typeof err.path === "string";
 };
 

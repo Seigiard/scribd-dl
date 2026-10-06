@@ -11,7 +11,12 @@ let api: UseTransient | null = null;
 const Probe = () => {
   const t = useTransient();
   api = t;
-  return React.createElement(Text, null, `s=${t.transient?.severity ?? "null"} m=${t.transient?.message ?? "-"}`);
+
+  return React.createElement(
+    Text,
+    null,
+    `s=${t.transient?.severity ?? "null"} m=${t.transient?.message ?? "-"}`,
+  );
 };
 
 beforeEach(() => {

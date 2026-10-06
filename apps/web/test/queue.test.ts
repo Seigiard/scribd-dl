@@ -21,10 +21,12 @@ const makeJob = (id: string, overrides: Partial<Job> = {}): Job => ({
 const mount = (jobs: Record<JobId, Job | undefined>): HTMLElement => {
   const container = document.createElement("div");
   render(container, queue({ jobs }));
+
   return container.querySelector(".queue") as HTMLElement;
 };
 
-const items = (root: HTMLElement): HTMLElement[] => Array.from(root.querySelectorAll(".queue-item"));
+const items = (root: HTMLElement): HTMLElement[] =>
+  Array.from(root.querySelectorAll(".queue-item"));
 
 describe("queue()", () => {
   afterEach(() => {
@@ -50,6 +52,7 @@ describe("queue()", () => {
       b: makeJob("b", { status: "Downloading", progress: { done: 1, total: 2, stage: "scrape" } }),
       c: makeJob("c", { status: "Downloaded" }),
     } as Record<JobId, Job | undefined>;
+
     const root = mount(jobs);
     expect(items(root)).toHaveLength(3);
   });
@@ -59,6 +62,7 @@ describe("queue()", () => {
       a: makeJob("a"),
       b: undefined,
     } as Record<JobId, Job | undefined>;
+
     const root = mount(jobs);
     const children = items(root);
     expect(children).toHaveLength(1);
@@ -73,10 +77,12 @@ describe("queue()", () => {
     render(
       container,
       queue({
-        jobs: { a: makeJob("a", { status: "Downloading", progress: { done: 1, total: 4, stage: "scrape" } }) } as Record<
-          JobId,
-          Job | undefined
-        >,
+        jobs: {
+          a: makeJob("a", {
+            status: "Downloading",
+            progress: { done: 1, total: 4, stage: "scrape" },
+          }),
+        } as Record<JobId, Job | undefined>,
       }),
     );
     const updated = container.querySelector(".queue-item") as HTMLElement;
