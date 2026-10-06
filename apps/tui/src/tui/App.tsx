@@ -107,6 +107,17 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
     [showTransient],
   );
 
+  const clearWithFeedback = async (
+    command: (baseUrl: string) => Promise<number>,
+    failureMessage: string,
+  ): Promise<void> => {
+    try {
+      await command(baseUrl);
+    } catch (e) {
+      showTransient("error", e instanceof Error ? e.message : failureMessage);
+    }
+  };
+
   useInput((input, key) => {
     if (changeFolderOpen || settingsOpen) return;
 
@@ -135,10 +146,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
         }
 
         if (accepted && kind === "clearAll") {
-          void clearAll(baseUrl).catch((e: unknown) => {
-            const msg = e instanceof Error ? e.message : "Failed to clear all jobs";
-            showTransient("error", msg);
-          });
+          void clearWithFeedback(clearAll, "Failed to clear all jobs");
         }
       }
 
@@ -177,10 +185,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
       }
 
       if (currentSlot.kind === "clearFinished") {
-        void clearFinished(baseUrl).catch((e: unknown) => {
-          const msg = e instanceof Error ? e.message : "Failed to clear finished jobs";
-          showTransient("error", msg);
-        });
+        void clearWithFeedback(clearFinished, "Failed to clear finished jobs");
 
         return;
       }

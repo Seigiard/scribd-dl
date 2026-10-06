@@ -35,7 +35,7 @@ const close = (): void => {
   $modal.set("none");
 };
 
-const trySave = async (): Promise<void> => {
+const trySave = async (save: typeof saveSettingsCommand): Promise<void> => {
   const pub = $draftPublicKey.get().trim();
   const sec = $draftSecretKey.get().trim();
 
@@ -49,7 +49,7 @@ const trySave = async (): Promise<void> => {
   $settingsValidity.set("validating");
 
   try {
-    const valid = await saveSettingsCommand(pub, sec);
+    const valid = await save(pub, sec);
     const cleared = pub === "" && sec === "";
     $settingsValidity.set(cleared ? "unverified" : valid ? "valid" : "invalid");
   } catch {
@@ -59,15 +59,11 @@ const trySave = async (): Promise<void> => {
 };
 
 const onPublicInput = (e: Event): void => {
-  $draftPublicKey.set((e.target as HTMLInputElement).value);
+  if (e.target instanceof HTMLInputElement) $draftPublicKey.set(e.target.value);
 };
 
 const onSecretInput = (e: Event): void => {
-  $draftSecretKey.set((e.target as HTMLInputElement).value);
-};
-
-const onSaveClick = (): void => {
-  void trySave();
+  if (e.target instanceof HTMLInputElement) $draftSecretKey.set(e.target.value);
 };
 
 let escapeHandler: ((e: KeyboardEvent) => void) | null = null;
@@ -131,13 +127,10 @@ const VALIDITY_LABEL: Record<SettingsValidity, string> = {
 const validityLine = (validity: SettingsValidity): Hole =>
   html`<div class="settings-validity" data-validity=${validity}>${VALIDITY_LABEL[validity]}</div>`;
 
-export const settingsModal = ({
-  mode,
-  publicKey,
-  secretKey,
-  validity,
-  error,
-}: SettingsModalProps): Hole => {
+export const settingsModal = (
+  { mode, publicKey, secretKey, validity, error }: SettingsModalProps,
+  save: typeof saveSettingsCommand = saveSettingsCommand,
+): Hole => {
   if (mode !== "settings") return html``;
   const saveDisabled = validity === "validating" || oneFilled(publicKey, secretKey);
 
@@ -178,7 +171,7 @@ export const settingsModal = ({
             type="button"
             class="btn btn-primary"
             ?disabled=${saveDisabled}
-            @click=${onSaveClick}
+            @click=${() => void trySave(save)}
           >
             Save
           </button>

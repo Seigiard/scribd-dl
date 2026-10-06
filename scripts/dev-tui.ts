@@ -73,7 +73,8 @@ const waitForReady = () =>
 try {
   await waitForReady();
 } catch (err) {
-  process.stderr.write(`dev:tui — ${(err as Error).message}\nSee ${LOG_PATH} for engine output.\n`);
+  const message = err instanceof Error ? err.message : String(err);
+  process.stderr.write(`dev:tui — ${message}\nSee ${LOG_PATH} for engine output.\n`);
   killEngine();
   process.exit(1);
 }

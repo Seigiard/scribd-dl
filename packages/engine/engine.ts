@@ -1,14 +1,14 @@
 import { Command } from "@effect/cli";
 import { HttpServer } from "@effect/platform";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Effect, Layer } from "effect";
+import { Effect, Layer, Predicate } from "effect";
 import { buildDownloadEngineLayer } from "./src/composition";
 import { portOpt } from "./src/cli/options";
 import { HttpServerLive } from "./src/server/HttpServerLive";
 
 const printReady = HttpServer.addressWith((address) =>
   Effect.sync(() => {
-    if (address._tag === "TcpAddress") {
+    if (Predicate.isTagged(address, "TcpAddress")) {
       console.log(`READY port=${address.port}`);
     } else {
       console.log(`READY unix=${address.path}`);

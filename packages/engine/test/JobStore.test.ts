@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
-import { Effect, Exit } from "effect";
+import { Effect, Exit, Fiber } from "effect";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
-import type { Job, JobId } from "@scribd-dl/shared";
-import { JobStore, makeJobStore } from "../src/service/JobStore";
+import type { Job } from "@scribd-dl/shared";
+import { JobStore, makeJobStore, type JobStoreIo } from "../src/service/JobStore";
 
 const runRead = (baseDir: string) =>
   Effect.runPromise(
@@ -42,7 +42,7 @@ const runWriteConcurrent = (baseDir: string, a: ReadonlyArray<Job>, b: ReadonlyA
   );
 
 const job = (id: string, status: Job["status"], extra: Partial<Job> = {}): Job => ({
-  id: id as JobId,
+  id,
   url: `https://www.scribd.com/document/${id}/x`,
   domain: "scribd",
   displayTitle: `doc ${id}`,
@@ -60,6 +60,83 @@ describe("JobStore", () => {
   afterEach(async () => {
     await fs.rm(tmpDir, { recursive: true, force: true });
   });
+
+  test.each(["writeFile", "rename"])(
+    "canceling a snapshot during %s waits for its transaction and permits the next snapshot afterward",
+    async (stage) => {
+      // #given
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const finished = Promise.withResolvers<void>();
+      const phases: string[] = [];
+      let writes = 0;
+
+      let renames = 0;
+
+      const io: JobStoreIo = {
+        mkdir: fs.mkdir,
+        writeFile: async (...args) => {
+          phases.push("write");
+          await fs.writeFile(...args);
+
+          if (++writes === 1 && stage === "writeFile") {
+            entered.resolve();
+            await release.promise;
+          }
+        },
+        rename: async (...args) => {
+          phases.push("rename");
+          await fs.rename(...args);
+
+          if (++renames === 1 && stage === "rename") {
+            entered.resolve();
+            await release.promise;
+          }
+
+          finished.resolve();
+        },
+      };
+
+      // #when
+      const result = await Effect.runPromise(
+        Effect.gen(function* () {
+          const store = yield* JobStore;
+          const first = yield* Effect.fork(store.write([job("first", "Queued")]));
+          yield* Effect.promise(() => entered.promise);
+          const second = yield* Effect.fork(store.write([job("second", "Queued")]));
+          const interruption = Effect.runPromise(Fiber.interrupt(first));
+
+          const canceledBeforeRelease = yield* Effect.promise(() =>
+            Promise.race([
+              interruption.then(() => true),
+              new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
+            ]),
+          );
+
+          release.resolve();
+          yield* Effect.promise(() => interruption);
+          yield* Effect.promise(() => finished.promise);
+          const secondExit = yield* Fiber.await(second);
+          const persisted = yield* store.read;
+
+          return {
+            canceledBeforeRelease,
+            phases,
+            secondSucceeded: Exit.isSuccess(secondExit),
+            ids: persisted.map((entry) => entry.id),
+          };
+        }).pipe(Effect.provide(makeJobStore(tmpDir, io)), Effect.scoped),
+      );
+
+      // #then
+      expect(result).toEqual({
+        canceledBeforeRelease: false,
+        phases: ["write", "rename", "write", "rename"],
+        secondSucceeded: true,
+        ids: ["second"],
+      });
+    },
+  );
 
   describe("read", () => {
     test("returns jobs in file order when all lines are valid", async () => {

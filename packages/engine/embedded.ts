@@ -8,7 +8,7 @@ const probeUntilReady = (baseUrl: string) =>
       fetch(`${baseUrl}/snapshot`).then((r) =>
         r.ok ? null : Promise.reject(new Error(`status ${r.status}`)),
       ),
-    catch: (e) => e as Error,
+    catch: (e) => (e instanceof Error ? e : new Error(String(e), { cause: e })),
   }).pipe(
     Effect.retry({ schedule: Schedule.spaced("50 millis"), times: 100 }),
     Effect.timeoutFail({

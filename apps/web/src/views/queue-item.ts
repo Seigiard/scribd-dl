@@ -19,14 +19,21 @@ const pickAction = (job: Job): Action | null => {
   return null;
 };
 
-const actionButton = (job: Job): Hole | null => {
+export interface QueueCommands {
+  readonly removeJobById: typeof removeJobById;
+  readonly retryJobById: typeof retryJobById;
+}
+
+const defaultCommands: QueueCommands = { removeJobById, retryJobById };
+
+const actionButton = (job: Job, commands: QueueCommands): Hole | null => {
   const action = pickAction(job);
 
   if (!action) return null;
 
   const onClick = (): void => {
-    if (action.kind === "retry") void retryJobById(job.id);
-    else void removeJobById(job.id);
+    if (action.kind === "retry") void commands.retryJobById(job.id);
+    else void commands.removeJobById(job.id);
   };
 
   return html`<button
@@ -69,12 +76,12 @@ const reasonLine = (job: Job): Hole | null => {
   return html`<div class="item-reason">Reason: ${job.failure.reason}</div>`;
 };
 
-export const queueItem = (job: Job): Hole => {
+export const queueItem = (job: Job, commands: QueueCommands = defaultCommands): Hole => {
   return html`<div class="queue-item" data-status=${job.status}>
     <div class="item-head">
       ${icon(STATUS_ICON[job.status], "item-icon-status")}
       <span class="item-title">${job.displayTitle || EMPTY_TITLE}</span>
-      ${actionButton(job)}
+      ${actionButton(job, commands)}
     </div>
     <div class="item-url">${job.url}</div>
     ${progressLine(job)} ${compressionLine(job)} ${reasonLine(job)}

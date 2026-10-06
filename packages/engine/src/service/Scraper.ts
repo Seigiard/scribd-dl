@@ -1,4 +1,4 @@
-import { Context, Effect } from "effect";
+import { Context, Data, Effect } from "effect";
 import type { JobDomain } from "@scribd-dl/shared";
 import {
   DirectoryIoFailed,
@@ -24,6 +24,8 @@ export type ScraperEvent =
 
 export type OnEvent = (event: ScraperEvent) => Effect.Effect<void, never, never>;
 
+export const ScraperEvent = Data.taggedEnum<ScraperEvent>();
+
 export type ScraperId = Exclude<JobDomain, "unsupported">;
 
 export interface Scraper {
@@ -44,3 +46,5 @@ export const findScraperForUrl = (
 ): Scraper | undefined => scrapers.find((scraper) => scraper.canHandle(url));
 
 export class Scrapers extends Context.Tag("Scrapers")<Scrapers, ReadonlyArray<Scraper>>() {}
+
+export const ScrapersTag: Context.Tag<Scrapers, ReadonlyArray<Scraper>> = Scrapers;

@@ -1,7 +1,7 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from "bun:test";
-import { Effect, Fiber, Layer } from "effect";
+import { afterAll, beforeAll, describe, expect, mock, test, type Mock } from "bun:test";
+import { Effect, Fiber, Layer, Match, Predicate, Schema } from "effect";
 import { HttpServer } from "@effect/platform";
-import type { Job } from "@scribd-dl/shared";
+import { EngineSnapshotSchema, JobEventSchema, type Job } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService } from "../../src/service/ConfigStore";
 import { DownloadEngineLive } from "../../src/service/DownloadEngine";
 import { JobStore, type JobStoreService } from "../../src/service/JobStore";
@@ -12,7 +12,7 @@ import { PdfGenerator, type PdfGeneratorService } from "../../src/utils/io/PdfGe
 import { HttpServerLive } from "../../src/server/HttpServerLive";
 
 interface MockState {
-  scribdExecute: ReturnType<typeof mock>;
+  scribdExecute: Mock<Scraper["execute"]>;
   restoredJobs: ReadonlyArray<Job>;
   validateResult: boolean;
 }
@@ -32,8 +32,7 @@ const scribdMockScraper: Scraper = {
   id: "scribd",
   canHandle: (url) => /scribd\.com/.test(url),
   deriveDisplayTitle: (url) => `Scribd ${url}`,
-  execute: (url, folder, onEvent, debug) =>
-    state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+  execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug),
 };
 
 const scrapersMockLayer = Layer.succeed(Scrapers, [scribdMockScraper]);
@@ -81,7 +80,7 @@ let serverFiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;
 let baseUrl = "";
 
 const getServerPort = HttpServer.addressWith((address) => {
-  if (address._tag !== "TcpAddress") return Effect.die("Expected TcpAddress");
+  if (!Predicate.isTagged(address, "TcpAddress")) return Effect.die("Expected TcpAddress");
 
   return Effect.succeed(address.port);
 });
@@ -113,7 +112,18 @@ afterAll(async () => {
   }
 });
 
-const j = (body: object) => JSON.stringify(body);
+const j = <A>(body: A) => JSON.stringify(body);
+
+const readQueue = async (response: Response) =>
+  Schema.decodeUnknownSync(EngineSnapshotSchema)(await response.json());
+
+const readError = async (response: Response) =>
+  Schema.decodeUnknownSync(Schema.Struct({ error: Schema.String }))(await response.json());
+
+const readClear = async (response: Response) =>
+  Schema.decodeUnknownSync(Schema.Struct({ removed: Schema.Number }))(await response.json());
+
+type DecodedJobEvent = typeof JobEventSchema.Type;
 
 const ct = { "Content-Type": "application/json" };
 
@@ -121,7 +131,7 @@ describe("HttpServer REST routes", () => {
   test("GET /snapshot on empty engine returns empty jobs array", async () => {
     const res = await fetch(`${baseUrl}/snapshot`);
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { jobs: unknown[] };
+    const body = await readQueue(res);
     expect(body.jobs).toEqual([]);
   });
 
@@ -133,7 +143,7 @@ describe("HttpServer REST routes", () => {
     });
 
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { jobs: unknown[] };
+    const body = await readQueue(res);
     expect(body.jobs).toEqual([]);
   });
 
@@ -146,14 +156,12 @@ describe("HttpServer REST routes", () => {
 
     expect(res.status).toBe(200);
 
-    const body = (await res.json()) as {
-      jobs: Array<{ status: string; domain: string; failure: { retryable: boolean } }>;
-    };
+    const body = await readQueue(res);
 
     expect(body.jobs).toHaveLength(1);
     expect(body.jobs[0]!.status).toBe("Failed");
     expect(body.jobs[0]!.domain).toBe("unsupported");
-    expect(body.jobs[0]!.failure.retryable).toBe(false);
+    expect(body.jobs[0]!.failure!.retryable).toBe(false);
   });
 
   test("DELETE /jobs/nonexistent returns 404 JobNotFound", async () => {
@@ -210,7 +218,7 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
       body: j({ text: "https://www.scribd.com/document/1/test" }),
     });
 
-    const body = (await enq.json()) as { jobs: Array<{ id: string; status: string }> };
+    const body = await readQueue(enq);
     expect(body.jobs).toHaveLength(1);
     const job = body.jobs[0]!;
 
@@ -220,7 +228,7 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
     expect([204, 409]).toContain(del.status);
 
     if (del.status === 409) {
-      const err = (await del.json()) as { error: string };
+      const err = await readError(del);
       expect(err.error).toBe("NotRemovable");
     }
   });
@@ -241,12 +249,10 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
 
     // #then
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { removed: number };
+    const body = await readClear(res);
     expect(body.removed).toBeGreaterThan(0);
 
-    const snap = await fetch(`${baseUrl}/snapshot`).then(
-      (r) => r.json() as Promise<{ jobs: unknown[] }>,
-    );
+    const snap = await fetch(`${baseUrl}/snapshot`).then(readQueue);
 
     expect(snap.jobs).toHaveLength(0);
   });
@@ -258,7 +264,7 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
       body: j({ text: "https://example.com/x" }),
     });
 
-    const body = (await enq.json()) as { jobs: Array<{ id: string }> };
+    const body = await readQueue(enq);
     const job = body.jobs[0]!;
     const retry = await fetch(`${baseUrl}/jobs/${job.id}/retry`, { method: "POST" });
     expect(retry.status).toBe(409);
@@ -270,8 +276,8 @@ const collectFrames = (
   url: string,
   opts: { after?: () => Promise<void>; timeoutMs?: number; minFrames?: number },
 ) =>
-  new Promise<unknown[]>((resolve, reject) => {
-    const frames: unknown[] = [];
+  new Promise<DecodedJobEvent[]>((resolve, reject) => {
+    const frames: DecodedJobEvent[] = [];
     const ws = new WebSocket(url);
 
     const timeout = setTimeout(() => {
@@ -292,7 +298,7 @@ const collectFrames = (
     };
 
     ws.onmessage = (e) => {
-      frames.push(JSON.parse(String(e.data)));
+      frames.push(Schema.decodeUnknownSync(Schema.parseJson(JobEventSchema))(String(e.data)));
 
       if (opts.minFrames && frames.length >= opts.minFrames) {
         clearTimeout(timeout);
@@ -331,7 +337,7 @@ describe("WebSocket /events", () => {
     });
 
     expect(frames.length).toBeGreaterThanOrEqual(2);
-    const tags = frames.map((f) => (f as { _tag: string })._tag);
+    const tags = frames.map((f) => f._tag);
     expect(tags).toContain("JobAdded");
     expect(tags).toContain("JobFailed");
   });
@@ -350,44 +356,82 @@ describe("WebSocket /events", () => {
       minFrames: 1,
     });
 
-    const change = frames.find((f) => (f as { _tag: string })._tag === "OutputFolderChanged");
+    const change = frames.find(
+      (frame): frame is Extract<DecodedJobEvent, { _tag: "OutputFolderChanged" }> =>
+        Predicate.isTagged(frame, "OutputFolderChanged"),
+    );
+
     expect(change).toBeDefined();
-    expect((change as { path: string }).path).toBe("/tmp/changed-folder");
+    expect(change!.path).toBe("/tmp/changed-folder");
   });
 
-  test("two concurrent WS clients both receive frames for the same enqueue", async () => {
+  test("two open WS clients each receive the complete unsupported enqueue broadcast", async () => {
+    // #given — empty queue makes the replacement snapshot independently predictable
+    const cleared = await fetch(`${baseUrl}/jobs`, { method: "DELETE" });
+    expect(cleared.status).toBe(200);
     const wsUrl = `${baseUrl.replace("http", "ws")}/events`;
+    const firstReady = Promise.withResolvers<void>();
+    const secondReady = Promise.withResolvers<void>();
 
-    // Open both, wait briefly, then enqueue.
-    const trigger = () =>
-      fetch(`${baseUrl}/enqueue`, {
-        method: "POST",
-        headers: ct,
-        body: j({ text: "https://example.com/y" }),
-      });
-
-    const both = await Promise.all([
+    const streams = [
       collectFrames(wsUrl, {
-        after: async () => {
-          /* wait for second client */
-        },
-        minFrames: 1,
-        timeoutMs: 1200,
+        after: async () => firstReady.resolve(),
+        minFrames: 3,
       }),
-      new Promise<unknown[]>((res) =>
-        setTimeout(
-          () =>
-            collectFrames(wsUrl, {
-              after: () => trigger().then(() => undefined),
-              minFrames: 1,
-            }).then(res),
-          100,
+      collectFrames(wsUrl, {
+        after: async () => secondReady.resolve(),
+        minFrames: 3,
+      }),
+    ];
+
+    // #when — both OPEN handlers have settled before the single enqueue
+    await Promise.all([firstReady.promise, secondReady.promise]);
+
+    const enqueued = await fetch(`${baseUrl}/enqueue`, {
+      method: "POST",
+      headers: ct,
+      body: j({ text: "https://example.com/ws-broadcast-contract" }),
+    });
+
+    expect(enqueued.status).toBe(200);
+    const created = await readQueue(enqueued);
+    expect(created.jobs).toHaveLength(1);
+    const id = created.jobs[0]!.id;
+    const both = await Promise.all(streams);
+
+    // #then — literal payloads pin the wire semantics, not just nonempty streams
+    const expectedJob = {
+      id,
+      url: "https://example.com/ws-broadcast-contract",
+      domain: "unsupported",
+      displayTitle: "Unsupported link",
+      status: "Failed",
+      failure: { reason: "Unsupported domain", retryable: false },
+    } satisfies Job;
+
+    const expected = [
+      ["JobAdded", expectedJob],
+      ["JobFailed", { id, reason: "Unsupported domain", retryable: false }],
+      ["SnapshotReplaced", { jobs: [expectedJob] }],
+    ];
+
+    const received = both.map((frames) =>
+      frames.map((frame) =>
+        Match.value(frame).pipe(
+          Match.tags({
+            JobAdded: (event) => ["JobAdded", event.job],
+            JobFailed: (event) => [
+              "JobFailed",
+              { id: event.id, reason: event.reason, retryable: event.retryable },
+            ],
+            SnapshotReplaced: (event) => ["SnapshotReplaced", event.snapshot],
+          }),
+          Match.orElse((event) => [event._tag]),
         ),
       ),
-    ]);
+    );
 
-    expect(both[0]!.length).toBeGreaterThanOrEqual(1);
-    expect(both[1]!.length).toBeGreaterThanOrEqual(1);
+    expect(received).toEqual([expected, expected]);
   });
 });
 
@@ -405,7 +449,7 @@ describe("HttpServer clear endpoints", () => {
       body: j({ text: "https://example.com/clear-failed-test" }),
     });
 
-    const enqBody = (await enq.json()) as { jobs: Array<{ id: string; status: string }> };
+    const enqBody = await readQueue(enq);
     const newId = enqBody.jobs[0]!.id;
     expect(enqBody.jobs[0]!.status).toBe("Failed");
 
@@ -414,18 +458,29 @@ describe("HttpServer clear endpoints", () => {
 
     // #then
     expect(res.status).toBe(200);
-    const body = (await res.json()) as { removed: number };
+    const body = await readClear(res);
     expect(body.removed).toBeGreaterThanOrEqual(1);
 
-    const snap = (await (await fetch(`${baseUrl}/snapshot`)).json()) as {
-      jobs: Array<{ id: string }>;
-    };
+    const snap = await readQueue(await fetch(`${baseUrl}/snapshot`));
 
     expect(snap.jobs.find((jb) => jb.id === newId)).toBeUndefined();
   });
 
   test("DELETE /jobs/failed with no failed left returns 200 removed:0", async () => {
-    // #given — prior test cleared all failed; verify again
+    // #given — seed and clear a failed job independently of prior tests
+    const seeded = await fetch(`${baseUrl}/enqueue`, {
+      method: "POST",
+      headers: ct,
+      body: j({ text: "https://example.com/isolated-clear-failed" }),
+    });
+
+    expect(seeded.status).toBe(200);
+    const seededBody = await readQueue(seeded);
+    expect(seededBody.jobs[0]!.status).toBe("Failed");
+    const cleared = await fetch(`${baseUrl}/jobs/failed`, { method: "DELETE" });
+    expect(cleared.status).toBe(200);
+    const clearedBody = await readClear(cleared);
+    expect(clearedBody.removed).toBeGreaterThanOrEqual(1);
 
     // #when
     const res = await fetch(`${baseUrl}/jobs/failed`, { method: "DELETE" });
@@ -452,7 +507,7 @@ describe("HttpServer clear endpoints", () => {
       body: j({ text: "https://example.com/remove-failed-broaden-test" }),
     });
 
-    const enqBody = (await enq.json()) as { jobs: Array<{ id: string; status: string }> };
+    const enqBody = await readQueue(enq);
     const newId = enqBody.jobs[0]!.id;
     expect(enqBody.jobs[0]!.status).toBe("Failed");
 
@@ -569,4 +624,53 @@ describe("HttpServer settings routes", () => {
     // #then
     expect(await res.json()).toEqual({ valid: false });
   });
+});
+
+describe("HTTP request field defaults", () => {
+  test.each(["null", "42", '"text"', "{}", '{"text":42}', "not JSON"])(
+    "POST /enqueue tolerates invalid body %s as empty input",
+    async (body) => {
+      // #given
+      // #when
+      const response = await fetch(`${baseUrl}/enqueue`, { method: "POST", headers: ct, body });
+      // #then
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ jobs: [] });
+    },
+  );
+
+  test.each(["null", "42", "{}", '{"path":42}', "not JSON"])(
+    "POST /folder tolerates invalid body %s as an empty path",
+    async (body) => {
+      // #given
+      // #when
+      const response = await fetch(`${baseUrl}/folder`, { method: "POST", headers: ct, body });
+      // #then
+      expect(response.status).toBe(400);
+      expect(await response.json()).toEqual({ error: "InvalidPath" });
+    },
+  );
+
+  test.each([
+    ["null", "", "", null],
+    ["not JSON", "", "", null],
+    ['{"publicKey":"keep-public","secretKey":42}', "keep-public", "", false],
+    ['{"publicKey":false,"secretKey":"keep-secret"}', "", "keep-secret", false],
+    ['{"publicKey":"keep-public"}', "keep-public", "", false],
+    ['{"secretKey":"keep-secret"}', "", "keep-secret", false],
+  ])(
+    "POST /settings defaults each field independently for %s",
+    async (body, publicKey, secretKey, valid) => {
+      // #given
+      state.validateResult = true;
+      // #when
+      const response = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body });
+      // #then
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ valid: false });
+      const stored = await fetch(`${baseUrl}/settings`);
+      expect(stored.status).toBe(200);
+      expect(await stored.json()).toEqual({ publicKey, secretKey, valid });
+    },
+  );
 });

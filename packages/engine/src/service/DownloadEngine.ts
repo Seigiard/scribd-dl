@@ -1,12 +1,14 @@
 import {
   Cause,
   Context,
+  Data,
   Effect,
   Either,
   Exit,
   Fiber,
   Layer,
   Option,
+  Predicate,
   PubSub,
   Queue,
   Ref,
@@ -24,15 +26,24 @@ import type {
   JobProgress,
 } from "@scribd-dl/shared";
 import { JobNotFound, NotRemovable, NotRetryable } from "../errors/DomainErrors";
-import { ConfigLoader } from "../utils/io/ConfigLoader";
+import type { ConfigLoader } from "../utils/io/ConfigLoader";
 import { expandHome } from "../utils/io/path";
-import { PdfGenerator } from "../utils/io/PdfGenerator";
+import { PdfGeneratorTag, type PdfGenerator } from "../utils/io/PdfGenerator";
 import { resolvePdfPath, scribdIdFromUrl } from "../utils/io/pdfPath";
 import { normalizeUrl } from "../utils/url";
-import { ConfigStore } from "./ConfigStore";
-import { JobStore } from "./JobStore";
-import { PdfCompressor } from "./PdfCompressor";
-import { findScraperForUrl, Scrapers, type OnEvent, type Scraper } from "./Scraper";
+import { ConfigStoreTag, type ConfigStore } from "./ConfigStore";
+import { JobStoreTag, type JobStore } from "./JobStore";
+import { PdfCompressorTag, type PdfCompressor } from "./PdfCompressor";
+import {
+  findScraperForUrl,
+  ScrapersTag,
+  type Scrapers,
+  type OnEvent,
+  type Scraper,
+  type ScraperError,
+} from "./Scraper";
+
+const Events = Data.taggedEnum<JobEvent>();
 
 export interface DownloadEngineService {
   readonly enqueue: (text: string) => Effect.Effect<ReadonlyArray<Job>, never, never>;
@@ -68,6 +79,8 @@ export class DownloadEngine extends Context.Tag("DownloadEngine")<
   DownloadEngine,
   DownloadEngineService
 >() {}
+
+export const DownloadEngineTag: Context.Tag<DownloadEngine, DownloadEngineService> = DownloadEngine;
 
 const URL_REGEX = /(https?:\/\/\S+)/;
 
@@ -113,34 +126,31 @@ const deriveTitleWith =
 
 // Non-transient failures: retrying the same URL will reproduce the same error.
 // Everything else (network, browser, IO) is treated as transient and retryable.
-const NON_RETRYABLE_TAGS = new Set(["UnsupportedUrl"]);
-
-const isRetryable = (cause: Cause.Cause<unknown>): boolean => {
+const isRetryable = (cause: Cause.Cause<ScraperError>): boolean => {
   const failure = Cause.failureOption(cause);
 
   if (Option.isNone(failure)) return true;
-  const tag = (failure.value as { _tag?: string })._tag;
 
-  return tag ? !NON_RETRYABLE_TAGS.has(tag) : true;
+  return !Predicate.isTagged(failure.value, "UnsupportedUrl");
 };
 
-const formatCause = (cause: Cause.Cause<unknown>): string => {
+const formatCause = (cause: Cause.Cause<ScraperError>): string => {
   const failure = Cause.failureOption(cause);
 
   if (Option.isSome(failure)) {
-    const err = failure.value as { _tag?: string; message?: string; url?: string; path?: string };
+    const err = failure.value;
 
-    if (typeof err.message === "string" && err.message.length > 0) {
-      return `${err._tag ?? "Error"}: ${err.message}`;
+    if (err.message.length > 0) {
+      return `${err._tag}: ${err.message}`;
     }
 
     const parts: string[] = [];
 
     if (err._tag) parts.push(err._tag);
 
-    if (typeof err.url === "string") parts.push(`url=${err.url}`);
+    if ("url" in err) parts.push(`url=${err.url}`);
 
-    if (typeof err.path === "string") parts.push(`path=${err.path}`);
+    if ("path" in err) parts.push(`path=${err.path}`);
 
     if (parts.length > 0) {
       return parts.join(" ");
@@ -156,7 +166,7 @@ const formatCause = (cause: Cause.Cause<unknown>): string => {
   return Cause.pretty(cause);
 };
 
-const newId = (): JobId => crypto.randomUUID() as JobId;
+const newId = (): JobId => crypto.randomUUID();
 
 export const DownloadEngineLive: Layer.Layer<
   DownloadEngine,
@@ -165,13 +175,13 @@ export const DownloadEngineLive: Layer.Layer<
 > = Layer.scoped(
   DownloadEngine,
   Effect.gen(function* () {
-    const scrapers = yield* Scrapers;
+    const scrapers = yield* ScrapersTag;
     const classify = classifyWith(scrapers);
     const deriveTitle = deriveTitleWith(scrapers);
-    const configStore = yield* ConfigStore;
-    const jobStore = yield* JobStore;
-    const pdfCompressor = yield* PdfCompressor;
-    const pdfGenerator = yield* PdfGenerator;
+    const configStore = yield* ConfigStoreTag;
+    const jobStore = yield* JobStoreTag;
+    const pdfCompressor = yield* PdfCompressorTag;
+    const pdfGenerator = yield* PdfGeneratorTag;
 
     const restored = yield* jobStore.read;
     const settings = yield* configStore.read;
@@ -188,9 +198,13 @@ export const DownloadEngineLive: Layer.Layer<
     const queue = yield* Queue.unbounded<JobId>();
     const pubsub = yield* PubSub.unbounded<JobEvent>();
 
-    type ActiveFiber = { readonly id: JobId; readonly fiber: Fiber.RuntimeFiber<unknown, unknown> };
+    type ActiveFiber = {
+      readonly id: JobId;
+      readonly fiber: Fiber.RuntimeFiber<void, never>;
+    };
 
     const activeFiberRef = yield* Ref.make<Option.Option<ActiveFiber>>(Option.none());
+    const lifecycleLock = yield* Effect.makeSemaphore(1);
 
     for (const job of restored) {
       if (job.status === "Queued") {
@@ -243,7 +257,7 @@ export const DownloadEngineLive: Layer.Layer<
 
     const publishSnapshot: Effect.Effect<void, never, never> = Effect.gen(function* () {
       const snap = yield* currentSnapshot;
-      yield* publish({ _tag: "SnapshotReplaced", snapshot: snap });
+      yield* publish(Events.SnapshotReplaced({ snapshot: snap }));
     });
 
     const fileExists = (path: string): Effect.Effect<boolean, never, never> =>
@@ -300,7 +314,7 @@ export const DownloadEngineLive: Layer.Layer<
               newJobs.push(job);
               result.push(job);
               byNormalizedUrl.set(normalized, job);
-              pendingEvents.push({ _tag: "JobAdded", job });
+              pendingEvents.push(Events.JobAdded({ job }));
               queueOffers.push(id);
             } else {
               const failure: JobFailure = { reason: "Unsupported domain", retryable: false };
@@ -308,13 +322,14 @@ export const DownloadEngineLive: Layer.Layer<
               newJobs.push(job);
               result.push(job);
               byNormalizedUrl.set(normalized, job);
-              pendingEvents.push({ _tag: "JobAdded", job });
-              pendingEvents.push({
-                _tag: "JobFailed",
-                id,
-                reason: failure.reason,
-                retryable: failure.retryable,
-              });
+              pendingEvents.push(Events.JobAdded({ job }));
+              pendingEvents.push(
+                Events.JobFailed({
+                  id,
+                  reason: failure.reason,
+                  retryable: failure.retryable,
+                }),
+              );
             }
 
             continue;
@@ -337,13 +352,13 @@ export const DownloadEngineLive: Layer.Layer<
               const { progress: _drop, failure: _f, ...rest } = existing;
               nextJob = { ...rest, status: "Queued" };
               queueOffers.push(existing.id);
-              pendingEvents.push({ _tag: "JobRequeued", id: existing.id });
+              pendingEvents.push(Events.JobRequeued({ id: existing.id }));
             }
           } else if (existing.status === "Failed" && existing.failure?.retryable === true) {
             const { progress: _drop, failure: _f, ...rest } = existing;
             nextJob = { ...rest, status: "Queued" };
             queueOffers.push(existing.id);
-            pendingEvents.push({ _tag: "JobRequeued", id: existing.id });
+            pendingEvents.push(Events.JobRequeued({ id: existing.id }));
           }
 
           movedJobs.push(nextJob);
@@ -391,7 +406,7 @@ export const DownloadEngineLive: Layer.Layer<
 
           return next;
         });
-        yield* publish({ _tag: "JobRemoved", id });
+        yield* publish(Events.JobRemoved({ id }));
         yield* publishSnapshot;
         yield* persistJobs;
       });
@@ -415,7 +430,7 @@ export const DownloadEngineLive: Layer.Layer<
         });
 
         for (const id of toRemove) {
-          yield* publish({ _tag: "JobRemoved", id });
+          yield* publish(Events.JobRemoved({ id }));
         }
 
         yield* publishSnapshot;
@@ -428,23 +443,26 @@ export const DownloadEngineLive: Layer.Layer<
     const clearFailed = clearByStatus("Failed");
 
     const clearAll: Effect.Effect<number, never, never> = Effect.gen(function* () {
-      const map = yield* Ref.get(stateRef);
-      const ids = Array.from(map.keys());
+      const { ids, active } = yield* lifecycleLock.withPermits(1)(
+        Effect.gen(function* () {
+          const map = yield* Ref.get(stateRef);
+          const ids = Array.from(map.keys());
+          // Clear state before interrupt so the job cannot write a terminal status.
+          yield* Ref.set(stateRef, new Map());
+          const active = yield* Ref.get(activeFiberRef);
+
+          return { ids, active };
+        }).pipe(Effect.uninterruptible),
+      );
 
       if (ids.length === 0) return 0;
 
-      // interrupt active download fiber first; clearing state before interrupt
-      // signals the worker's exit path to skip status mutation for that id.
-      yield* Ref.set(stateRef, new Map());
-      const active = yield* Ref.get(activeFiberRef);
-
       if (Option.isSome(active)) {
         yield* Fiber.interrupt(active.value.fiber);
-        yield* Ref.set(activeFiberRef, Option.none());
       }
 
       for (const id of ids) {
-        yield* publish({ _tag: "JobRemoved", id });
+        yield* publish(Events.JobRemoved({ id }));
       }
 
       yield* publishSnapshot;
@@ -476,7 +494,7 @@ export const DownloadEngineLive: Layer.Layer<
 
         yield* setJob(requeued);
         yield* Queue.offer(queue, id);
-        yield* publish({ _tag: "JobRequeued", id });
+        yield* publish(Events.JobRequeued({ id }));
         yield* publishSnapshot;
         yield* persistJobs;
       });
@@ -500,21 +518,22 @@ export const DownloadEngineLive: Layer.Layer<
       (id: JobId): OnEvent =>
       (event) =>
         Effect.gen(function* () {
-          if (event._tag === "TitleResolved") {
+          if (Predicate.isTagged(event, "TitleResolved")) {
             yield* updateJob(id, (j) => ({ ...j, displayTitle: event.title }));
-            yield* publish({ _tag: "JobTitleUpdated", id, title: event.title });
+            yield* publish(Events.JobTitleUpdated({ id, title: event.title }));
             yield* persistJobs;
           } else {
-            const stage = event._tag === "ScrapeProgress" ? "scrape" : "render";
+            const stage = Predicate.isTagged(event, "ScrapeProgress") ? "scrape" : "render";
             const progress: JobProgress = { done: event.done, total: event.total, stage };
             yield* updateJob(id, (j) => ({ ...j, progress }));
-            yield* publish({
-              _tag: "JobProgress",
-              id,
-              done: event.done,
-              total: event.total,
-              stage,
-            });
+            yield* publish(
+              Events.JobProgress({
+                id,
+                done: event.done,
+                total: event.total,
+                stage,
+              }),
+            );
           }
         });
 
@@ -551,7 +570,7 @@ export const DownloadEngineLive: Layer.Layer<
 
           return { ...rest, compression: { status: "compressing" } };
         });
-        yield* publish({ _tag: "JobCompressing", id });
+        yield* publish(Events.JobCompressing({ id }));
         yield* publishSnapshot;
 
         const result = yield* Effect.either(
@@ -560,12 +579,23 @@ export const DownloadEngineLive: Layer.Layer<
 
         if (Either.isLeft(result)) {
           const reason = result.left.reason;
-          yield* publish({ _tag: "JobCompressionFailed", id, reason });
+          yield* publish(Events.JobCompressionFailed({ id, reason }));
 
           if (reason === "invalid credentials") {
-            // Runtime 401 self-corrects the persisted validity so later downloads skip (KTD9).
-            yield* Ref.update(keysRef, (k) => ({ ...k, valid: false }));
-            yield* persistSettings;
+            // Runtime 401 invalidates only the pair used by this request (KTD9).
+            const invalidated = yield* Ref.modify(keysRef, (current): [boolean, KeysState] => {
+              if (
+                current.publicKey !== keys.publicKey ||
+                current.secretKey !== keys.secretKey ||
+                !current.valid
+              ) {
+                return [false, current];
+              }
+
+              return [true, { ...current, valid: false }];
+            });
+
+            if (invalidated) yield* persistSettings;
           }
 
           return { status: "failed", reason };
@@ -601,48 +631,36 @@ export const DownloadEngineLive: Layer.Layer<
           );
       });
 
-    const worker = Effect.forever(
+    const runJob = (current: Job, folder: string): Effect.Effect<void, never, never> =>
       Effect.gen(function* () {
-        const id = yield* Queue.take(queue);
-        const map = yield* Ref.get(stateRef);
-        const current = map.get(id);
-
-        if (!current || current.status !== "Queued") {
-          return;
-        }
-
-        const downloading: Job = { ...current, status: "Downloading" };
-        yield* setJob(downloading);
-        yield* publish({ _tag: "JobStarted", id });
+        const id = current.id;
+        yield* publish(Events.JobStarted({ id }));
         yield* persistJobs;
-        const folder = yield* Ref.get(folderRef);
         const scraper = scrapers.find((s) => s.id === current.domain);
 
         if (!scraper) {
           // Domain was supported at enqueue time but the registry no longer carries it —
           // typically a persisted job from a previous engine build. Retryable so a
-          // subsequent restart with the original registry recovers without manual action.
+          // restoring the original registry allows the user to retry the failed job.
           const failure: JobFailure = {
             reason: `No scraper registered for domain '${current.domain}'`,
             retryable: true,
           };
 
-          yield* setJob({ ...downloading, status: "Failed", failure });
-          yield* publish({
-            _tag: "JobFailed",
-            id,
-            reason: failure.reason,
-            retryable: failure.retryable,
-          });
+          yield* updateJob(id, (job) => ({ ...job, status: "Failed", failure }));
+          yield* publish(
+            Events.JobFailed({
+              id,
+              reason: failure.reason,
+              retryable: failure.retryable,
+            }),
+          );
           yield* persistJobs;
 
           return;
         }
 
-        const fiber = yield* Effect.fork(scraper.execute(current.url, folder, makeOnEvent(id)));
-        yield* Ref.set(activeFiberRef, Option.some({ id, fiber }));
-        const exit = yield* Fiber.await(fiber);
-        yield* Ref.set(activeFiberRef, Option.none());
+        const exit = yield* Effect.exit(scraper.execute(current.url, folder, makeOnEvent(id)));
 
         // If clearAll removed the job from state mid-flight, skip status update.
         const after = (yield* Ref.get(stateRef)).get(id);
@@ -662,9 +680,11 @@ export const DownloadEngineLive: Layer.Layer<
           yield* updateJob(id, (j) => {
             const { progress: _p, compression: _c, ...rest } = j;
 
-            return { ...rest, status: "Downloaded", ...(compression ? { compression } : {}) };
+            const downloaded: Job = { ...rest, status: "Downloaded" };
+
+            return compression ? { ...downloaded, compression } : downloaded;
           });
-          yield* publish({ _tag: "JobCompleted", id });
+          yield* publish(Events.JobCompleted({ id }));
         } else if (Cause.isInterruptedOnly(exit.cause)) {
           // External interrupt (e.g. clearAll racing); state already adjusted.
           return;
@@ -672,11 +692,46 @@ export const DownloadEngineLive: Layer.Layer<
           const reason = formatCause(exit.cause);
           const retryable = isRetryable(exit.cause);
           const failure: JobFailure = { reason, retryable };
-          yield* setJob({ ...withoutProgress, status: "Failed", failure });
-          yield* publish({ _tag: "JobFailed", id, reason, retryable });
+          yield* updateJob(id, () => ({ ...withoutProgress, status: "Failed", failure }));
+          yield* publish(Events.JobFailed({ id, reason, retryable }));
         }
 
         yield* persistJobs;
+      });
+
+    const worker = Effect.forever(
+      Effect.gen(function* () {
+        const id = yield* Queue.take(queue);
+
+        const active = yield* lifecycleLock.withPermits(1)(
+          Effect.uninterruptibleMask((restore) =>
+            Effect.gen(function* () {
+              const current = (yield* Ref.get(stateRef)).get(id);
+
+              if (!current || current.status !== "Queued") return Option.none<ActiveFiber>();
+
+              yield* updateJob(id, (job) => ({ ...job, status: "Downloading" }));
+              const folder = yield* Ref.get(folderRef);
+              const fiber = yield* Effect.fork(restore(runJob(current, folder)));
+              const active: ActiveFiber = { id, fiber };
+              yield* Ref.set(activeFiberRef, Option.some(active));
+
+              return Option.some(active);
+            }),
+          ),
+        );
+
+        if (Option.isNone(active)) return;
+
+        yield* Fiber.await(active.value.fiber).pipe(
+          Effect.ensuring(
+            Ref.update(activeFiberRef, (registered) =>
+              Option.isSome(registered) && registered.value.fiber === active.value.fiber
+                ? Option.none()
+                : registered,
+            ),
+          ),
+        );
       }),
     );
 
@@ -691,7 +746,7 @@ export const DownloadEngineLive: Layer.Layer<
         if (trimmed === "") return;
         const expanded = expandHome(trimmed);
         yield* Ref.set(folderRef, expanded);
-        yield* publish({ _tag: "OutputFolderChanged", path: expanded });
+        yield* publish(Events.OutputFolderChanged({ path: expanded }));
         yield* persistSettings;
       });
 

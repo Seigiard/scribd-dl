@@ -75,16 +75,16 @@ Engine state (download folder and job queue) is persisted under `~/.config/scrib
 
 | File | Purpose |
 | --- | --- |
-| `settings.json` | Persistent `outputFolder` chosen by the user. |
+| `settings.json` | The chosen `outputFolder`, iLovePDF public and secret keys, and their validation result. Keys are stored in plaintext in this local file. |
 | `jobs.jsonl` | State-snapshot of the queue (one job per line). Jobs that were `Downloading` when the engine stopped are restored as `Queued`. |
 
-There is no config file beyond `settings.json` — `outputFolder` is the only persistent setting; everything else lives as constants in the code.
+`settings.json` stores the mutable settings. Rendering time and filename defaults are constants in the code.
 
 ### Other entry points ###
 
 | Command | What it does |
 | --- | --- |
-| `bun run app:dev` | Start the Vite dev server for the SPA in `apps/web`. |
+| `bun --filter @scribd-dl/web dev` | Start the Vite dev server for the SPA in `apps/web`. |
 | `bun run test` | Run all workspace tests (engine `bun:test` + web Vitest). |
 
 ## Conventions ##

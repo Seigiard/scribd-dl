@@ -1,6 +1,6 @@
 import { Command, Options } from "@effect/cli";
 import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Effect } from "effect";
+import { Effect, Either } from "effect";
 import { fetchFolder, fetchSnapshot } from "@scribd-dl/shared";
 import { runEmbeddedEngine } from "@scribd-dl/engine/embedded";
 import { render } from "ink";
@@ -46,7 +46,7 @@ const ensureEngine = (engineUrl: string) =>
   Effect.gen(function* () {
     const reachable = yield* Effect.either(healthCheck(engineUrl));
 
-    if (reachable._tag === "Right") return engineUrl;
+    if (Either.isRight(reachable)) return engineUrl;
     process.stderr.write(
       `scribd-dl-tui: no external engine at ${engineUrl}, starting embedded engine on :${EMBEDDED_ENGINE_PORT}\n`,
     );

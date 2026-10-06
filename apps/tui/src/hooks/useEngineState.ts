@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { Match } from "effect";
 import {
   fetchSettings,
   fetchSnapshot,
@@ -67,19 +68,11 @@ export const useEngineState = (
     const onEvent = (event: JobEvent) => {
       if (!alive) return;
 
-      if (event._tag === "OutputFolderChanged") {
-        setFolder(event.path);
-
-        return;
-      }
-
-      if (event._tag === "SnapshotReplaced") {
-        setSnapshot(event.snapshot);
-
-        return;
-      }
-
-      void refresh();
+      Match.value(event).pipe(
+        Match.tag("OutputFolderChanged", ({ path }) => setFolder(path)),
+        Match.tag("SnapshotReplaced", ({ snapshot }) => setSnapshot(snapshot)),
+        Match.orElse(() => void refresh()),
+      );
     };
 
     void refresh();

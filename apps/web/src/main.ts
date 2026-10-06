@@ -16,7 +16,7 @@ import {
 import { installFakeJobs } from "./devFixtures";
 import { attachPasteHandler, startEngineClient } from "./engineClient";
 
-const mount = (selector: string, view: () => Hole | null): (() => void) => {
+const mount = (selector: string, view: () => Hole): (() => void) => {
   const el = document.querySelector(selector);
 
   if (!el) throw new Error(`mount target not found: ${selector}`);

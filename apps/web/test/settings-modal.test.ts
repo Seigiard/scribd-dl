@@ -4,10 +4,6 @@ import type { SettingsResponse } from "@scribd-dl/shared";
 
 const saveSettingsCommandMock = vi.fn(async (_pub: string, _sec: string) => true);
 
-vi.mock("@/engineClient", () => ({
-  saveSettingsCommand: saveSettingsCommandMock,
-}));
-
 const { settingsModal, $settingsError, $draftPublicKey, $draftSecretKey, $settingsValidity } =
   await import("@/views/settings-modal");
 
@@ -26,13 +22,16 @@ const mount = (props: Props): HTMLElement => {
   document.body.appendChild(container);
   render(
     container,
-    settingsModal({
-      mode: props.mode,
-      publicKey: props.publicKey ?? "",
-      secretKey: props.secretKey ?? "",
-      validity: props.validity ?? "unverified",
-      error: props.error ?? null,
-    }),
+    settingsModal(
+      {
+        mode: props.mode,
+        publicKey: props.publicKey ?? "",
+        secretKey: props.secretKey ?? "",
+        validity: props.validity ?? "unverified",
+        error: props.error ?? null,
+      },
+      saveSettingsCommandMock,
+    ),
   );
 
   return container;

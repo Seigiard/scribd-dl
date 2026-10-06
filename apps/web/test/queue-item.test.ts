@@ -6,14 +6,9 @@ const removeJobByIdMock = vi.fn(async () => {});
 
 const retryJobByIdMock = vi.fn(async () => {});
 
-vi.mock("@/engineClient", () => ({
-  removeJobById: removeJobByIdMock,
-  retryJobById: retryJobByIdMock,
-}));
-
 const { queueItem } = await import("@/views/queue-item");
 
-const ID = "j1" as JobId;
+const ID: JobId = "j1";
 
 const makeJob = (status: JobStatus, overrides: Partial<Job> = {}): Job => ({
   id: ID,
@@ -26,9 +21,15 @@ const makeJob = (status: JobStatus, overrides: Partial<Job> = {}): Job => ({
 
 const mountJob = (job: Job): HTMLElement => {
   const container = document.createElement("div");
-  render(container, queueItem(job));
+  render(
+    container,
+    queueItem(job, {
+      removeJobById: removeJobByIdMock,
+      retryJobById: retryJobByIdMock,
+    }),
+  );
 
-  return container.querySelector(".queue-item") as HTMLElement;
+  return container.querySelector<HTMLElement>(".queue-item")!;
 };
 
 describe("queueItem()", () => {
@@ -87,14 +88,14 @@ describe("queueItem()", () => {
 
   it("clicking Remove calls removeJobById with id", () => {
     const el = mountJob(makeJob("Queued"));
-    const btn = el.querySelector('button[data-action="remove"]') as HTMLButtonElement;
+    const btn = el.querySelector<HTMLButtonElement>('button[data-action="remove"]')!;
     btn.click();
     expect(removeJobByIdMock).toHaveBeenCalledWith(ID);
   });
 
   it("clicking Retry calls retryJobById with id", () => {
     const el = mountJob(makeJob("Failed", { failure: { reason: "x", retryable: true } }));
-    const btn = el.querySelector('button[data-action="retry"]') as HTMLButtonElement;
+    const btn = el.querySelector<HTMLButtonElement>('button[data-action="retry"]')!;
     btn.click();
     expect(retryJobByIdMock).toHaveBeenCalledWith(ID);
   });
@@ -125,7 +126,7 @@ describe("queueItem()", () => {
     );
 
     // #then — inline visible text (not tooltip-only) plus a supplementary title
-    const marker = el.querySelector(".item-compression-failed") as HTMLElement;
+    const marker = el.querySelector<HTMLElement>(".item-compression-failed")!;
     expect(marker).not.toBeNull();
     expect(marker.textContent).toContain("quota exceeded");
     expect(marker.getAttribute("title")).toBe("quota exceeded");

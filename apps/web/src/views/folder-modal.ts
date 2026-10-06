@@ -23,7 +23,7 @@ const close = (): void => {
   $modal.set("none");
 };
 
-const trySave = async (): Promise<void> => {
+const trySave = async (save: typeof saveFolder): Promise<void> => {
   const val = $draftFolder.get().trim();
 
   if (!val) {
@@ -33,7 +33,7 @@ const trySave = async (): Promise<void> => {
   }
 
   try {
-    await saveFolder(val);
+    await save(val);
     $modalError.set(null);
     close();
   } catch {
@@ -42,16 +42,12 @@ const trySave = async (): Promise<void> => {
 };
 
 const onInput = (e: Event): void => {
-  $draftFolder.set((e.target as HTMLInputElement).value);
-};
-
-const onSaveClick = (): void => {
-  void trySave();
+  if (e.target instanceof HTMLInputElement) $draftFolder.set(e.target.value);
 };
 
 const tryBrowse = async (): Promise<void> => {
   try {
-    const picked = await invokeTauri<string | null>("pick_folder", {
+    const picked = await invokeTauri("pick_folder", {
       defaultPath: $draftFolder.get() || null,
     });
 
@@ -65,10 +61,10 @@ const onBrowseClick = (): void => {
   void tryBrowse();
 };
 
-const onInputKeydown = (e: KeyboardEvent): void => {
+const onInputKeydown = (e: KeyboardEvent, save: typeof saveFolder): void => {
   if (e.key === "Enter") {
     e.preventDefault();
-    void trySave();
+    void trySave(save);
 
     return;
   }
@@ -130,7 +126,10 @@ $modal.listen((mode) => {
   }
 });
 
-export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
+export const folderModal = (
+  { mode, error, draft }: FolderModalProps,
+  save: typeof saveFolder = saveFolder,
+): Hole => {
   if (mode !== "folder") return html``;
 
   return html`<div class="folder-modal" @click=${onBackdropClick}>
@@ -146,7 +145,7 @@ export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
             .value=${draft}
             ref=${onInputRef}
             @input=${onInput}
-            @keydown=${onInputKeydown}
+            @keydown=${(e: KeyboardEvent) => onInputKeydown(e, save)}
           />
         </div>
         <div class="modal-actions">
@@ -163,7 +162,9 @@ export const folderModal = ({ mode, error, draft }: FolderModalProps): Hole => {
                 </button>`
               : null
           }
-          <button type="button" class="btn btn-primary" @click=${onSaveClick}>Save</button>
+          <button type="button" class="btn btn-primary" @click=${() => void trySave(save)}>
+            Save
+          </button>
         </div>
         ${error ? html`<div class="terminal-alert terminal-alert-error">${error}</div>` : null}
       </div>

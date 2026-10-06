@@ -13,7 +13,15 @@ export type StatusZoneProps = {
 const isTerminal = (status: Job["status"]): boolean =>
   status === "Downloaded" || status === "Failed";
 
-export const statusZone = ({ transient, jobs }: StatusZoneProps): Hole => {
+export interface StatusCommands {
+  readonly commandClearAll: typeof commandClearAll;
+  readonly commandClearFinished: typeof commandClearFinished;
+}
+
+export const statusZone = (
+  { transient, jobs }: StatusZoneProps,
+  commands: StatusCommands = { commandClearAll, commandClearFinished },
+): Hole => {
   const present = Object.values(jobs).filter((j): j is Job => j !== undefined);
   const total = present.length;
   const terminalCount = present.filter((j) => isTerminal(j.status)).length;
@@ -32,7 +40,7 @@ export const statusZone = ({ transient, jobs }: StatusZoneProps): Hole => {
         type="button"
         class="btn btn-default"
         ?disabled=${terminalCount === 0}
-        @click=${() => void commandClearFinished()}
+        @click=${() => void commands.commandClearFinished()}
       >
         Clear Finished
       </button>
@@ -40,7 +48,7 @@ export const statusZone = ({ transient, jobs }: StatusZoneProps): Hole => {
         type="button"
         class="btn btn-danger"
         ?disabled=${total === 0}
-        @click=${() => void commandClearAll()}
+        @click=${() => void commands.commandClearAll()}
       >
         Clear All
       </button>

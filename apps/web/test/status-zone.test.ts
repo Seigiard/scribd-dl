@@ -1,32 +1,32 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "uhtml";
-import type { Job, JobId } from "@scribd-dl/shared";
+import type { Job } from "@scribd-dl/shared";
 
 const clearFinishedMock = vi.fn();
 
 const clearAllMock = vi.fn();
 
-vi.mock("@/engineClient", () => ({
-  commandClearFinished: clearFinishedMock,
-  commandClearAll: clearAllMock,
-}));
-
 const { statusZone } = await import("@/views/status-zone");
 
 const DEFAULT_HINT = "Press Ctrl/Cmd+V to download links";
 
-const job = (id: string, status: Job["status"]): Job =>
-  ({
-    id: id as JobId,
-    url: `https://scribd.com/${id}`,
-    domain: "scribd",
-    displayTitle: id,
-    status,
-  }) as Job;
+const job = (id: string, status: Job["status"]): Job => ({
+  id,
+  url: `https://scribd.com/${id}`,
+  domain: "scribd",
+  displayTitle: id,
+  status,
+});
 
 const renderTo = (props: Parameters<typeof statusZone>[0]): HTMLDivElement => {
   const container = document.createElement("div");
-  render(container, statusZone(props));
+  render(
+    container,
+    statusZone(props, {
+      commandClearFinished: clearFinishedMock,
+      commandClearAll: clearAllMock,
+    }),
+  );
 
   return container;
 };
@@ -57,7 +57,7 @@ describe("statusZone view", () => {
     });
 
     // #then
-    const text = c.querySelector(".status-zone-text") as HTMLElement | null;
+    const text = c.querySelector<HTMLElement>(".status-zone-text");
     expect(text?.textContent).toBe("boom");
     expect(text?.classList.contains("status-zone-error")).toBe(true);
   });
@@ -101,7 +101,7 @@ describe("statusZone view", () => {
     const c = renderTo({ transient: null, jobs: { a: job("a", "Downloaded") } });
 
     // #when
-    (c.querySelectorAll("button")[0] as HTMLButtonElement).click();
+    c.querySelectorAll("button")[0]!.click();
 
     // #then
     expect(clearFinishedMock).toHaveBeenCalledTimes(1);
@@ -112,7 +112,7 @@ describe("statusZone view", () => {
     const c = renderTo({ transient: null, jobs: { a: job("a", "Queued") } });
 
     // #when
-    (c.querySelectorAll("button")[1] as HTMLButtonElement).click();
+    c.querySelectorAll("button")[1]!.click();
 
     // #then
     expect(clearAllMock).toHaveBeenCalledTimes(1);

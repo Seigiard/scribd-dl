@@ -1,4 +1,5 @@
 import { Context, Effect, Layer } from "effect";
+import * as fs from "node:fs/promises";
 import puppeteer from "puppeteer";
 import type { LaunchOptions, Page, PDFOptions } from "puppeteer";
 import {
@@ -8,6 +9,18 @@ import {
 } from "../../errors/DomainErrors";
 
 const PAGE_BUFFER_MS = 1000;
+
+declare global {
+  interface Window {
+    __helpers__?: {
+      removeSelectorAll: (selector: string) => void;
+      lazyLoad: (selector: string, rendertime: number) => Promise<void>;
+      removeMarginSelectorAll: (selector: string) => void;
+      hideSelectorAll: (selector: string) => void;
+      showSelectorAll: (selector: string) => void;
+    };
+  }
+}
 
 const BROWSER_HELPERS_SOURCE = `
       window.__helpers__ = {
@@ -74,9 +87,20 @@ export interface PuppeteerSgService {
 
 export class PuppeteerSg extends Context.Tag("PuppeteerSg")<PuppeteerSg, PuppeteerSgService>() {}
 
+export const PuppeteerSgTag: Context.Tag<PuppeteerSg, PuppeteerSgService> = PuppeteerSg;
+
 export interface PuppeteerSgOptions {
   readonly headful: boolean;
 }
+
+export interface BrowserSession {
+  readonly newPage: () => Promise<Page>;
+  readonly close: () => Promise<void>;
+}
+
+export type BrowserLauncher = (options: LaunchOptions) => Promise<BrowserSession>;
+
+export type PuppeteerPdfIo = Pick<typeof fs, "writeFile">;
 
 const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
   const useNoSandbox = process.env.CI === "true" || process.env.PUPPETEER_NO_SANDBOX === "true";
@@ -97,8 +121,9 @@ const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
     // surfaces as a job failure instead of wedging the single-fiber worker queue.
     // Debug runs interactively under the developer's eye, so we disable the limit
     // to let heavy documents finish without false timeouts.
-    ...(opts.headful ? { protocolTimeout: 0 } : {}),
   };
+
+  if (opts.headful) options.protocolTimeout = 0;
 
   if (executablePath) {
     return { ...options, executablePath };
@@ -109,61 +134,97 @@ const buildLaunchOptions = (opts: PuppeteerSgOptions): LaunchOptions => {
 
 export const makePuppeteerSgLive = (
   opts: PuppeteerSgOptions,
+  launch: BrowserLauncher = (options) => puppeteer.launch(options),
+  io: PuppeteerPdfIo = fs,
 ): Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> =>
   Layer.scoped(
     PuppeteerSg,
     Effect.gen(function* () {
       const browser = yield* Effect.acquireRelease(
         Effect.tryPromise({
-          try: () => puppeteer.launch(buildLaunchOptions(opts)),
+          try: () => launch(buildLaunchOptions(opts)),
           catch: (cause) => new BrowserLaunchFailed({ cause }),
         }),
         (b) => Effect.promise(() => b.close()),
       );
 
       const getPage = (url: string): Effect.Effect<Page, PageLoadFailed, never> =>
-        Effect.gen(function* () {
-          const page = yield* Effect.tryPromise({
-            try: () => browser.newPage(),
-            catch: (cause) => new PageLoadFailed({ url, cause }),
-          });
+        Effect.uninterruptibleMask(() =>
+          Effect.gen(function* () {
+            const allocation = yield* Effect.try({
+              try: () => browser.newPage(),
+              catch: (cause) => new PageLoadFailed({ url, cause }),
+            });
 
-          yield* Effect.tryPromise({
-            try: () => page.goto(url, { waitUntil: "load" }),
-            catch: (cause) => new PageLoadFailed({ url, cause }),
-          });
-          yield* Effect.tryPromise({
-            try: () => page.emulateMediaType("screen"),
-            catch: (cause) => new PageLoadFailed({ url, cause }),
-          });
-          yield* Effect.tryPromise({
-            try: () => page.evaluate(BROWSER_HELPERS_SOURCE),
-            catch: (cause) => new PageLoadFailed({ url, cause }),
-          });
-          yield* Effect.promise(
-            () => new Promise<void>((resolve) => setTimeout(resolve, PAGE_BUFFER_MS)),
-          );
+            const page = yield* Effect.interruptible(
+              Effect.tryPromise({
+                try: () => allocation,
+                catch: (cause) => new PageLoadFailed({ url, cause }),
+              }),
+            ).pipe(
+              Effect.onInterrupt(() =>
+                Effect.sync(() => {
+                  // The browser promise cannot be canceled. Release its eventual page
+                  // without waiting for an allocation that may never resolve.
+                  void allocation.then((allocated) => allocated.close()).catch(() => undefined);
+                }),
+              ),
+            );
 
-          return page;
-        });
+            const initialize = Effect.gen(function* () {
+              yield* Effect.tryPromise({
+                try: () => page.goto(url, { waitUntil: "load" }),
+                catch: (cause) => new PageLoadFailed({ url, cause }),
+              });
+              yield* Effect.tryPromise({
+                try: () => page.emulateMediaType("screen"),
+                catch: (cause) => new PageLoadFailed({ url, cause }),
+              });
+              yield* Effect.tryPromise({
+                try: () => page.evaluate(BROWSER_HELPERS_SOURCE),
+                catch: (cause) => new PageLoadFailed({ url, cause }),
+              });
+              yield* Effect.sleep(PAGE_BUFFER_MS);
+
+              return page;
+            });
+
+            return yield* Effect.interruptible(initialize).pipe(
+              Effect.onError(() => Effect.tryPromise(() => page.close()).pipe(Effect.ignore)),
+            );
+          }),
+        );
 
       const generatePDF = (
         page: Page,
         pdfPath: string,
         options?: PuppeteerPdfOptions,
       ): Effect.Effect<void, PdfGenerationFailed, never> =>
-        Effect.tryPromise({
-          try: () => {
-            const pdfOptions: PDFOptions = {
-              path: pdfPath,
-              printBackground: true,
-              timeout: 0,
-              ...options,
-            };
+        Effect.gen(function* () {
+          const pdfOptions: PDFOptions = {
+            printBackground: true,
+            timeout: 0,
+          };
 
-            return page.pdf(pdfOptions).then(() => undefined);
-          },
-          catch: (cause) => new PdfGenerationFailed({ path: pdfPath, cause }),
+          if (options?.width !== undefined) pdfOptions.width = options.width;
+
+          if (options?.height !== undefined) pdfOptions.height = options.height;
+
+          if (options?.pageRanges !== undefined) pdfOptions.pageRanges = options.pageRanges;
+
+          const bytes = yield* Effect.interruptible(
+            Effect.tryPromise({
+              try: () => page.pdf(pdfOptions),
+              catch: (cause) => new PdfGenerationFailed({ path: pdfPath, cause }),
+            }),
+          );
+
+          yield* Effect.uninterruptible(
+            Effect.tryPromise({
+              try: () => io.writeFile(pdfPath, bytes),
+              catch: (cause) => new PdfGenerationFailed({ path: pdfPath, cause }),
+            }),
+          );
         });
 
       return PuppeteerSg.of({ getPage, generatePDF });
@@ -171,3 +232,5 @@ export const makePuppeteerSgLive = (
   );
 
 export const PuppeteerSgLive = makePuppeteerSgLive({ headful: false });
+
+export const PuppeteerSgDebugLive = makePuppeteerSgLive({ headful: true });

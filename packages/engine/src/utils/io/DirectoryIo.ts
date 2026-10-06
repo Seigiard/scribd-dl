@@ -9,21 +9,35 @@ export interface DirectoryIoService {
 
 export class DirectoryIo extends Context.Tag("DirectoryIo")<DirectoryIo, DirectoryIoService>() {}
 
-const create = (path: string): Effect.Effect<void, DirectoryIoFailed, never> =>
-  Effect.tryPromise({
-    try: async () => {
-      await fs.mkdir(path, { recursive: true });
-    },
-    catch: (cause) => new DirectoryIoFailed({ path, op: "create", cause }),
-  });
+export const DirectoryIoTag: Context.Tag<DirectoryIo, DirectoryIoService> = DirectoryIo;
 
-const remove = (path: string): Effect.Effect<void, DirectoryIoFailed, never> =>
-  Effect.tryPromise({
-    try: () => fs.rm(path, { recursive: true, force: true }),
-    catch: (cause) => new DirectoryIoFailed({ path, op: "remove", cause }),
-  });
+interface DirectoryOperations {
+  readonly mkdir: (path: string) => Promise<string | undefined>;
+  readonly rm: (path: string) => Promise<void>;
+}
 
-export const DirectoryIoLive: Layer.Layer<DirectoryIo, never, never> = Layer.succeed(DirectoryIo, {
-  create,
-  remove,
+export const makeDirectoryIo = (
+  io: DirectoryOperations = {
+    mkdir: (path) => fs.mkdir(path, { recursive: true }),
+    rm: (path) => fs.rm(path, { recursive: true, force: true }),
+  },
+): DirectoryIoService => ({
+  // Filesystem promises cannot be canceled; wait for IO before callers can reuse the path.
+  create: (path) =>
+    Effect.tryPromise({
+      try: async () => {
+        await io.mkdir(path);
+      },
+      catch: (cause) => new DirectoryIoFailed({ path, op: "create", cause }),
+    }).pipe(Effect.uninterruptible),
+  remove: (path) =>
+    Effect.tryPromise({
+      try: () => io.rm(path),
+      catch: (cause) => new DirectoryIoFailed({ path, op: "remove", cause }),
+    }).pipe(Effect.uninterruptible),
 });
+
+export const DirectoryIoLive: Layer.Layer<DirectoryIo, never, never> = Layer.succeed(
+  DirectoryIo,
+  makeDirectoryIo(),
+);

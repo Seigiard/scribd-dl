@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import * as api from "@/lib/api";
 
-const enqueueTextMock = vi.fn(async () => ({ jobs: [] }));
+const enqueueTextMock = vi.fn<typeof api.enqueueText>(async () => ({ jobs: [] }));
 
 const clearAllMock = vi.fn(async () => 0);
 
@@ -16,17 +17,6 @@ const retryJobMock = vi.fn(async () => {});
 
 const setFolderMock = vi.fn(async () => {});
 
-vi.mock("@/lib/api", () => ({
-  clearAll: clearAllMock,
-  clearFinished: clearFinishedMock,
-  enqueueText: enqueueTextMock,
-  fetchSnapshot: fetchSnapshotMock,
-  fetchFolder: fetchFolderMock,
-  removeJob: removeJobMock,
-  retryJob: retryJobMock,
-  setFolder: setFolderMock,
-}));
-
 const { __testing, attachPasteHandler, detachPasteHandler, handlePastedText } =
   await import("@/engineClient");
 
@@ -37,6 +27,17 @@ const FAKE_URL = "http://engine.test";
 describe("paste handler", () => {
   beforeEach(() => {
     resetStores();
+    __testing.setApi({
+      ...api,
+      clearAll: clearAllMock,
+      clearFinished: clearFinishedMock,
+      enqueueText: enqueueTextMock,
+      fetchSnapshot: fetchSnapshotMock,
+      fetchFolder: fetchFolderMock,
+      removeJob: removeJobMock,
+      retryJob: retryJobMock,
+      setFolder: setFolderMock,
+    });
     enqueueTextMock.mockReset();
     enqueueTextMock.mockResolvedValue({ jobs: [] });
     __testing.setBaseUrl(FAKE_URL);
@@ -49,7 +50,17 @@ describe("paste handler", () => {
   });
 
   it("posts the pasted text when at least one https URL is present", async () => {
-    enqueueTextMock.mockResolvedValueOnce({ jobs: [{ id: "x" }] as never });
+    enqueueTextMock.mockResolvedValueOnce({
+      jobs: [
+        {
+          id: "x",
+          url: "https://scribd.com/doc/123",
+          domain: "scribd",
+          displayTitle: "123",
+          status: "Queued",
+        },
+      ],
+    });
     await handlePastedText("look at this https://scribd.com/doc/123");
     expect(enqueueTextMock).toHaveBeenCalledWith(
       FAKE_URL,
@@ -77,23 +88,28 @@ describe("paste handler", () => {
         {
           id: "u",
           url: "https://example.com/x",
+          domain: "unsupported",
+          displayTitle: "x",
           status: "Failed",
           failure: { reason: "Unsupported domain", retryable: false },
         },
-      ] as never,
+      ],
     });
     await handlePastedText("https://example.com/x");
     expect($transient.get()?.severity).toBe("warning");
     expect($transient.get()?.message).toBe("Unsupported domain");
   });
 
-  const makePasteEvent = (text: string): ClipboardEvent => {
-    const evt = new Event("paste", { bubbles: true }) as ClipboardEvent;
-    Object.defineProperty(evt, "clipboardData", {
-      value: { getData: (type: string) => (type === "text" ? text : "") },
-    });
+  const makePasteEvent = (text: string): Event => {
+    const event = new Event("paste", { bubbles: true });
 
-    return evt;
+    const clipboardData: Pick<DataTransfer, "getData"> = {
+      getData: (format) => (format === "text" ? text : ""),
+    };
+
+    Object.defineProperty(event, "clipboardData", { value: clipboardData });
+
+    return event;
   };
 
   it("ignores paste events whose target is an INPUT", () => {

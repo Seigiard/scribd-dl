@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
+import { beforeEach, describe, expect, mock, test, type Mock } from "bun:test";
 import { Effect } from "effect";
 import {
   type Fetcher,
@@ -8,8 +8,8 @@ import {
 } from "../src/utils/request/TitleResolver";
 
 interface FakeFetcher {
-  fetchPageTitle: ReturnType<typeof mock>;
-  fetchOEmbedTitle: ReturnType<typeof mock>;
+  fetchPageTitle: Mock<Fetcher["fetchPageTitle"]>;
+  fetchOEmbedTitle: Mock<Fetcher["fetchOEmbedTitle"]>;
   url: string | null;
 }
 
@@ -26,9 +26,8 @@ const resetFetcher = () => {
 };
 
 const fetcher: Fetcher = {
-  fetchPageTitle: (url) => fakeFetcher.fetchPageTitle(url) as ReturnType<Fetcher["fetchPageTitle"]>,
-  fetchOEmbedTitle: (url) =>
-    fakeFetcher.fetchOEmbedTitle(url) as ReturnType<Fetcher["fetchOEmbedTitle"]>,
+  fetchPageTitle: (url) => fakeFetcher.fetchPageTitle(url),
+  fetchOEmbedTitle: (url) => fakeFetcher.fetchOEmbedTitle(url),
 };
 
 const runResolve = (originalUrl: string, id: string): Promise<string> =>
@@ -207,6 +206,20 @@ describe("TitleResolver.resolve", () => {
     // #then
     expect(title).toBe("42");
   });
+
+  test.each(["%", "%ZZ", "%E0%A4"])(
+    "falls back to id when metadata is unavailable and slug %s is malformed",
+    async (slug) => {
+      // #given
+      const url = `https://www.scribd.com/document/42/${slug}`;
+
+      // #when
+      const title = await runResolve(url, "42");
+
+      // #then
+      expect(title).toBe("42");
+    },
+  );
 
   test("passes the original URL to oEmbed", async () => {
     // #when

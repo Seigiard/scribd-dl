@@ -1,9 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import type { EngineSnapshot, Job, JobId } from "@scribd-dl/shared";
+import type { EngineSnapshot, Job } from "@scribd-dl/shared";
 import { computeFocusable } from "../src/tui/focus";
 
 const job = (id: string, status: Job["status"], extra: Partial<Job> = {}): Job => ({
-  id: id as JobId,
+  id,
   url: `https://scribd.com/${id}`,
   domain: "scribd",
   displayTitle: id,

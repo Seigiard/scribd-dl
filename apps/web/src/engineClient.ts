@@ -1,16 +1,11 @@
-import { containsUrl, summarizeEnqueueFeedback, type JobEvent } from "@scribd-dl/shared";
 import {
-  clearAll,
-  clearFinished,
-  enqueueText,
-  fetchFolder,
-  fetchSettings,
-  fetchSnapshot,
-  removeJob,
-  retryJob,
-  saveSettings,
-  setFolder,
-} from "@/lib/api";
+  containsUrl,
+  JobEventSchema,
+  summarizeEnqueueFeedback,
+  type JobEvent,
+} from "@scribd-dl/shared";
+import * as defaultApi from "@/lib/api";
+import { Either, Match, Schema } from "effect";
 import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
 import {
   $connected,
@@ -24,6 +19,8 @@ import {
 
 let ws: WebSocket | null = null;
 
+let api: typeof defaultApi = defaultApi;
+
 let baseUrl: string | null = null;
 
 let starting: Promise<void> | null = null;
@@ -32,7 +29,7 @@ const refresh = async (): Promise<void> => {
   if (!baseUrl) return;
 
   try {
-    const snap = await fetchSnapshot(baseUrl);
+    const snap = await api.fetchSnapshot(baseUrl);
     applySnapshot(snap);
   } catch {
     // transport errors surface via the disconnect banner (R6)
@@ -43,7 +40,7 @@ const loadFolder = async (): Promise<void> => {
   if (!baseUrl) return;
 
   try {
-    $folder.set(await fetchFolder(baseUrl));
+    $folder.set(await api.fetchFolder(baseUrl));
   } catch {
     $folder.set(null);
   }
@@ -53,36 +50,18 @@ const loadSettings = async (): Promise<void> => {
   if (!baseUrl) return;
 
   try {
-    $settings.set(await fetchSettings(baseUrl));
+    $settings.set(await api.fetchSettings(baseUrl));
   } catch {
     $settings.set(null);
   }
 };
 
 const handleWsEvent = (event: JobEvent): void => {
-  if (event._tag === "OutputFolderChanged") {
-    $folder.set(event.path);
-
-    return;
-  }
-
-  if (event._tag === "SnapshotReplaced") {
-    applySnapshot(event.snapshot);
-
-    return;
-  }
-
-  void refresh();
-};
-
-const parseEvent = (data: unknown): JobEvent | null => {
-  if (typeof data !== "string") return null;
-
-  try {
-    return JSON.parse(data) as JobEvent;
-  } catch {
-    return null;
-  }
+  Match.value(event).pipe(
+    Match.tag("OutputFolderChanged", ({ path }) => $folder.set(path)),
+    Match.tag("SnapshotReplaced", ({ snapshot }) => applySnapshot(snapshot)),
+    Match.orElse(() => void refresh()),
+  );
 };
 
 const openSocket = (): void => {
@@ -101,9 +80,9 @@ const openSocket = (): void => {
 
   next.onmessage = (msg) => {
     if (ws !== next) return;
-    const event = parseEvent(msg.data);
+    const event = Schema.decodeUnknownEither(Schema.parseJson(JobEventSchema))(msg.data);
 
-    if (event) handleWsEvent(event);
+    if (Either.isRight(event)) handleWsEvent(event.right);
     else void refresh();
   };
 
@@ -144,7 +123,7 @@ export const getBaseUrl = (): string | null => baseUrl;
 
 export const saveFolder = async (path: string): Promise<void> => {
   if (!baseUrl) throw new Error("Engine not connected");
-  await setFolder(baseUrl, path);
+  await api.setFolder(baseUrl, path);
   $folder.set(path);
 };
 
@@ -153,7 +132,7 @@ export const saveSettingsCommand = async (
   secretKey: string,
 ): Promise<boolean> => {
   if (!baseUrl) throw new Error("Engine not connected");
-  const { valid } = await saveSettings(baseUrl, { publicKey, secretKey });
+  const { valid } = await api.saveSettings(baseUrl, { publicKey, secretKey });
   const cleared = publicKey === "" && secretKey === "";
   $settings.set({ publicKey, secretKey, valid: cleared ? null : valid });
 
@@ -162,19 +141,19 @@ export const saveSettingsCommand = async (
 
 export const removeJobById = async (id: string): Promise<void> => {
   if (!baseUrl) return;
-  await removeJob(baseUrl, id);
+  await api.removeJob(baseUrl, id);
 };
 
 export const retryJobById = async (id: string): Promise<void> => {
   if (!baseUrl) return;
-  await retryJob(baseUrl, id);
+  await api.retryJob(baseUrl, id);
 };
 
 export const commandClearFinished = async (): Promise<void> => {
   if (!baseUrl) return;
 
   try {
-    await clearFinished(baseUrl);
+    await api.clearFinished(baseUrl);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to clear finished jobs";
     showTransient("error", msg);
@@ -197,7 +176,7 @@ export const commandClearAll = async (): Promise<void> => {
   if (!confirmed) return;
 
   try {
-    await clearAll(baseUrl);
+    await api.clearAll(baseUrl);
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Failed to clear all jobs";
     showTransient("error", msg);
@@ -219,7 +198,7 @@ export const handlePastedText = async (text: string): Promise<void> => {
   }
 
   try {
-    const { jobs } = await enqueueText(baseUrl, text);
+    const { jobs } = await api.enqueueText(baseUrl, text);
     showFeedback(summarizeEnqueueFeedback(jobs));
   } catch {
     // transport errors surface via the disconnect banner
@@ -255,6 +234,9 @@ export const detachPasteHandler = (): void => {
 };
 
 export const __testing = {
+  setApi: (dependencies: typeof defaultApi): void => {
+    api = dependencies;
+  },
   setBaseUrl: (url: string | null): void => {
     baseUrl = url;
   },
@@ -266,6 +248,7 @@ export const __testing = {
       old.close();
     }
 
+    api = defaultApi;
     baseUrl = null;
     starting = null;
     detachPasteHandler();

@@ -7,6 +7,8 @@ export interface ConfigData {
 
 export class ConfigLoader extends Context.Tag("ConfigLoader")<ConfigLoader, ConfigData>() {}
 
+export const ConfigLoaderTag: Context.Tag<ConfigLoader, ConfigData> = ConfigLoader;
+
 export const DEFAULT_CONFIG: ConfigData = {
   scribd: { rendertime: 100 },
   directory: { output: "output", filename: "title" },
@@ -14,3 +16,5 @@ export const DEFAULT_CONFIG: ConfigData = {
 
 export const makeConfigLoader = (config: ConfigData): Layer.Layer<ConfigLoader, never, never> =>
   Layer.succeed(ConfigLoader, config);
+
+export const ConfigLoaderLive = makeConfigLoader(DEFAULT_CONFIG);

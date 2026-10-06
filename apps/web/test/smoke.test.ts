@@ -1,32 +1,21 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("@/engineClient", () => ({
-  startEngineClient: vi.fn(async () => {}),
-  attachPasteHandler: vi.fn(),
-  reconnect: vi.fn(),
-  saveFolder: vi.fn(),
-  removeJobById: vi.fn(),
-  retryJobById: vi.fn(),
-  commandClearFinished: vi.fn(),
-  commandClearAll: vi.fn(),
-}));
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { readFile } from "node:fs/promises";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 
 const { resetStores } = await import("@/store");
 
 describe("SPA smoke", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     resetStores();
-    document.body.innerHTML = `
-      <div class="terminal-banner terminal-header">
-        <strong>Scribd downloader</strong>
-        <div class="mount-header"></div>
-      </div>
-      <div class="mount-status-zone"></div>
-      <div class="terminal-content">
-        <div class="mount-queue"></div>
-      </div>
-      <div class="mount-modal"></div>
-    `;
+
+    const html = await readFile(
+      resolve(dirname(fileURLToPath(import.meta.url)), "../index.html"),
+      "utf8",
+    );
+
+    const scaffold = new DOMParser().parseFromString(html, "text/html");
+    document.body.replaceChildren(...Array.from(scaffold.body.childNodes));
   });
 
   afterEach(() => {

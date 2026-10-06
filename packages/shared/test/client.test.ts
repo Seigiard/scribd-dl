@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, test } from "bun:test";
+import { afterEach, beforeEach, describe, expect, spyOn, test } from "bun:test";
 import { clearAll, clearFinished } from "../src/client";
 
 interface FetchCall {
@@ -6,27 +6,30 @@ interface FetchCall {
   readonly init?: RequestInit;
 }
 
-const originalFetch = globalThis.fetch;
+let fetchMock = spyOn(globalThis, "fetch");
 
 let calls: FetchCall[] = [];
 
 const installFetch = (responder: (url: string) => { status: number; body: unknown }): void => {
   calls = [];
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = typeof input === "string" ? input : input instanceof URL ? input.toString() : (input as Request).url;
-    calls.push({ url, init });
+  fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+    const url = input instanceof Request ? input.url : String(input);
+
+    if (init) calls.push({ url, init });
+    else calls.push({ url });
     const { status, body } = responder(url);
 
     return new Response(JSON.stringify(body), { status });
-  }) as typeof fetch;
+  });
 };
 
 beforeEach(() => {
+  fetchMock = spyOn(globalThis, "fetch");
   calls = [];
 });
 
 afterEach(() => {
-  globalThis.fetch = originalFetch;
+  fetchMock.mockRestore();
 });
 
 const BASE = "http://engine.test";
@@ -47,7 +50,10 @@ describe("clearFinished", () => {
 
     // #then
     expect(total).toBe(5);
-    expect(calls.map((c) => c.url).sort()).toEqual([`${BASE}/jobs/completed`, `${BASE}/jobs/failed`]);
+    expect(calls.map((c) => c.url).sort()).toEqual([
+      `${BASE}/jobs/completed`,
+      `${BASE}/jobs/failed`,
+    ]);
     expect(calls.every((c) => c.init?.method === "DELETE")).toBe(true);
   });
 

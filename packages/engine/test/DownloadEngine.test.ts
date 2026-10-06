@@ -1,20 +1,37 @@
-import { beforeEach, describe, expect, mock, test } from "bun:test";
-import { Cause, Chunk, Effect, Exit, Layer, Stream } from "effect";
+import { beforeEach, describe, expect, mock, test, type Mock } from "bun:test";
+import {
+  Cause,
+  Chunk,
+  Deferred,
+  Effect,
+  Exit,
+  Layer,
+  Option,
+  Predicate,
+  Schema,
+  Stream,
+} from "effect";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
+import ILovePDFFile from "@ilovepdf/ilovepdf-nodejs/ILovePDFFile";
 import type { EngineSnapshot, Job, JobEvent } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService, type Settings } from "../src/service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive } from "../src/service/DownloadEngine";
 import { JobStore, type JobStoreService } from "../src/service/JobStore";
-import { PdfCompressor, type PdfCompressorService } from "../src/service/PdfCompressor";
-import { Scrapers, type Scraper } from "../src/service/Scraper";
+import {
+  makePdfCompressor,
+  PdfCompressor,
+  type PdfCompressorService,
+} from "../src/service/PdfCompressor";
+import { Scrapers, ScraperEvent, type OnEvent, type Scraper } from "../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
 import { PdfGenerator, type PdfGeneratorService } from "../src/utils/io/PdfGenerator";
 import {
   CompressionFailed,
   PageLoadFailed,
   PdfMetadataFailed,
+  PersistenceFailed,
   UnsupportedUrl,
 } from "../src/errors/DomainErrors";
 
@@ -26,12 +43,12 @@ const emptySettings: Settings = {
 };
 
 interface MockState {
-  scribdExecute: ReturnType<typeof mock>;
-  jobStoreWrite: ReturnType<typeof mock>;
-  configStoreWrite: ReturnType<typeof mock>;
-  compressCompress: ReturnType<typeof mock>;
-  compressValidate: ReturnType<typeof mock>;
-  pdfSetTitle: ReturnType<typeof mock>;
+  scribdExecute: Mock<Scraper["execute"]>;
+  jobStoreWrite: Mock<JobStoreService["write"]>;
+  configStoreWrite: Mock<ConfigStoreService["write"]>;
+  compressCompress: Mock<PdfCompressorService["compress"]>;
+  compressValidate: Mock<PdfCompressorService["validate"]>;
+  pdfSetTitle: Mock<PdfGeneratorService["setTitle"]>;
   restoredJobs: ReadonlyArray<Job>;
   initialSettings: Settings;
 }
@@ -66,6 +83,7 @@ const defaultConfig: ConfigData = {
 const buildLayer = (
   config: ConfigData = defaultConfig,
   extraScrapers: ReadonlyArray<Scraper> = [],
+  compressorLayer: Layer.Layer<PdfCompressor> | undefined = undefined,
 ) => {
   const scribdScraper: Scraper = {
     id: "scribd",
@@ -80,31 +98,27 @@ const buildLayer = (
 
       return "Scribd document";
     },
-    execute: (url, folder, onEvent, debug) =>
-      state.scribdExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+    execute: (url, folder, onEvent, debug) => state.scribdExecute(url, folder, onEvent, debug),
   };
 
   const configStoreSvc: ConfigStoreService = {
     read: Effect.sync(() => state.initialSettings),
-    write: (s) => state.configStoreWrite(s) as Effect.Effect<void, never, never>,
+    write: (s) => state.configStoreWrite(s),
   };
 
   const jobStoreSvc: JobStoreService = {
     read: Effect.sync(() => state.restoredJobs),
-    write: (jobs) => state.jobStoreWrite(jobs) as Effect.Effect<void, never, never>,
+    write: (jobs) => state.jobStoreWrite(jobs),
   };
 
   const pdfCompressorSvc: PdfCompressorService = {
-    compress: (pdfPath, keys) =>
-      state.compressCompress(pdfPath, keys) as ReturnType<PdfCompressorService["compress"]>,
-    validate: (keys) =>
-      state.compressValidate(keys) as ReturnType<PdfCompressorService["validate"]>,
+    compress: (pdfPath, keys) => state.compressCompress(pdfPath, keys),
+    validate: (keys) => state.compressValidate(keys),
   };
 
   const pdfGeneratorSvc: PdfGeneratorService = {
     merge: () => Effect.void,
-    setTitle: (pdfPath, title) =>
-      state.pdfSetTitle(pdfPath, title) as ReturnType<PdfGeneratorService["setTitle"]>,
+    setTitle: (pdfPath, title) => state.pdfSetTitle(pdfPath, title),
   };
 
   return Layer.provide(
@@ -114,19 +128,18 @@ const buildLayer = (
       Layer.succeed(ConfigLoader, config),
       Layer.succeed(ConfigStore, configStoreSvc),
       Layer.succeed(JobStore, jobStoreSvc),
-      Layer.succeed(PdfCompressor, pdfCompressorSvc),
+      compressorLayer ?? Layer.succeed(PdfCompressor, pdfCompressorSvc),
       Layer.succeed(PdfGenerator, pdfGeneratorSvc),
     ),
   );
 };
 
-const makeCustomScraper = (customExecute: ReturnType<typeof mock>): Scraper => ({
+const makeCustomScraper = (customExecute: Mock<Scraper["execute"]>): Scraper => ({
   // @ts-expect-error custom id outside current JobDomain union for test purposes
   id: "custom",
   canHandle: (url) => url.includes("example.com"),
   deriveDisplayTitle: (url) => `Custom ${url}`,
-  execute: (url, folder, onEvent, debug) =>
-    customExecute(url, folder, onEvent, debug) as ReturnType<Scraper["execute"]>,
+  execute: (url, folder, onEvent, debug) => customExecute(url, folder, onEvent, debug),
 });
 
 const runScoped = <A, E>(program: Effect.Effect<A, E, DownloadEngine>) =>
@@ -155,8 +168,8 @@ const firstFailureTag = (exit: Exit.Exit<unknown, unknown>): string | undefined 
   if (Exit.isFailure(exit)) {
     const failure = Cause.failureOption(exit.cause);
 
-    if (failure._tag === "Some") {
-      return (failure.value as { _tag: string })._tag;
+    if (Option.isSome(failure)) {
+      return Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.String }))(failure.value)._tag;
     }
   }
 
@@ -502,7 +515,7 @@ describe("DownloadEngine", () => {
       const exit = await runScopedExit(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          yield* engine.remove("nonexistent" as Job["id"]);
+          yield* engine.remove("nonexistent");
         }),
       );
 
@@ -592,28 +605,28 @@ describe("DownloadEngine", () => {
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
         {
-          id: "a" as Job["id"],
+          id: "a",
           url: "https://www.scribd.com/document/1/x",
           domain: "scribd",
           displayTitle: "1",
           status: "Queued",
         },
         {
-          id: "b" as Job["id"],
+          id: "b",
           url: "https://www.scribd.com/document/2/y",
           domain: "scribd",
           displayTitle: "2",
           status: "Downloaded",
         },
         {
-          id: "c" as Job["id"],
+          id: "c",
           url: "https://www.scribd.com/document/3/z",
           domain: "scribd",
           displayTitle: "3",
           status: "Downloaded",
         },
         {
-          id: "d" as Job["id"],
+          id: "d",
           url: "https://www.scribd.com/document/4/w",
           domain: "scribd",
           displayTitle: "4",
@@ -647,21 +660,21 @@ describe("DownloadEngine", () => {
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
         {
-          id: "a" as Job["id"],
+          id: "a",
           url: "https://www.scribd.com/document/1/x",
           domain: "scribd",
           displayTitle: "1",
           status: "Queued",
         },
         {
-          id: "b" as Job["id"],
+          id: "b",
           url: "https://www.scribd.com/document/2/y",
           domain: "scribd",
           displayTitle: "2",
           status: "Downloaded",
         },
         {
-          id: "c" as Job["id"],
+          id: "c",
           url: "https://www.scribd.com/document/3/z",
           domain: "scribd",
           displayTitle: "3",
@@ -691,14 +704,14 @@ describe("DownloadEngine", () => {
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
         {
-          id: "a" as Job["id"],
+          id: "a",
           url: "https://www.scribd.com/document/1/x",
           domain: "scribd",
           displayTitle: "1",
           status: "Downloaded",
         },
         {
-          id: "b" as Job["id"],
+          id: "b",
           url: "https://www.scribd.com/document/2/y",
           domain: "scribd",
           displayTitle: "2",
@@ -774,21 +787,21 @@ describe("DownloadEngine", () => {
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
         {
-          id: "a" as Job["id"],
+          id: "a",
           url: "https://www.scribd.com/document/1/x",
           domain: "scribd",
           displayTitle: "1",
           status: "Queued",
         },
         {
-          id: "b" as Job["id"],
+          id: "b",
           url: "https://www.scribd.com/document/2/y",
           domain: "scribd",
           displayTitle: "2",
           status: "Downloaded",
         },
         {
-          id: "c" as Job["id"],
+          id: "c",
           url: "https://www.scribd.com/document/3/z",
           domain: "scribd",
           displayTitle: "3",
@@ -815,7 +828,24 @@ describe("DownloadEngine", () => {
 
     test("clearAll interrupts active Downloading and prevents Failed status from being written", async () => {
       // #given — execute hangs until interrupted
-      state.scribdExecute = mock(() => Effect.never);
+      const started = Effect.runSync(Deferred.make<void>());
+      let interrupted = false;
+      state.scribdExecute = mock((url) =>
+        url.includes("/1/")
+          ? Deferred.succeed(started, undefined).pipe(
+              Effect.zipRight(Effect.never),
+              Effect.onInterrupt(() =>
+                Effect.sleep("5 millis").pipe(
+                  Effect.zipRight(
+                    Effect.sync(() => {
+                      interrupted = true;
+                    }),
+                  ),
+                ),
+              ),
+            )
+          : Effect.void,
+      );
 
       // #when
       const result = await runScoped(
@@ -823,18 +853,17 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
           yield* engine.enqueue("https://www.scribd.com/document/1/active");
 
-          // wait until worker has picked up and started downloading
-          for (let i = 0; i < 200; i++) {
-            const snap = yield* engine.snapshot;
-
-            if (snap.jobs.some((j) => j.status === "Downloading")) break;
-            yield* Effect.sleep("5 millis");
-          }
+          yield* Deferred.await(started).pipe(Effect.timeout("1 second"));
 
           const removed = yield* engine.clearAll;
-          // give worker time to settle if anything else fires
-          yield* Effect.sleep("50 millis");
+          // #then — cancellation must finish before clearAll returns, not at scope cleanup.
+          expect(interrupted).toBe(true);
           const snap = yield* engine.snapshot;
+          yield* engine.enqueue("https://www.scribd.com/document/2/next");
+          const next = yield* waitForQuiet(engine);
+          expect(next.jobs.map((job) => ({ url: job.url, status: job.status }))).toEqual([
+            { url: "https://www.scribd.com/document/2/next", status: "Downloaded" },
+          ]);
 
           return { removed, snap };
         }),
@@ -843,6 +872,124 @@ describe("DownloadEngine", () => {
       // #then — job removed, no zombie Failed status written
       expect(result.removed).toBe(1);
       expect(result.snap.jobs).toHaveLength(0);
+    });
+
+    test("clearAll cancels hanging compression before returning and the next download completes", async () => {
+      // #given
+      const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "engine-clear-compression-"));
+      const started = Effect.runSync(Deferred.make<void>());
+      let interrupted = false;
+      state.initialSettings = {
+        outputFolder: tmp,
+        ilovepdfPublicKey: "public",
+        ilovepdfSecretKey: "secret",
+        ilovepdfKeysValid: true,
+      };
+      state.compressCompress = mock(() =>
+        Deferred.succeed(started, undefined).pipe(
+          Effect.zipRight(Effect.never),
+          Effect.onInterrupt(() =>
+            Effect.sleep("5 millis").pipe(
+              Effect.zipRight(
+                Effect.sync(() => {
+                  interrupted = true;
+                }),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      try {
+        await fs.writeFile(path.join(tmp, "Scribd document 1.pdf"), "fake-pdf");
+        // #when
+        await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            yield* engine.enqueue("https://www.scribd.com/document/1/active");
+            yield* Deferred.await(started).pipe(Effect.timeout("1 second"));
+            const removed = yield* engine.clearAll;
+
+            // #then — inspect while the engine scope is still open.
+            expect(interrupted).toBe(true);
+            expect(removed).toBe(1);
+            expect((yield* engine.snapshot).jobs).toEqual([]);
+            expect(state.pdfSetTitle).not.toHaveBeenCalled();
+            yield* engine.enqueue("https://www.scribd.com/document/2/next");
+            const next = yield* waitForQuiet(engine);
+            expect(next.jobs.map((job) => ({ url: job.url, status: job.status }))).toEqual([
+              { url: "https://www.scribd.com/document/2/next", status: "Downloaded" },
+            ]);
+          }),
+        );
+      } finally {
+        await fs.rm(tmp, { recursive: true, force: true });
+      }
+    });
+
+    test("clearAll with a real compressor prevents a late download overwriting the next job at the same path", async () => {
+      // #given
+      const tmp = await fs.mkdtemp(path.join(os.tmpdir(), "engine-real-compressor-"));
+      const target = path.join(tmp, "Scribd document 1.pdf");
+      await fs.writeFile(target, "%PDF-original");
+      state.initialSettings = {
+        outputFolder: tmp,
+        ilovepdfPublicKey: "public",
+        ilovepdfSecretKey: "secret",
+        ilovepdfKeysValid: true,
+      };
+      const entered = Promise.withResolvers<void>();
+      const response = Promise.withResolvers<Uint8Array>();
+      let tasks = 0;
+
+      const compressor = makePdfCompressor(
+        () => ({
+          newTask: () => {
+            const first = tasks++ === 0;
+
+            return {
+              start: async () => {},
+              addFile: async () => {},
+              process: async () => {},
+              download: async () => {
+                if (first) {
+                  entered.resolve();
+
+                  return await response.promise;
+                }
+
+                return new TextEncoder().encode("%PDF-new-job");
+              },
+            };
+          },
+        }),
+        (absolutePath) => new ILovePDFFile(absolutePath),
+      );
+
+      try {
+        // #when
+        await Effect.runPromise(
+          Effect.scoped(
+            Effect.gen(function* () {
+              const engine = yield* DownloadEngine;
+              yield* engine.enqueue("https://www.scribd.com/document/1/same");
+              yield* Effect.promise(() => entered.promise);
+              yield* engine.clearAll;
+              yield* engine.enqueue("https://www.scribd.com/document/1/same");
+              const next = yield* waitForQuiet(engine);
+              expect(next.jobs.map((job) => job.status)).toEqual(["Downloaded"]);
+              response.resolve(new TextEncoder().encode("%PDF-old-job"));
+              yield* Effect.sleep("50 millis");
+
+              // #then
+              expect(yield* Effect.promise(() => fs.readFile(target, "utf8"))).toBe("%PDF-new-job");
+            }).pipe(Effect.provide(buildLayer(defaultConfig, [], compressor))),
+          ),
+        );
+      } finally {
+        response.resolve(new TextEncoder().encode("%PDF-old-job"));
+        await fs.rm(tmp, { recursive: true, force: true });
+      }
     });
 
     test("clearAll followed by enqueue keeps the worker functional", async () => {
@@ -937,7 +1084,7 @@ describe("DownloadEngine", () => {
       const exit = await runScopedExit(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          yield* engine.retry("nonexistent" as Job["id"]);
+          yield* engine.retry("nonexistent");
         }),
       );
 
@@ -1215,15 +1362,10 @@ describe("DownloadEngine", () => {
   describe("downloader events: title + progress", () => {
     test("TitleResolved → JobTitleUpdated published + displayTitle updated", async () => {
       // #given
-      state.scribdExecute = mock(
-        (
-          _url: string,
-          _folder: string,
-          onEvent: (e: { _tag: string; title?: string }) => Effect.Effect<void, never, never>,
-        ) =>
-          Effect.gen(function* () {
-            yield* onEvent({ _tag: "TitleResolved", title: "Into the Odd" });
-          }),
+      state.scribdExecute = mock((_url: string, _folder: string, onEvent: OnEvent) =>
+        Effect.gen(function* () {
+          yield* onEvent(ScraperEvent.TitleResolved({ title: "Into the Odd" }));
+        }),
       );
 
       // #when
@@ -1232,7 +1374,9 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
 
           const tagsFork = yield* engine.events.pipe(
-            Stream.filter((e) => e._tag === "JobTitleUpdated"),
+            Stream.filter((e): e is Extract<JobEvent, { _tag: "JobTitleUpdated" }> =>
+              Predicate.isTagged(e, "JobTitleUpdated"),
+            ),
             Stream.take(1),
             Stream.runCollect,
             Effect.fork,
@@ -1249,27 +1393,18 @@ describe("DownloadEngine", () => {
 
       // #then
       expect(result.events).toHaveLength(1);
-      expect((result.events[0]! as { title: string }).title).toBe("Into the Odd");
+      expect(result.events[0]!.title).toBe("Into the Odd");
       expect(result.snap.jobs[0]!.displayTitle).toBe("Into the Odd");
     });
 
     test("ScrapeProgress + RenderProgress → JobProgress published; progress cleared on Downloaded", async () => {
       // #given
-      state.scribdExecute = mock(
-        (
-          _url: string,
-          _folder: string,
-          onEvent: (e: {
-            _tag: string;
-            done?: number;
-            total?: number;
-          }) => Effect.Effect<void, never, never>,
-        ) =>
-          Effect.gen(function* () {
-            yield* onEvent({ _tag: "ScrapeProgress", done: 10, total: 10 });
-            yield* onEvent({ _tag: "RenderProgress", done: 1, total: 3 });
-            yield* onEvent({ _tag: "RenderProgress", done: 3, total: 3 });
-          }),
+      state.scribdExecute = mock((_url: string, _folder: string, onEvent: OnEvent) =>
+        Effect.gen(function* () {
+          yield* onEvent(ScraperEvent.ScrapeProgress({ done: 10, total: 10 }));
+          yield* onEvent(ScraperEvent.RenderProgress({ done: 1, total: 3 }));
+          yield* onEvent(ScraperEvent.RenderProgress({ done: 3, total: 3 }));
+        }),
       );
 
       // #when
@@ -1278,7 +1413,9 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
 
           const progFork = yield* engine.events.pipe(
-            Stream.filter((e) => e._tag === "JobProgress"),
+            Stream.filter((e): e is Extract<JobEvent, { _tag: "JobProgress" }> =>
+              Predicate.isTagged(e, "JobProgress"),
+            ),
             Stream.take(3),
             Stream.runCollect,
             Effect.fork,
@@ -1295,29 +1432,20 @@ describe("DownloadEngine", () => {
 
       // #then
       expect(result.events).toHaveLength(3);
-      expect((result.events[0]! as { stage: string }).stage).toBe("scrape");
-      expect((result.events[2]! as { stage: string; done: number }).stage).toBe("render");
+      expect(result.events[0]!.stage).toBe("scrape");
+      expect(result.events[2]!.stage).toBe("render");
       expect(result.snap.jobs[0]!.status).toBe("Downloaded");
       expect(result.snap.jobs[0]!.progress).toBeUndefined();
     });
 
     test("progress cleared when job Fails", async () => {
       // #given
-      state.scribdExecute = mock(
-        (
-          url: string,
-          _folder: string,
-          onEvent: (e: {
-            _tag: string;
-            done?: number;
-            total?: number;
-          }) => Effect.Effect<void, never, never>,
-        ) =>
-          Effect.gen(function* () {
-            yield* onEvent({ _tag: "RenderProgress", done: 2, total: 5 });
+      state.scribdExecute = mock((url: string, _folder: string, onEvent: OnEvent) =>
+        Effect.gen(function* () {
+          yield* onEvent(ScraperEvent.RenderProgress({ done: 2, total: 5 }));
 
-            return yield* Effect.fail(new PageLoadFailed({ url, cause: "boom" }));
-          }),
+          return yield* Effect.fail(new PageLoadFailed({ url, cause: "boom" }));
+        }),
       );
 
       // #when
@@ -1348,7 +1476,9 @@ describe("DownloadEngine", () => {
           const initial = yield* engine.outputFolder;
 
           const evtFork = yield* engine.events.pipe(
-            Stream.filter((e) => e._tag === "OutputFolderChanged"),
+            Stream.filter((e): e is Extract<JobEvent, { _tag: "OutputFolderChanged" }> =>
+              Predicate.isTagged(e, "OutputFolderChanged"),
+            ),
             Stream.take(1),
             Stream.runCollect,
             Effect.fork,
@@ -1366,7 +1496,7 @@ describe("DownloadEngine", () => {
       // #then
       expect(result.initial).toBe("/tmp/out");
       expect(result.after).toBe("/tmp/new");
-      expect((result.events[0]! as { path: string }).path).toBe("/tmp/new");
+      expect(result.events[0]!.path).toBe("/tmp/new");
     });
 
     test("worker passes current folder to execute (read at take time)", async () => {
@@ -1396,7 +1526,11 @@ describe("DownloadEngine", () => {
       // #given
       const folders: string[] = [];
       let firstStarted = false;
-      const release: { resolve?: () => void } = {};
+
+      let release: () => void = () => {
+        throw new Error("first job has not started");
+      };
+
       state.scribdExecute = mock((url: string, folder: string) =>
         Effect.gen(function* () {
           folders.push(folder);
@@ -1404,7 +1538,7 @@ describe("DownloadEngine", () => {
           if (url.includes("/1/")) {
             firstStarted = true;
             yield* Effect.async<void>((cb) => {
-              release.resolve = () => cb(Effect.void);
+              release = () => cb(Effect.void);
             });
           }
         }),
@@ -1421,7 +1555,7 @@ describe("DownloadEngine", () => {
           // wait until first job is in-flight
           for (let i = 0; i < 100 && !firstStarted; i++) yield* Effect.sleep("5 millis");
           yield* engine.setOutputFolder("/tmp/new");
-          yield* Effect.sync(() => release.resolve?.());
+          yield* Effect.sync(() => release());
           yield* waitForQuiet(engine);
         }),
       );
@@ -1476,21 +1610,21 @@ describe("DownloadEngine", () => {
       state.scribdExecute = mock(() => Effect.never);
       state.restoredJobs = [
         {
-          id: "a" as Job["id"],
+          id: "a",
           url: "https://www.scribd.com/document/1/x",
           domain: "scribd",
           displayTitle: "doc 1",
           status: "Queued",
         },
         {
-          id: "b" as Job["id"],
+          id: "b",
           url: "https://www.scribd.com/document/2/y",
           domain: "scribd",
           displayTitle: "doc 2",
           status: "Downloaded",
         },
         {
-          id: "c" as Job["id"],
+          id: "c",
           url: "https://www.scribd.com/document/3/z",
           domain: "scribd",
           displayTitle: "doc 3",
@@ -1545,14 +1679,14 @@ describe("DownloadEngine", () => {
       );
       state.restoredJobs = [
         {
-          id: "a" as Job["id"],
+          id: "a",
           url: "https://www.scribd.com/document/1/x",
           domain: "scribd",
           displayTitle: "doc 1",
           status: "Queued",
         },
         {
-          id: "b" as Job["id"],
+          id: "b",
           url: "https://www.scribd.com/document/2/y",
           domain: "scribd",
           displayTitle: "doc 2",
@@ -1633,47 +1767,50 @@ describe("DownloadEngine", () => {
 
     test("JobTitleUpdated triggers JobStore.write but JobProgress does not", async () => {
       // #given
-      state.scribdExecute = mock(
-        (
-          _url: string,
-          _folder: string,
-          onEvent: (e: {
-            _tag: string;
-            title?: string;
-            done?: number;
-            total?: number;
-          }) => Effect.Effect<void, never, never>,
-        ) =>
-          Effect.gen(function* () {
-            yield* onEvent({ _tag: "TitleResolved", title: "Real Title" });
-            yield* onEvent({ _tag: "ScrapeProgress", done: 5, total: 10 });
-            yield* onEvent({ _tag: "RenderProgress", done: 1, total: 3 });
-          }),
-      );
-
-      // #when
-      let titleWrites = 0;
-      await runScoped(
+      const allowTitle = Effect.runSync(Deferred.make<void>());
+      const titleHandled = Effect.runSync(Deferred.make<void>());
+      const allowProgress = Effect.runSync(Deferred.make<void>());
+      const progressHandled = Effect.runSync(Deferred.make<void>());
+      const finish = Effect.runSync(Deferred.make<void>());
+      state.scribdExecute = mock((_url: string, _folder: string, onEvent: OnEvent) =>
         Effect.gen(function* () {
-          const engine = yield* DownloadEngine;
-          yield* engine.enqueue("https://www.scribd.com/document/1/a");
-          yield* waitForQuiet(engine);
+          yield* Deferred.await(allowTitle);
+          yield* onEvent(ScraperEvent.TitleResolved({ title: "Real Title" }));
+          yield* Deferred.succeed(titleHandled, undefined);
+          yield* Deferred.await(allowProgress);
+          yield* onEvent(ScraperEvent.ScrapeProgress({ done: 5, total: 10 }));
+          yield* onEvent(ScraperEvent.RenderProgress({ done: 1, total: 3 }));
+          yield* Deferred.succeed(progressHandled, undefined);
+          yield* Deferred.await(finish);
         }),
       );
 
-      // count writes whose snapshot contains the resolved title
-      for (const call of state.jobStoreWrite.mock.calls) {
-        const jobs = call[0] as ReadonlyArray<Job>;
+      // #when
+      await runScoped(
+        Effect.gen(function* () {
+          const engine = yield* DownloadEngine;
+          const [job] = yield* engine.enqueue("https://www.scribd.com/document/1/a");
+          yield* Deferred.succeed(allowTitle, undefined);
+          yield* Deferred.await(titleHandled).pipe(Effect.timeout("1 second"));
 
-        if (jobs.some((j) => j.displayTitle === "Real Title")) titleWrites += 1;
-      }
-
-      // #then — title update must have produced at least one write with the new title
-      expect(titleWrites).toBeGreaterThan(0);
-      // and total writes must NOT include the two progress events (transient, not persisted)
-      // enqueue (1) + Queued→Downloading (1) + title (1) + Downloading→Downloaded (1) = 4 writes
-      // progress events would push us to 6 if persisted; verify upper bound
-      expect(state.jobStoreWrite.mock.calls.length).toBeLessThanOrEqual(5);
+          // #then — completion cannot supply the title persistence being checked.
+          expect(state.jobStoreWrite.mock.calls.at(-1)?.[0]).toEqual([
+            { ...job!, displayTitle: "Real Title", status: "Downloading" },
+          ]);
+          expect((yield* engine.snapshot).jobs[0]?.status).toBe("Downloading");
+          const writesBeforeProgress = state.jobStoreWrite.mock.calls.length;
+          yield* Deferred.succeed(allowProgress, undefined);
+          yield* Deferred.await(progressHandled).pipe(Effect.timeout("1 second"));
+          expect((yield* engine.snapshot).jobs[0]?.progress).toEqual({
+            done: 1,
+            total: 3,
+            stage: "render",
+          });
+          expect(state.jobStoreWrite.mock.calls.length - writesBeforeProgress).toBe(0);
+          yield* Deferred.succeed(finish, undefined);
+          yield* waitForQuiet(engine);
+        }),
+      );
     });
 
     test("setOutputFolder triggers ConfigStore.write with the expanded path", async () => {
@@ -1702,7 +1839,7 @@ describe("DownloadEngine", () => {
       // #given — JobStore.write always fails
       state.scribdExecute = mock(() => Effect.void);
       state.jobStoreWrite = mock(() =>
-        Effect.fail({ _tag: "PersistenceFailed", path: "/x", op: "write", cause: "disk full" }),
+        Effect.fail(new PersistenceFailed({ path: "/x", op: "write", cause: "disk full" })),
       );
 
       // #when
@@ -1802,7 +1939,7 @@ describe("DownloadEngine", () => {
       );
 
       // #then
-      expect(created[0]!.domain).toBe("custom" as never);
+      expect<string>(created[0]!.domain).toBe("custom");
       expect(created[0]!.status).toBe("Queued");
     });
 
@@ -2054,6 +2191,85 @@ describe("DownloadEngine", () => {
       });
     });
 
+    test.each([
+      { publicKey: "new-public", secretKey: "new-secret" },
+      { publicKey: "new-public", secretKey: "sec" },
+      { publicKey: "pub", secretKey: "new-secret" },
+    ])(
+      "old compression credentials cannot invalidate a newly validated pair %j",
+      async (newKeys) => {
+        await withTmp(async (tmp) => {
+          // #given — the first request remains pending while settings change.
+          state.initialSettings = validKeysSettings(tmp);
+          await fs.writeFile(path.join(tmp, "Scribd document 1.pdf"), "fake-pdf");
+          await fs.writeFile(path.join(tmp, "Scribd document 2.pdf"), "fake-pdf");
+          const started = Effect.runSync(Deferred.make<void>());
+          const release = Effect.runSync(Deferred.make<void>());
+          state.compressCompress = mock<PdfCompressorService["compress"]>(
+            () => Effect.void,
+          ).mockImplementationOnce((pdfPath) =>
+            Effect.gen(function* () {
+              yield* Deferred.succeed(started, undefined);
+              yield* Deferred.await(release);
+
+              return yield* Effect.fail(
+                new CompressionFailed({
+                  path: pdfPath,
+                  reason: "invalid credentials",
+                  cause: new Error("old credentials rejected"),
+                }),
+              );
+            }),
+          );
+
+          // #when
+          await runScoped(
+            Effect.gen(function* () {
+              const engine = yield* DownloadEngine;
+              const [first] = yield* engine.enqueue("https://www.scribd.com/document/1/a");
+              yield* Deferred.await(started).pipe(Effect.timeout("1 second"));
+              expect(state.compressCompress.mock.calls).toEqual([
+                [path.join(tmp, "Scribd document 1.pdf"), { publicKey: "pub", secretKey: "sec" }],
+              ]);
+              expect(yield* engine.setSettings(newKeys)).toBe(true);
+              yield* Deferred.succeed(release, undefined);
+              const firstDone = yield* waitForQuiet(engine);
+
+              // #then — validity belongs to the tested pair, not the previous request.
+              expect(yield* engine.settings).toEqual({ ...newKeys, valid: true });
+              expect(state.configStoreWrite.mock.calls).toEqual([
+                [
+                  {
+                    outputFolder: tmp,
+                    ilovepdfPublicKey: newKeys.publicKey,
+                    ilovepdfSecretKey: newKeys.secretKey,
+                    ilovepdfKeysValid: true,
+                  },
+                ],
+              ]);
+              expect(firstDone.jobs).toEqual([
+                {
+                  ...first!,
+                  status: "Downloaded",
+                  compression: { status: "failed", reason: "invalid credentials" },
+                },
+              ]);
+              const [second] = yield* engine.enqueue("https://www.scribd.com/document/2/b");
+              const secondDone = yield* waitForQuiet(engine);
+              expect(secondDone.jobs.find((job) => job.id === second!.id)).toEqual({
+                ...second!,
+                status: "Downloaded",
+              });
+              expect(state.compressCompress.mock.calls).toEqual([
+                [path.join(tmp, "Scribd document 1.pdf"), { publicKey: "pub", secretKey: "sec" }],
+                [path.join(tmp, "Scribd document 2.pdf"), newKeys],
+              ]);
+            }),
+          );
+        });
+      },
+    );
+
     test("runtime 'invalid credentials' flips persisted validity; next download skips compression", async () => {
       await withTmp(async (tmp) => {
         // #given
@@ -2078,7 +2294,31 @@ describe("DownloadEngine", () => {
           Effect.gen(function* () {
             const engine = yield* DownloadEngine;
             yield* engine.enqueue("https://www.scribd.com/document/1/a");
-            yield* waitForQuiet(engine);
+            const firstDone = yield* waitForQuiet(engine);
+            // #then — unchanged credentials still invalidate and persist before the next job.
+            expect(yield* engine.settings).toEqual({
+              publicKey: "pub",
+              secretKey: "sec",
+              valid: false,
+            });
+            expect(state.configStoreWrite.mock.calls).toEqual([
+              [
+                {
+                  outputFolder: tmp,
+                  ilovepdfPublicKey: "pub",
+                  ilovepdfSecretKey: "sec",
+                  ilovepdfKeysValid: false,
+                },
+              ],
+            ]);
+            expect(
+              firstDone.jobs.map((job) => ({ status: job.status, compression: job.compression })),
+            ).toEqual([
+              {
+                status: "Downloaded",
+                compression: { status: "failed", reason: "invalid credentials" },
+              },
+            ]);
             yield* engine.enqueue("https://www.scribd.com/document/2/b");
 
             return yield* waitForQuiet(engine);
@@ -2094,6 +2334,7 @@ describe("DownloadEngine", () => {
           ilovepdfKeysValid: false,
         });
         const second = snap.jobs.find((j) => j.url.includes("/document/2/"))!;
+        expect(second.status).toBe("Downloaded");
         expect(second.compression).toBeUndefined();
       });
     });

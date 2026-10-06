@@ -76,6 +76,9 @@
     "packages/shared": {
       "name": "@scribd-dl/shared",
       "version": "0.0.2",
+      "dependencies": {
+        "effect": "^3.21.3",
+      },
     },
   },
   "packages": {

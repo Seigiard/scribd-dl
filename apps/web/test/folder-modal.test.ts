@@ -1,11 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { render } from "uhtml";
+import type { TauriInvoke } from "@/lib/backendUrl";
 
 const saveFolderMock = vi.fn(async (_path: string) => {});
-
-vi.mock("@/engineClient", () => ({
-  saveFolder: saveFolderMock,
-}));
 
 const { folderModal, $modalError, $draftFolder } = await import("@/views/folder-modal");
 
@@ -21,7 +18,7 @@ type ModalProps = {
 const mountModal = (props: ModalProps): HTMLElement => {
   const container = document.createElement("div");
   document.body.appendChild(container);
-  render(container, folderModal({ draft: "", ...props }));
+  render(container, folderModal({ draft: "", ...props }, saveFolderMock));
 
   return container;
 };
@@ -224,22 +221,19 @@ describe("folderModal()", () => {
   });
 
   describe("native Browse button (Tauri runtime)", () => {
-    const invokeMock = vi.fn<(cmd: string, args?: Record<string, unknown>) => Promise<unknown>>();
+    const invokeMock = vi.fn<TauriInvoke>();
 
     beforeEach(() => {
       invokeMock.mockReset();
-      // @ts-expect-error — installing the Tauri global for the duration of these tests
       window.__TAURI__ = { core: { invoke: invokeMock } };
     });
 
     afterEach(() => {
-      // @ts-expect-error — clean up the global between scopes
       delete window.__TAURI__;
     });
 
     it("does not render Browse button without __TAURI__", () => {
       // #given — clear the Tauri global installed by this describe's beforeEach
-      // @ts-expect-error
       delete window.__TAURI__;
 
       // #when

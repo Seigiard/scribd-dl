@@ -1,4 +1,4 @@
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Schema } from "effect";
 import * as scribdRegex from "../../const/ScribdRegex";
 
 const FETCH_TIMEOUT_MS = 5000;
@@ -13,6 +13,8 @@ export class TitleResolver extends Context.Tag("TitleResolver")<
   TitleResolver,
   TitleResolverService
 >() {}
+
+export const TitleResolverTag: Context.Tag<TitleResolver, TitleResolverService> = TitleResolver;
 
 const decodeEntities = (s: string): string =>
   s
@@ -32,9 +34,14 @@ export const slugFromUrl = (url: string): string | null => {
   const slugMatch = /^\/([^/?#]+)/.exec(rest);
 
   if (!slugMatch) return null;
-  const decoded = decodeURIComponent(slugMatch[1]!).replace(/-/g, " ").trim();
 
-  return decoded === "" ? null : decoded;
+  try {
+    const decoded = decodeURIComponent(slugMatch[1]!).replace(/-/g, " ").trim();
+
+    return decoded === "" ? null : decoded;
+  } catch {
+    return null;
+  }
 };
 
 export interface Fetcher {
@@ -104,9 +111,9 @@ const liveFetcher: Fetcher = {
           throw new Error(`HTTP ${response.status}`);
         }
 
-        const title = ((await response.json()) as { readonly title?: unknown }).title;
-
-        if (typeof title !== "string") throw new Error("oEmbed response has no title");
+        const { title } = Schema.decodeUnknownSync(Schema.Struct({ title: Schema.String }))(
+          await response.json(),
+        );
 
         return title;
       },
