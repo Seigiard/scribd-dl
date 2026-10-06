@@ -34,10 +34,7 @@ await $`bun build ${ENTRY} --target=bun --format=esm --outfile=${BUNDLE} --exter
 
 const original = readFileSync(BUNDLE, "utf8");
 
-const patched = original.replace(
-  /^\s*import\s+\w+\s+from\s+["']react-devtools-core["'];?\s*$/gm,
-  "",
-);
+const patched = original.replace(/^\s*import\s+\w+\s+from\s+["']react-devtools-core["'];?\s*$/gm, "");
 
 if (patched === original) {
   console.error("[build-tui] expected to strip a react-devtools-core import but none was found");

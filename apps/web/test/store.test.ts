@@ -1,13 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { EngineSnapshot, Job, JobId } from "@scribd-dl/shared";
-import {
-  $jobs,
-  $transient,
-  applySnapshot,
-  dismissSticky,
-  resetStores,
-  showTransient,
-} from "@/store";
+import { $jobs, $transient, applySnapshot, dismissSticky, resetStores, showTransient } from "@/store";
 
 const job = (overrides: Partial<Job> & { id: JobId }): Job => ({
   ...overrides,

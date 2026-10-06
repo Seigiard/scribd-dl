@@ -1,30 +1,6 @@
-import {
-  Cause,
-  Context,
-  Data,
-  Effect,
-  Either,
-  Exit,
-  Fiber,
-  Layer,
-  Option,
-  Predicate,
-  PubSub,
-  Queue,
-  Ref,
-  Stream,
-} from "effect";
+import { Cause, Context, Data, Effect, Result, Exit, Fiber, Layer, Option, Predicate, PubSub, Queue, Ref, Semaphore, Stream } from "effect";
 import * as fs from "node:fs/promises";
-import type {
-  EngineSnapshot,
-  Job,
-  JobCompression,
-  JobDomain,
-  JobEvent,
-  JobFailure,
-  JobId,
-  JobProgress,
-} from "@scribd-dl/shared";
+import type { EngineSnapshot, Job, JobCompression, JobDomain, JobEvent, JobFailure, JobId, JobProgress } from "@scribd-dl/shared";
 import { JobNotFound, NotRemovable, NotRetryable } from "../errors/DomainErrors";
 import type { ConfigLoader } from "../utils/io/ConfigLoader";
 import { expandHome } from "../utils/io/path";
@@ -34,14 +10,7 @@ import { normalizeUrl } from "../utils/url";
 import { ConfigStoreTag, type ConfigStore } from "./ConfigStore";
 import { JobStoreTag, type JobStore } from "./JobStore";
 import { PdfCompressorTag, type PdfCompressor } from "./PdfCompressor";
-import {
-  findScraperForUrl,
-  ScrapersTag,
-  type Scrapers,
-  type OnEvent,
-  type Scraper,
-  type ScraperError,
-} from "./Scraper";
+import { findScraperForUrl, ScrapersTag, type Scrapers, type OnEvent, type Scraper, type ScraperError } from "./Scraper";
 
 const Events = Data.taggedEnum<JobEvent>();
 
@@ -57,10 +26,7 @@ export interface DownloadEngineService {
   readonly outputFolder: Effect.Effect<string, never, never>;
   readonly setOutputFolder: (path: string) => Effect.Effect<void, never, never>;
   readonly settings: Effect.Effect<SettingsView, never, never>;
-  readonly setSettings: (req: {
-    publicKey: string;
-    secretKey: string;
-  }) => Effect.Effect<boolean, never, never>;
+  readonly setSettings: (req: { publicKey: string; secretKey: string }) => Effect.Effect<boolean, never, never>;
 }
 
 export interface SettingsView {
@@ -75,12 +41,9 @@ interface KeysState {
   readonly valid: boolean;
 }
 
-export class DownloadEngine extends Context.Tag("DownloadEngine")<
-  DownloadEngine,
-  DownloadEngineService
->() {}
+export class DownloadEngine extends Context.Service<DownloadEngine, DownloadEngineService>()("DownloadEngine") {}
 
-export const DownloadEngineTag: Context.Tag<DownloadEngine, DownloadEngineService> = DownloadEngine;
+export const DownloadEngineTag = DownloadEngine;
 
 const URL_REGEX = /(https?:\/\/\S+)/;
 
@@ -127,7 +90,7 @@ const deriveTitleWith =
 // Non-transient failures: retrying the same URL will reproduce the same error.
 // Everything else (network, browser, IO) is treated as transient and retryable.
 const isRetryable = (cause: Cause.Cause<ScraperError>): boolean => {
-  const failure = Cause.failureOption(cause);
+  const failure = Cause.findErrorOption(cause);
 
   if (Option.isNone(failure)) return true;
 
@@ -135,7 +98,7 @@ const isRetryable = (cause: Cause.Cause<ScraperError>): boolean => {
 };
 
 const formatCause = (cause: Cause.Cause<ScraperError>): string => {
-  const failure = Cause.failureOption(cause);
+  const failure = Cause.findErrorOption(cause);
 
   if (Option.isSome(failure)) {
     const err = failure.value;
@@ -172,7 +135,7 @@ export const DownloadEngineLive: Layer.Layer<
   DownloadEngine,
   never,
   Scrapers | ConfigLoader | ConfigStore | JobStore | PdfCompressor | PdfGenerator
-> = Layer.scoped(
+> = Layer.effect(
   DownloadEngine,
   Effect.gen(function* () {
     const scrapers = yield* ScrapersTag;
@@ -200,11 +163,11 @@ export const DownloadEngineLive: Layer.Layer<
 
     type ActiveFiber = {
       readonly id: JobId;
-      readonly fiber: Fiber.RuntimeFiber<void, never>;
+      readonly fiber: Fiber.Fiber<void, never>;
     };
 
     const activeFiberRef = yield* Ref.make<Option.Option<ActiveFiber>>(Option.none());
-    const lifecycleLock = yield* Effect.makeSemaphore(1);
+    const lifecycleLock = yield* Semaphore.make(1);
 
     for (const job of restored) {
       if (job.status === "Queued") {
@@ -212,18 +175,13 @@ export const DownloadEngineLive: Layer.Layer<
       }
     }
 
-    const publish = (event: JobEvent): Effect.Effect<void, never, never> =>
-      PubSub.publish(pubsub, event).pipe(Effect.asVoid);
+    const publish = (event: JobEvent): Effect.Effect<void, never, never> => PubSub.publish(pubsub, event).pipe(Effect.asVoid);
 
     const persistJobs: Effect.Effect<void, never, never> = Effect.gen(function* () {
       const map = yield* Ref.get(stateRef);
       yield* jobStore
         .write(Array.from(map.values()))
-        .pipe(
-          Effect.catchAll((cause) =>
-            Effect.sync(() => console.warn("[DownloadEngine] failed to persist jobs:", cause)),
-          ),
-        );
+        .pipe(Effect.catch((cause) => Effect.sync(() => console.warn("[DownloadEngine] failed to persist jobs:", cause))));
     });
 
     const persistSettings: Effect.Effect<void, never, never> = Effect.gen(function* () {
@@ -236,11 +194,7 @@ export const DownloadEngineLive: Layer.Layer<
           ilovepdfSecretKey: keys.secretKey,
           ilovepdfKeysValid: keys.valid,
         })
-        .pipe(
-          Effect.catchAll((cause) =>
-            Effect.sync(() => console.warn("[DownloadEngine] failed to persist settings:", cause)),
-          ),
-        );
+        .pipe(Effect.catch((cause) => Effect.sync(() => console.warn("[DownloadEngine] failed to persist settings:", cause))));
     });
 
     const setJob = (job: Job): Effect.Effect<void, never, never> =>
@@ -264,7 +218,7 @@ export const DownloadEngineLive: Layer.Layer<
       Effect.tryPromise({
         try: () => fs.stat(path).then(() => true),
         catch: () => false as const,
-      }).pipe(Effect.catchAll(() => Effect.succeed(false)));
+      }).pipe(Effect.catch(() => Effect.succeed(false)));
 
     const prependTouched = (touched: ReadonlyArray<Job>): Effect.Effect<void, never, never> =>
       Ref.update(stateRef, (m) => {
@@ -540,11 +494,7 @@ export const DownloadEngineLive: Layer.Layer<
     // Best-effort in-place compression of a freshly-downloaded PDF (KTD1/KTD3/KTD9).
     // Returns the resulting compression state to stamp on the terminal Downloaded job,
     // or undefined on success / when compression is skipped. Never fails the worker.
-    const compressJob = (
-      id: JobId,
-      job: Job,
-      folder: string,
-    ): Effect.Effect<JobCompression | undefined, never, never> =>
+    const compressJob = (id: JobId, job: Job, folder: string): Effect.Effect<JobCompression | undefined, never, never> =>
       Effect.gen(function* () {
         const keys = yield* Ref.get(keysRef);
         const eligible = keys.publicKey !== "" && keys.secretKey !== "" && keys.valid;
@@ -573,22 +523,16 @@ export const DownloadEngineLive: Layer.Layer<
         yield* publish(Events.JobCompressing({ id }));
         yield* publishSnapshot;
 
-        const result = yield* Effect.either(
-          pdfCompressor.compress(pdfPath, { publicKey: keys.publicKey, secretKey: keys.secretKey }),
-        );
+        const result = yield* Effect.result(pdfCompressor.compress(pdfPath, { publicKey: keys.publicKey, secretKey: keys.secretKey }));
 
-        if (Either.isLeft(result)) {
-          const reason = result.left.reason;
+        if (Result.isFailure(result)) {
+          const reason = result.failure.reason;
           yield* publish(Events.JobCompressionFailed({ id, reason }));
 
           if (reason === "invalid credentials") {
             // Runtime 401 invalidates only the pair used by this request (KTD9).
             const invalidated = yield* Ref.modify(keysRef, (current): [boolean, KeysState] => {
-              if (
-                current.publicKey !== keys.publicKey ||
-                current.secretKey !== keys.secretKey ||
-                !current.valid
-              ) {
+              if (current.publicKey !== keys.publicKey || current.secretKey !== keys.secretKey || !current.valid) {
                 return [false, current];
               }
 
@@ -622,13 +566,7 @@ export const DownloadEngineLive: Layer.Layer<
         if (!present) return;
         yield* pdfGenerator
           .setTitle(pdfPath, job.displayTitle)
-          .pipe(
-            Effect.catchAll((e) =>
-              Effect.sync(() =>
-                console.warn(`[title] metadata stamp failed for ${pdfPath}:`, e.cause),
-              ),
-            ),
-          );
+          .pipe(Effect.catch((e) => Effect.sync(() => console.warn(`[title] metadata stamp failed for ${pdfPath}:`, e.cause))));
       });
 
     const runJob = (current: Job, folder: string): Effect.Effect<void, never, never> =>
@@ -685,7 +623,7 @@ export const DownloadEngineLive: Layer.Layer<
             return compression ? { ...downloaded, compression } : downloaded;
           });
           yield* publish(Events.JobCompleted({ id }));
-        } else if (Cause.isInterruptedOnly(exit.cause)) {
+        } else if (Cause.hasInterruptsOnly(exit.cause)) {
           // External interrupt (e.g. clearAll racing); state already adjusted.
           return;
         } else {
@@ -712,7 +650,7 @@ export const DownloadEngineLive: Layer.Layer<
 
               yield* updateJob(id, (job) => ({ ...job, status: "Downloading" }));
               const folder = yield* Ref.get(folderRef);
-              const fiber = yield* Effect.fork(restore(runJob(current, folder)));
+              const fiber = yield* Effect.forkChild(restore(runJob(current, folder)));
               const active: ActiveFiber = { id, fiber };
               yield* Ref.set(activeFiberRef, Option.some(active));
 
@@ -726,9 +664,7 @@ export const DownloadEngineLive: Layer.Layer<
         yield* Fiber.await(active.value.fiber).pipe(
           Effect.ensuring(
             Ref.update(activeFiberRef, (registered) =>
-              Option.isSome(registered) && registered.value.fiber === active.value.fiber
-                ? Option.none()
-                : registered,
+              Option.isSome(registered) && registered.value.fiber === active.value.fiber ? Option.none() : registered,
             ),
           ),
         );
@@ -758,10 +694,7 @@ export const DownloadEngineLive: Layer.Layer<
       })),
     );
 
-    const setSettings = (req: {
-      publicKey: string;
-      secretKey: string;
-    }): Effect.Effect<boolean, never, never> =>
+    const setSettings = (req: { publicKey: string; secretKey: string }): Effect.Effect<boolean, never, never> =>
       Effect.gen(function* () {
         const publicKey = req.publicKey.trim();
         const secretKey = req.secretKey.trim();

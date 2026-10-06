@@ -1,4 +1,4 @@
-import { Box, useApp, useInput, useStdout } from "ink";
+import { Box, useApp, useInput, useWindowSize } from "ink";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   clearAll,
@@ -27,8 +27,7 @@ import { StatusZone } from "./StatusZone";
 
 const DISCONNECT_MESSAGE = "Disconnected from engine";
 
-const hasActiveJobs = (snap: EngineSnapshot): boolean =>
-  snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
+const hasActiveJobs = (snap: EngineSnapshot): boolean => snap.jobs.some((j) => j.status === "Queued" || j.status === "Downloading");
 
 const looksLikePaste = (input: string): boolean => input.length > 5;
 
@@ -51,19 +50,14 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
     dismissSticky();
   }, [dismissSticky]);
 
-  const {
-    snapshot,
-    folder: liveFolder,
-    settings,
-  } = useEngineState(baseUrl, initialFolder, { onWsOpen, onWsClose });
+  const { snapshot, folder: liveFolder, settings } = useEngineState(baseUrl, initialFolder, { onWsOpen, onWsClose });
 
   const folder = liveFolder ?? initialFolder;
   const [settingsOverride, setSettingsOverride] = useState<SettingsResponse | null>(null);
   const effectiveSettings = settingsOverride ?? settings;
   const app = useApp();
   const exit = useCallback(() => (onExit ? onExit() : app.exit()), [app, onExit]);
-  const { stdout } = useStdout();
-  const rows = stdout?.rows ?? 24;
+  const { rows } = useWindowSize();
 
   const [focusIndex, setFocusIndex] = useState(0);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialog | null>(null);
@@ -77,10 +71,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
   const actionable = useMemo<ReadonlyArray<ActionableControl>>(
     () =>
       focusable.slots
-        .filter(
-          (s): s is Extract<FocusableSlot, { readonly kind: "remove" | "retry" }> =>
-            s.kind === "remove" || s.kind === "retry",
-        )
+        .filter((s): s is Extract<FocusableSlot, { readonly kind: "remove" | "retry" }> => s.kind === "remove" || s.kind === "retry")
         .map((s) => ({ type: s.kind, id: s.id })),
     [focusable.slots],
   );
@@ -107,10 +98,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
     [showTransient],
   );
 
-  const clearWithFeedback = async (
-    command: (baseUrl: string) => Promise<number>,
-    failureMessage: string,
-  ): Promise<void> => {
+  const clearWithFeedback = async (command: (baseUrl: string) => Promise<number>, failureMessage: string): Promise<void> => {
     try {
       await command(baseUrl);
     } catch (e) {
@@ -129,9 +117,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
       }
 
       if (key.tab) {
-        setConfirmDialog((dialog) =>
-          dialog ? { ...dialog, focus: dialog.focus === 0 ? 1 : 0 } : null,
-        );
+        setConfirmDialog((dialog) => (dialog ? { ...dialog, focus: dialog.focus === 0 ? 1 : 0 } : null));
 
         return;
       }
@@ -242,9 +228,7 @@ export const App = ({ baseUrl, initialFolder, onExit }: AppProps) => {
         <Queue snapshot={snapshot} actionable={actionable} focusIndex={queueFocusIndex} />
       </Box>
       {confirmDialog?.kind === "exit" ? <ExitConfirm focus={confirmDialog.focus} /> : null}
-      {confirmDialog?.kind === "clearAll" ? (
-        <ClearAllConfirm focus={confirmDialog.focus} total={snapshot.jobs.length} />
-      ) : null}
+      {confirmDialog?.kind === "clearAll" ? <ClearAllConfirm focus={confirmDialog.focus} total={snapshot.jobs.length} /> : null}
       {changeFolderOpen ? (
         <ChangeFolderPopup
           initial={folder}

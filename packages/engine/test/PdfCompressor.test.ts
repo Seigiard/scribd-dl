@@ -5,12 +5,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { CompressionFailed } from "../src/errors/DomainErrors";
 import ILovePDFFile from "@ilovepdf/ilovepdf-nodejs/ILovePDFFile";
-import {
-  makePdfCompressor,
-  PdfCompressor,
-  type ApiFactory,
-  type FileFactory,
-} from "../src/service/PdfCompressor";
+import { makePdfCompressor, PdfCompressor, type ApiFactory, type FileFactory } from "../src/service/PdfCompressor";
 
 const KEYS = { publicKey: "pub_x", secretKey: "sec_y" };
 
@@ -93,7 +88,7 @@ const runValidate = (makeApi: ApiFactory) =>
 
 const failureOf = (exit: Exit.Exit<void, CompressionFailed>): CompressionFailed => {
   if (!Exit.isFailure(exit)) throw new Error("expected failure exit");
-  const opt = Cause.failureOption(exit.cause);
+  const opt = Cause.findErrorOption(exit.cause);
 
   if (Option.isNone(opt)) throw new Error("expected a typed failure");
 
@@ -159,12 +154,13 @@ describe("PdfCompressor", () => {
         await entered.promise;
 
         // #when
-        const exit = await Effect.runPromise(Fiber.interrupt(fiber));
+        await Effect.runPromise(Fiber.interrupt(fiber));
+        const exit = await Effect.runPromise(Fiber.await(fiber));
         release.resolve();
         await Bun.sleep(50);
 
         // #then
-        expect(Exit.isInterrupted(exit)).toBe(true);
+        expect(Exit.hasInterrupts(exit)).toBe(true);
 
         const expectedCalls = {
           start: ["start"],
@@ -217,7 +213,8 @@ describe("PdfCompressor", () => {
       const canceledBeforeRename = settled;
       release.resolve();
       await renamed.promise;
-      const exit = await interruption;
+      await interruption;
+      const exit = await Effect.runPromise(Fiber.await(fiber));
 
       const replacement = fakeApiFactory({
         downloadBytes: new TextEncoder().encode("%PDF-new-job"),
@@ -227,7 +224,7 @@ describe("PdfCompressor", () => {
 
       // #then
       expect(canceledBeforeRename).toBe(false);
-      expect(Exit.isInterrupted(exit)).toBe(true);
+      expect(Exit.hasInterrupts(exit)).toBe(true);
       expect(await fs.readFile(target, "utf8")).toBe("%PDF-new-job");
     });
 
@@ -280,10 +277,7 @@ describe("PdfCompressor", () => {
     test("happy path writes compressed bytes over the resolved absolute path", async () => {
       // #given
       const target = path.join(tmpDir, "doc.pdf");
-      await fs.writeFile(
-        target,
-        new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
-      );
+      await fs.writeFile(target, new Uint8Array([0x25, 0x50, 0x44, 0x46, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]));
       const { factory } = fakeApiFactory({ downloadBytes: PDF_BYTES });
       const file = recordingFileFactory();
 
@@ -347,11 +341,7 @@ describe("PdfCompressor", () => {
       const { factory } = fakeApiFactory({ startError: axiosLike(401) });
 
       // #when
-      const exit = await runCompress(
-        factory,
-        recordingFileFactory().factory,
-        path.join(tmpDir, "d.pdf"),
-      );
+      const exit = await runCompress(factory, recordingFileFactory().factory, path.join(tmpDir, "d.pdf"));
 
       // #then
       expect(failureOf(exit).reason).toBe("invalid credentials");
@@ -362,11 +352,7 @@ describe("PdfCompressor", () => {
       const { factory } = fakeApiFactory({ processError: axiosLike(402) });
 
       // #when
-      const exit = await runCompress(
-        factory,
-        recordingFileFactory().factory,
-        path.join(tmpDir, "d.pdf"),
-      );
+      const exit = await runCompress(factory, recordingFileFactory().factory, path.join(tmpDir, "d.pdf"));
 
       // #then
       expect(failureOf(exit).reason).toBe("quota exceeded");
@@ -377,11 +363,7 @@ describe("PdfCompressor", () => {
       const { factory } = fakeApiFactory({ startError: axiosLike(429) });
 
       // #when
-      const exit = await runCompress(
-        factory,
-        recordingFileFactory().factory,
-        path.join(tmpDir, "d.pdf"),
-      );
+      const exit = await runCompress(factory, recordingFileFactory().factory, path.join(tmpDir, "d.pdf"));
 
       // #then
       expect(failureOf(exit).reason).toBe("quota exceeded");
@@ -394,11 +376,7 @@ describe("PdfCompressor", () => {
       });
 
       // #when
-      const exit = await runCompress(
-        factory,
-        recordingFileFactory().factory,
-        path.join(tmpDir, "d.pdf"),
-      );
+      const exit = await runCompress(factory, recordingFileFactory().factory, path.join(tmpDir, "d.pdf"));
 
       // #then
       expect(failureOf(exit).reason).toBe("network error");
@@ -411,11 +389,7 @@ describe("PdfCompressor", () => {
       });
 
       // #when
-      const exit = await runCompress(
-        factory,
-        recordingFileFactory().factory,
-        path.join(tmpDir, "d.pdf"),
-      );
+      const exit = await runCompress(factory, recordingFileFactory().factory, path.join(tmpDir, "d.pdf"));
 
       // #then
       expect(failureOf(exit).reason).toBe("invalid credentials");
@@ -475,11 +449,7 @@ describe("PdfCompressor", () => {
       const { factory } = fakeApiFactory({ startError: axiosLike(401) });
 
       // #when
-      const exit = await runCompress(
-        factory,
-        recordingFileFactory().factory,
-        path.join(tmpDir, "d.pdf"),
-      );
+      const exit = await runCompress(factory, recordingFileFactory().factory, path.join(tmpDir, "d.pdf"));
 
       // #then
       const serialized = JSON.stringify(failureOf(exit).cause);

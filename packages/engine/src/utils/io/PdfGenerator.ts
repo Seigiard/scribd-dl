@@ -4,22 +4,13 @@ import { PDFDocument } from "pdf-lib";
 import { PdfMergeFailed, PdfMetadataFailed } from "../../errors/DomainErrors";
 
 export interface PdfGeneratorService {
-  readonly merge: (
-    inputPdfPaths: ReadonlyArray<string>,
-    outputPath: string,
-  ) => Effect.Effect<void, PdfMergeFailed, never>;
-  readonly setTitle: (
-    pdfPath: string,
-    title: string,
-  ) => Effect.Effect<void, PdfMetadataFailed, never>;
+  readonly merge: (inputPdfPaths: ReadonlyArray<string>, outputPath: string) => Effect.Effect<void, PdfMergeFailed, never>;
+  readonly setTitle: (pdfPath: string, title: string) => Effect.Effect<void, PdfMetadataFailed, never>;
 }
 
-export class PdfGenerator extends Context.Tag("PdfGenerator")<
-  PdfGenerator,
-  PdfGeneratorService
->() {}
+export class PdfGenerator extends Context.Service<PdfGenerator, PdfGeneratorService>()("PdfGenerator") {}
 
-export const PdfGeneratorTag: Context.Tag<PdfGenerator, PdfGeneratorService> = PdfGenerator;
+export const PdfGeneratorTag = PdfGenerator;
 
 const merge = (
   inputPdfPaths: ReadonlyArray<string>,

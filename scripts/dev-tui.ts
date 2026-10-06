@@ -49,10 +49,7 @@ const waitForReady = () =>
   new Promise<void>((resolveReady, rejectReady) => {
     let buf = "";
 
-    const timeout = setTimeout(
-      () => rejectReady(new Error(`engine did not emit READY within ${READY_TIMEOUT_MS}ms`)),
-      READY_TIMEOUT_MS,
-    );
+    const timeout = setTimeout(() => rejectReady(new Error(`engine did not emit READY within ${READY_TIMEOUT_MS}ms`)), READY_TIMEOUT_MS);
 
     engine.stdout.on("data", (chunk: Buffer) => {
       const text = chunk.toString("utf8");

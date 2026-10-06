@@ -36,25 +36,13 @@ describe("computeFocusable", () => {
   });
 
   test("Failed retryable=true adds a retry slot after removes", () => {
-    const { slots } = computeFocusable(
-      snap(job("a", "Failed", { failure: { reason: "x", retryable: true } }), job("b", "Queued")),
-      null,
-    );
+    const { slots } = computeFocusable(snap(job("a", "Failed", { failure: { reason: "x", retryable: true } }), job("b", "Queued")), null);
 
-    expect(slots.map((s) => s.kind)).toEqual([
-      "change",
-      "clearFinished",
-      "clearAll",
-      "remove",
-      "retry",
-    ]);
+    expect(slots.map((s) => s.kind)).toEqual(["change", "clearFinished", "clearAll", "remove", "retry"]);
   });
 
   test("Failed retryable=false produces only clearFinished, no retry slot", () => {
-    const { slots } = computeFocusable(
-      snap(job("a", "Failed", { failure: { reason: "x", retryable: false } })),
-      null,
-    );
+    const { slots } = computeFocusable(snap(job("a", "Failed", { failure: { reason: "x", retryable: false } })), null);
 
     expect(slots.map((s) => s.kind)).toEqual(["change", "clearFinished", "clearAll"]);
   });

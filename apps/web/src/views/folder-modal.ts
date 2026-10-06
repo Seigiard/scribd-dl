@@ -1,5 +1,6 @@
 import { atom } from "nanostores";
-import { html, type Hole } from "uhtml";
+import { html } from "uhtml";
+
 import { saveFolder } from "@/engineClient";
 import { invokeTauri, isTauri } from "@/lib/backendUrl";
 import { $folder, $modal, type ModalMode } from "@/store";
@@ -126,10 +127,7 @@ $modal.listen((mode) => {
   }
 });
 
-export const folderModal = (
-  { mode, error, draft }: FolderModalProps,
-  save: typeof saveFolder = saveFolder,
-): Hole => {
+export const folderModal = ({ mode, error, draft }: FolderModalProps, save: typeof saveFolder = saveFolder): ReturnType<typeof html> => {
   if (mode !== "folder") return html``;
 
   return html`<div class="folder-modal" @click=${onBackdropClick}>
@@ -152,21 +150,12 @@ export const folderModal = (
           <button type="button" class="btn btn-default" @click=${close}>Cancel</button>
           ${
             isTauri()
-              ? html`<button
-                  type="button"
-                  class="btn btn-default"
-                  data-action="browse"
-                  @click=${onBrowseClick}
-                >
-                  Browse…
-                </button>`
-              : null
+              ? [html`<button type="button" class="btn btn-default" data-action="browse" @click=${onBrowseClick}>Browse…</button>`]
+              : []
           }
-          <button type="button" class="btn btn-primary" @click=${() => void trySave(save)}>
-            Save
-          </button>
+          <button type="button" class="btn btn-primary" @click=${() => void trySave(save)}>Save</button>
         </div>
-        ${error ? html`<div class="terminal-alert terminal-alert-error">${error}</div>` : null}
+        ${error ? [html`<div class="terminal-alert terminal-alert-error">${error}</div>`] : []}
       </div>
     </article>
   </div>`;

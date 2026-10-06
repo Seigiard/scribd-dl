@@ -1,16 +1,5 @@
 import { beforeEach, describe, expect, mock, test, type Mock } from "bun:test";
-import {
-  Cause,
-  Chunk,
-  Deferred,
-  Effect,
-  Exit,
-  Layer,
-  Option,
-  Predicate,
-  Schema,
-  Stream,
-} from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Layer, Option, Predicate, Schema, Stream } from "effect";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
@@ -19,21 +8,11 @@ import type { EngineSnapshot, Job, JobEvent } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService, type Settings } from "../src/service/ConfigStore";
 import { DownloadEngine, DownloadEngineLive } from "../src/service/DownloadEngine";
 import { JobStore, type JobStoreService } from "../src/service/JobStore";
-import {
-  makePdfCompressor,
-  PdfCompressor,
-  type PdfCompressorService,
-} from "../src/service/PdfCompressor";
+import { makePdfCompressor, PdfCompressor, type PdfCompressorService } from "../src/service/PdfCompressor";
 import { Scrapers, ScraperEvent, type OnEvent, type Scraper } from "../src/service/Scraper";
 import { ConfigLoader, type ConfigData } from "../src/utils/io/ConfigLoader";
 import { PdfGenerator, type PdfGeneratorService } from "../src/utils/io/PdfGenerator";
-import {
-  CompressionFailed,
-  PageLoadFailed,
-  PdfMetadataFailed,
-  PersistenceFailed,
-  UnsupportedUrl,
-} from "../src/errors/DomainErrors";
+import { CompressionFailed, PageLoadFailed, PdfMetadataFailed, PersistenceFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
 
 const emptySettings: Settings = {
   outputFolder: "/tmp/out",
@@ -166,7 +145,7 @@ const waitForQuiet = (engine: ReturnType<typeof DownloadEngine.of>) =>
 
 const firstFailureTag = (exit: Exit.Exit<unknown, unknown>): string | undefined => {
   if (Exit.isFailure(exit)) {
-    const failure = Cause.failureOption(exit.cause);
+    const failure = Cause.findErrorOption(exit.cause);
 
     if (Option.isSome(failure)) {
       return Schema.decodeUnknownSync(Schema.Struct({ _tag: Schema.String }))(failure.value)._tag;
@@ -261,8 +240,7 @@ describe("DownloadEngine", () => {
       // #given
       state.scribdExecute = mock(() => Effect.void);
 
-      const text =
-        "https://www.scribd.com/document/1/a\nhttps://example.com/foo\nhttps://www.scribd.com/document/2/b";
+      const text = "https://www.scribd.com/document/1/a\nhttps://example.com/foo\nhttps://www.scribd.com/document/2/b";
 
       // #when
       const snap = await runScoped(
@@ -357,19 +335,12 @@ describe("DownloadEngine", () => {
       // #then
       expect(snap.jobs[0]!.status).toBe("Downloaded");
       expect(state.scribdExecute).toHaveBeenCalledTimes(1);
-      expect(state.scribdExecute).toHaveBeenCalledWith(
-        url,
-        "/tmp/out",
-        expect.any(Function),
-        undefined,
-      );
+      expect(state.scribdExecute).toHaveBeenCalledWith(url, "/tmp/out", expect.any(Function), undefined);
     });
 
     test("ScribdDownloader failure → Failed with retryable: true", async () => {
       // #given
-      state.scribdExecute = mock((url: string) =>
-        Effect.fail(new PageLoadFailed({ url, cause: "boom" })),
-      );
+      state.scribdExecute = mock((url: string) => Effect.fail(new PageLoadFailed({ url, cause: "boom" })));
 
       // #when
       const snap = await runScoped(
@@ -403,9 +374,7 @@ describe("DownloadEngine", () => {
       await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          yield* engine.enqueue(
-            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
-          );
+          yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
           yield* waitForQuiet(engine);
         }),
       );
@@ -430,9 +399,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
 
-          const created = yield* engine.enqueue(
-            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
-          );
+          const created = yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
 
           yield* engine.remove(created[1]!.id);
 
@@ -543,9 +510,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
 
-          const created = yield* engine.enqueue(
-            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
-          );
+          const created = yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
 
           // wait until first is Downloading
           yield* Effect.sleep("10 millis");
@@ -573,8 +538,7 @@ describe("DownloadEngine", () => {
       });
 
       // Enqueue: /1/ blocks (Downloading), /2/ fails, plus an unsupported (immediately Failed)
-      const text =
-        "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b\nhttps://example.com/foo";
+      const text = "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b\nhttps://example.com/foo";
 
       // #when
       const result = await runScoped(
@@ -724,17 +688,13 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
 
-          const collector = yield* engine.events.pipe(
-            Stream.take(2),
-            Stream.runCollect,
-            Effect.fork,
-          );
+          const collector = yield* engine.events.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild);
 
           yield* Effect.sleep("10 millis");
           yield* engine.clearCompleted;
-          const chunk = yield* collector;
+          const chunk = yield* Fiber.join(collector);
 
-          return Chunk.toReadonlyArray(chunk).map((e: JobEvent) => e._tag);
+          return chunk.map((e: JobEvent) => e._tag);
         }),
       );
 
@@ -833,10 +793,10 @@ describe("DownloadEngine", () => {
       state.scribdExecute = mock((url) =>
         url.includes("/1/")
           ? Deferred.succeed(started, undefined).pipe(
-              Effect.zipRight(Effect.never),
+              Effect.andThen(Effect.never),
               Effect.onInterrupt(() =>
                 Effect.sleep("5 millis").pipe(
-                  Effect.zipRight(
+                  Effect.andThen(
                     Effect.sync(() => {
                       interrupted = true;
                     }),
@@ -887,10 +847,10 @@ describe("DownloadEngine", () => {
       };
       state.compressCompress = mock(() =>
         Deferred.succeed(started, undefined).pipe(
-          Effect.zipRight(Effect.never),
+          Effect.andThen(Effect.never),
           Effect.onInterrupt(() =>
             Effect.sleep("5 millis").pipe(
-              Effect.zipRight(
+              Effect.andThen(
                 Effect.sync(() => {
                   interrupted = true;
                 }),
@@ -1022,9 +982,7 @@ describe("DownloadEngine", () => {
       state.scribdExecute = mock((_url: string) => {
         attempt += 1;
 
-        return attempt === 1
-          ? Effect.fail(new PageLoadFailed({ url: _url, cause: "first" }))
-          : Effect.void;
+        return attempt === 1 ? Effect.fail(new PageLoadFailed({ url: _url, cause: "first" })) : Effect.void;
       });
 
       // #when
@@ -1176,9 +1134,7 @@ describe("DownloadEngine", () => {
 
     test("re-enqueue after Failed retryable=true → same id, implicit retry", async () => {
       // #given
-      state.scribdExecute = mock((u: string) =>
-        Effect.fail(new PageLoadFailed({ url: u, cause: "boom" })),
-      );
+      state.scribdExecute = mock((u: string) => Effect.fail(new PageLoadFailed({ url: u, cause: "boom" })));
       const url = "https://www.scribd.com/document/1/a";
 
       // #when
@@ -1374,20 +1330,18 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
 
           const tagsFork = yield* engine.events.pipe(
-            Stream.filter((e): e is Extract<JobEvent, { _tag: "JobTitleUpdated" }> =>
-              Predicate.isTagged(e, "JobTitleUpdated"),
-            ),
+            Stream.filter((e): e is Extract<JobEvent, { _tag: "JobTitleUpdated" }> => Predicate.isTagged(e, "JobTitleUpdated")),
             Stream.take(1),
             Stream.runCollect,
-            Effect.fork,
+            Effect.forkChild,
           );
 
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
-          const chunk = yield* tagsFork;
+          const chunk = yield* Fiber.join(tagsFork);
           const snap = yield* waitForQuiet(engine);
 
-          return { events: Chunk.toReadonlyArray(chunk), snap };
+          return { events: chunk, snap };
         }),
       );
 
@@ -1413,20 +1367,18 @@ describe("DownloadEngine", () => {
           const engine = yield* DownloadEngine;
 
           const progFork = yield* engine.events.pipe(
-            Stream.filter((e): e is Extract<JobEvent, { _tag: "JobProgress" }> =>
-              Predicate.isTagged(e, "JobProgress"),
-            ),
+            Stream.filter((e): e is Extract<JobEvent, { _tag: "JobProgress" }> => Predicate.isTagged(e, "JobProgress")),
             Stream.take(3),
             Stream.runCollect,
-            Effect.fork,
+            Effect.forkChild,
           );
 
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
-          const chunk = yield* progFork;
+          const chunk = yield* Fiber.join(progFork);
           const snap = yield* waitForQuiet(engine);
 
-          return { events: Chunk.toReadonlyArray(chunk), snap };
+          return { events: chunk, snap };
         }),
       );
 
@@ -1476,20 +1428,18 @@ describe("DownloadEngine", () => {
           const initial = yield* engine.outputFolder;
 
           const evtFork = yield* engine.events.pipe(
-            Stream.filter((e): e is Extract<JobEvent, { _tag: "OutputFolderChanged" }> =>
-              Predicate.isTagged(e, "OutputFolderChanged"),
-            ),
+            Stream.filter((e): e is Extract<JobEvent, { _tag: "OutputFolderChanged" }> => Predicate.isTagged(e, "OutputFolderChanged")),
             Stream.take(1),
             Stream.runCollect,
-            Effect.fork,
+            Effect.forkChild,
           );
 
           yield* Effect.sleep("10 millis");
           yield* engine.setOutputFolder("/tmp/new");
-          const chunk = yield* evtFork;
+          const chunk = yield* Fiber.join(evtFork);
           const after = yield* engine.outputFolder;
 
-          return { initial, after, events: Chunk.toReadonlyArray(chunk) };
+          return { initial, after, events: chunk };
         }),
       );
 
@@ -1537,7 +1487,7 @@ describe("DownloadEngine", () => {
 
           if (url.includes("/1/")) {
             firstStarted = true;
-            yield* Effect.async<void>((cb) => {
+            yield* Effect.callback<void>((cb) => {
               release = () => cb(Effect.void);
             });
           }
@@ -1548,9 +1498,7 @@ describe("DownloadEngine", () => {
       await runScoped(
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
-          yield* engine.enqueue(
-            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
-          );
+          yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
 
           // wait until first job is in-flight
           for (let i = 0; i < 100 && !firstStarted; i++) yield* Effect.sleep("5 millis");
@@ -1703,10 +1651,7 @@ describe("DownloadEngine", () => {
       );
 
       // #then
-      expect(observed).toEqual([
-        "https://www.scribd.com/document/1/x",
-        "https://www.scribd.com/document/2/y",
-      ]);
+      expect(observed).toEqual(["https://www.scribd.com/document/1/x", "https://www.scribd.com/document/2/y"]);
     });
 
     test("enqueue triggers JobStore.write at least once", async () => {
@@ -1734,9 +1679,7 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
 
-          const created = yield* engine.enqueue(
-            "https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b",
-          );
+          const created = yield* engine.enqueue("https://www.scribd.com/document/1/a\nhttps://www.scribd.com/document/2/b");
 
           state.jobStoreWrite.mockClear();
           yield* engine.remove(created[1]!.id);
@@ -1794,9 +1737,7 @@ describe("DownloadEngine", () => {
           yield* Deferred.await(titleHandled).pipe(Effect.timeout("1 second"));
 
           // #then — completion cannot supply the title persistence being checked.
-          expect(state.jobStoreWrite.mock.calls.at(-1)?.[0]).toEqual([
-            { ...job!, displayTitle: "Real Title", status: "Downloading" },
-          ]);
+          expect(state.jobStoreWrite.mock.calls.at(-1)?.[0]).toEqual([{ ...job!, displayTitle: "Real Title", status: "Downloading" }]);
           expect((yield* engine.snapshot).jobs[0]?.status).toBe("Downloading");
           const writesBeforeProgress = state.jobStoreWrite.mock.calls.length;
           yield* Deferred.succeed(allowProgress, undefined);
@@ -1838,9 +1779,7 @@ describe("DownloadEngine", () => {
     test("persist failure does not crash the engine", async () => {
       // #given — JobStore.write always fails
       state.scribdExecute = mock(() => Effect.void);
-      state.jobStoreWrite = mock(() =>
-        Effect.fail(new PersistenceFailed({ path: "/x", op: "write", cause: "disk full" })),
-      );
+      state.jobStoreWrite = mock(() => Effect.fail(new PersistenceFailed({ path: "/x", op: "write", cause: "disk full" })));
 
       // #when
       const snap = await runScoped(
@@ -1867,18 +1806,14 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
 
-          const collector = yield* engine.events.pipe(
-            Stream.take(4),
-            Stream.runCollect,
-            Effect.fork,
-          );
+          const collector = yield* engine.events.pipe(Stream.take(4), Stream.runCollect, Effect.forkChild);
 
           // yield to let the subscription register before publishing
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://www.scribd.com/document/1/a");
-          const chunk = yield* collector;
+          const chunk = yield* Fiber.join(collector);
 
-          return Chunk.toReadonlyArray(chunk).map((e: JobEvent) => e._tag);
+          return chunk.map((e: JobEvent) => e._tag);
         }),
       );
 
@@ -1895,17 +1830,13 @@ describe("DownloadEngine", () => {
         Effect.gen(function* () {
           const engine = yield* DownloadEngine;
 
-          const collector = yield* engine.events.pipe(
-            Stream.take(2),
-            Stream.runCollect,
-            Effect.fork,
-          );
+          const collector = yield* engine.events.pipe(Stream.take(2), Stream.runCollect, Effect.forkChild);
 
           yield* Effect.sleep("10 millis");
           yield* engine.enqueue("https://example.com/foo");
-          const chunk = yield* collector;
+          const chunk = yield* Fiber.join(collector);
 
-          return Chunk.toReadonlyArray(chunk).map((e: JobEvent) => e._tag);
+          return chunk.map((e: JobEvent) => e._tag);
         }),
       );
 
@@ -1915,13 +1846,8 @@ describe("DownloadEngine", () => {
   });
 
   describe("scrapers registry extensibility", () => {
-    const runScopedWith = <A, E>(
-      program: Effect.Effect<A, E, DownloadEngine>,
-      extraScrapers: ReadonlyArray<Scraper>,
-    ) =>
-      Effect.runPromise(
-        Effect.scoped(program.pipe(Effect.provide(buildLayer(defaultConfig, extraScrapers)))),
-      );
+    const runScopedWith = <A, E>(program: Effect.Effect<A, E, DownloadEngine>, extraScrapers: ReadonlyArray<Scraper>) =>
+      Effect.runPromise(Effect.scoped(program.pipe(Effect.provide(buildLayer(defaultConfig, extraScrapers)))));
 
     test("URL handled by extra scraper gets that scraper's id as domain", async () => {
       // #given
@@ -2017,9 +1943,7 @@ describe("DownloadEngine", () => {
 
     test("transient scraper failure (PageLoadFailed) → retryable: true", async () => {
       // #given
-      state.scribdExecute = mock((url: string) =>
-        Effect.fail(new PageLoadFailed({ url, cause: "network blip" })),
-      );
+      state.scribdExecute = mock((url: string) => Effect.fail(new PageLoadFailed({ url, cause: "network blip" })));
 
       // #when
       const snap = await runScoped(
@@ -2047,9 +1971,7 @@ describe("DownloadEngine", () => {
 
     const writingScraper = (filename: string) =>
       mock((_url: string, folder: string) =>
-        Effect.promise(() =>
-          fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46])),
-        ),
+        Effect.promise(() => fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46]))),
       );
 
     const withTmp = async (run: (tmp: string) => Promise<void>) => {
@@ -2082,13 +2004,10 @@ describe("DownloadEngine", () => {
         // #then
         expect(snap.jobs[0]!.status).toBe("Downloaded");
         expect(snap.jobs[0]!.compression).toBeUndefined();
-        expect(state.compressCompress).toHaveBeenCalledWith(
-          path.join(tmp, "Scribd document 1.pdf"),
-          {
-            publicKey: "pub",
-            secretKey: "sec",
-          },
-        );
+        expect(state.compressCompress).toHaveBeenCalledWith(path.join(tmp, "Scribd document 1.pdf"), {
+          publicKey: "pub",
+          secretKey: "sec",
+        });
       });
     });
 
@@ -2097,9 +2016,7 @@ describe("DownloadEngine", () => {
         // #given
         state.initialSettings = validKeysSettings(tmp);
         state.scribdExecute = writingScraper("Scribd document 1.pdf");
-        state.compressCompress = mock(() =>
-          Effect.fail(new CompressionFailed({ path: "p", reason: "quota exceeded", cause: {} })),
-        );
+        state.compressCompress = mock(() => Effect.fail(new CompressionFailed({ path: "p", reason: "quota exceeded", cause: {} })));
 
         // #when
         const snap = await runScoped(
@@ -2195,80 +2112,75 @@ describe("DownloadEngine", () => {
       { publicKey: "new-public", secretKey: "new-secret" },
       { publicKey: "new-public", secretKey: "sec" },
       { publicKey: "pub", secretKey: "new-secret" },
-    ])(
-      "old compression credentials cannot invalidate a newly validated pair %j",
-      async (newKeys) => {
-        await withTmp(async (tmp) => {
-          // #given — the first request remains pending while settings change.
-          state.initialSettings = validKeysSettings(tmp);
-          await fs.writeFile(path.join(tmp, "Scribd document 1.pdf"), "fake-pdf");
-          await fs.writeFile(path.join(tmp, "Scribd document 2.pdf"), "fake-pdf");
-          const started = Effect.runSync(Deferred.make<void>());
-          const release = Effect.runSync(Deferred.make<void>());
-          state.compressCompress = mock<PdfCompressorService["compress"]>(
-            () => Effect.void,
-          ).mockImplementationOnce((pdfPath) =>
-            Effect.gen(function* () {
-              yield* Deferred.succeed(started, undefined);
-              yield* Deferred.await(release);
+    ])("old compression credentials cannot invalidate a newly validated pair %j", async (newKeys) => {
+      await withTmp(async (tmp) => {
+        // #given — the first request remains pending while settings change.
+        state.initialSettings = validKeysSettings(tmp);
+        await fs.writeFile(path.join(tmp, "Scribd document 1.pdf"), "fake-pdf");
+        await fs.writeFile(path.join(tmp, "Scribd document 2.pdf"), "fake-pdf");
+        const started = Effect.runSync(Deferred.make<void>());
+        const release = Effect.runSync(Deferred.make<void>());
+        state.compressCompress = mock<PdfCompressorService["compress"]>(() => Effect.void).mockImplementationOnce((pdfPath) =>
+          Effect.gen(function* () {
+            yield* Deferred.succeed(started, undefined);
+            yield* Deferred.await(release);
 
-              return yield* Effect.fail(
-                new CompressionFailed({
-                  path: pdfPath,
-                  reason: "invalid credentials",
-                  cause: new Error("old credentials rejected"),
-                }),
-              );
-            }),
-          );
+            return yield* Effect.fail(
+              new CompressionFailed({
+                path: pdfPath,
+                reason: "invalid credentials",
+                cause: new Error("old credentials rejected"),
+              }),
+            );
+          }),
+        );
 
-          // #when
-          await runScoped(
-            Effect.gen(function* () {
-              const engine = yield* DownloadEngine;
-              const [first] = yield* engine.enqueue("https://www.scribd.com/document/1/a");
-              yield* Deferred.await(started).pipe(Effect.timeout("1 second"));
-              expect(state.compressCompress.mock.calls).toEqual([
-                [path.join(tmp, "Scribd document 1.pdf"), { publicKey: "pub", secretKey: "sec" }],
-              ]);
-              expect(yield* engine.setSettings(newKeys)).toBe(true);
-              yield* Deferred.succeed(release, undefined);
-              const firstDone = yield* waitForQuiet(engine);
+        // #when
+        await runScoped(
+          Effect.gen(function* () {
+            const engine = yield* DownloadEngine;
+            const [first] = yield* engine.enqueue("https://www.scribd.com/document/1/a");
+            yield* Deferred.await(started).pipe(Effect.timeout("1 second"));
+            expect(state.compressCompress.mock.calls).toEqual([
+              [path.join(tmp, "Scribd document 1.pdf"), { publicKey: "pub", secretKey: "sec" }],
+            ]);
+            expect(yield* engine.setSettings(newKeys)).toBe(true);
+            yield* Deferred.succeed(release, undefined);
+            const firstDone = yield* waitForQuiet(engine);
 
-              // #then — validity belongs to the tested pair, not the previous request.
-              expect(yield* engine.settings).toEqual({ ...newKeys, valid: true });
-              expect(state.configStoreWrite.mock.calls).toEqual([
-                [
-                  {
-                    outputFolder: tmp,
-                    ilovepdfPublicKey: newKeys.publicKey,
-                    ilovepdfSecretKey: newKeys.secretKey,
-                    ilovepdfKeysValid: true,
-                  },
-                ],
-              ]);
-              expect(firstDone.jobs).toEqual([
+            // #then — validity belongs to the tested pair, not the previous request.
+            expect(yield* engine.settings).toEqual({ ...newKeys, valid: true });
+            expect(state.configStoreWrite.mock.calls).toEqual([
+              [
                 {
-                  ...first!,
-                  status: "Downloaded",
-                  compression: { status: "failed", reason: "invalid credentials" },
+                  outputFolder: tmp,
+                  ilovepdfPublicKey: newKeys.publicKey,
+                  ilovepdfSecretKey: newKeys.secretKey,
+                  ilovepdfKeysValid: true,
                 },
-              ]);
-              const [second] = yield* engine.enqueue("https://www.scribd.com/document/2/b");
-              const secondDone = yield* waitForQuiet(engine);
-              expect(secondDone.jobs.find((job) => job.id === second!.id)).toEqual({
-                ...second!,
+              ],
+            ]);
+            expect(firstDone.jobs).toEqual([
+              {
+                ...first!,
                 status: "Downloaded",
-              });
-              expect(state.compressCompress.mock.calls).toEqual([
-                [path.join(tmp, "Scribd document 1.pdf"), { publicKey: "pub", secretKey: "sec" }],
-                [path.join(tmp, "Scribd document 2.pdf"), newKeys],
-              ]);
-            }),
-          );
-        });
-      },
-    );
+                compression: { status: "failed", reason: "invalid credentials" },
+              },
+            ]);
+            const [second] = yield* engine.enqueue("https://www.scribd.com/document/2/b");
+            const secondDone = yield* waitForQuiet(engine);
+            expect(secondDone.jobs.find((job) => job.id === second!.id)).toEqual({
+              ...second!,
+              status: "Downloaded",
+            });
+            expect(state.compressCompress.mock.calls).toEqual([
+              [path.join(tmp, "Scribd document 1.pdf"), { publicKey: "pub", secretKey: "sec" }],
+              [path.join(tmp, "Scribd document 2.pdf"), newKeys],
+            ]);
+          }),
+        );
+      });
+    });
 
     test("runtime 'invalid credentials' flips persisted validity; next download skips compression", async () => {
       await withTmp(async (tmp) => {
@@ -2277,17 +2189,10 @@ describe("DownloadEngine", () => {
         state.scribdExecute = mock((_url: string, folder: string) =>
           Effect.promise(async () => {
             const doc = /document\/(\d+)/.exec(_url)![1];
-            await fs.writeFile(
-              path.join(folder, `Scribd document ${doc}.pdf`),
-              new Uint8Array([0x25, 0x50, 0x44, 0x46]),
-            );
+            await fs.writeFile(path.join(folder, `Scribd document ${doc}.pdf`), new Uint8Array([0x25, 0x50, 0x44, 0x46]));
           }),
         );
-        state.compressCompress = mock(() =>
-          Effect.fail(
-            new CompressionFailed({ path: "p", reason: "invalid credentials", cause: {} }),
-          ),
-        );
+        state.compressCompress = mock(() => Effect.fail(new CompressionFailed({ path: "p", reason: "invalid credentials", cause: {} })));
 
         // #when — first download flips validity, second (different URL) should skip
         const snap = await runScoped(
@@ -2311,9 +2216,7 @@ describe("DownloadEngine", () => {
                 },
               ],
             ]);
-            expect(
-              firstDone.jobs.map((job) => ({ status: job.status, compression: job.compression })),
-            ).toEqual([
+            expect(firstDone.jobs.map((job) => ({ status: job.status, compression: job.compression }))).toEqual([
               {
                 status: "Downloaded",
                 compression: { status: "failed", reason: "invalid credentials" },
@@ -2453,9 +2356,7 @@ describe("DownloadEngine", () => {
   describe("title metadata stamp", () => {
     const writingScraper = (filename: string) =>
       mock((_url: string, folder: string) =>
-        Effect.promise(() =>
-          fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46])),
-        ),
+        Effect.promise(() => fs.writeFile(path.join(folder, filename), new Uint8Array([0x25, 0x50, 0x44, 0x46]))),
       );
 
     const withTmp = async (run: (tmp: string) => Promise<void>) => {
@@ -2486,10 +2387,7 @@ describe("DownloadEngine", () => {
 
         // #then
         expect(snap.jobs[0]!.status).toBe("Downloaded");
-        expect(state.pdfSetTitle).toHaveBeenCalledWith(
-          path.join(tmp, "Scribd document 1.pdf"),
-          "Scribd document 1",
-        );
+        expect(state.pdfSetTitle).toHaveBeenCalledWith(path.join(tmp, "Scribd document 1.pdf"), "Scribd document 1");
       });
     });
 
@@ -2498,9 +2396,7 @@ describe("DownloadEngine", () => {
         // #given
         state.initialSettings = { ...emptySettings, outputFolder: tmp };
         state.scribdExecute = writingScraper("Scribd document 1.pdf");
-        state.pdfSetTitle = mock(() =>
-          Effect.fail(new PdfMetadataFailed({ path: "p", cause: new Error("boom") })),
-        );
+        state.pdfSetTitle = mock(() => Effect.fail(new PdfMetadataFailed({ path: "p", cause: new Error("boom") })));
 
         // #when
         const snap = await runScoped(

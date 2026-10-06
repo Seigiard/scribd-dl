@@ -1,4 +1,5 @@
-import { render, type Hole } from "uhtml";
+import { render, type html } from "uhtml";
+
 import "./styles.css";
 import "./store";
 import { $folder, $jobs, $modal, $settings, $transient } from "./store";
@@ -6,27 +7,19 @@ import { statusZone } from "./views/status-zone";
 import { header } from "./views/header";
 import { queue } from "./views/queue";
 import { folderModal, $modalError, $draftFolder } from "./views/folder-modal";
-import {
-  settingsModal,
-  $settingsError,
-  $draftPublicKey,
-  $draftSecretKey,
-  $settingsValidity,
-} from "./views/settings-modal";
+import { settingsModal, $settingsError, $draftPublicKey, $draftSecretKey, $settingsValidity } from "./views/settings-modal";
 import { installFakeJobs } from "./devFixtures";
 import { attachPasteHandler, startEngineClient } from "./engineClient";
 
-const mount = (selector: string, view: () => Hole): (() => void) => {
+const mount = (selector: string, view: () => ReturnType<typeof html>): (() => void) => {
   const el = document.querySelector(selector);
 
   if (!el) throw new Error(`mount target not found: ${selector}`);
 
-  return () => render(el, view());
+  return () => render(el, view);
 };
 
-const renderStatusZone = mount(".mount-status-zone", () =>
-  statusZone({ transient: $transient.get(), jobs: $jobs.get() }),
-);
+const renderStatusZone = mount(".mount-status-zone", () => statusZone({ transient: $transient.get(), jobs: $jobs.get() }));
 
 $transient.listen(renderStatusZone);
 

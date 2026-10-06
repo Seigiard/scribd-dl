@@ -8,26 +8,14 @@ import { ScrapersTag } from "./service/Scraper";
 import { ConfigLoaderLive, type ConfigLoader } from "./utils/io/ConfigLoader";
 import { DirectoryIoLive } from "./utils/io/DirectoryIo";
 import { PdfGeneratorLive } from "./utils/io/PdfGenerator";
-import {
-  PuppeteerSgLive,
-  PuppeteerSgDebugLive,
-  type PuppeteerSg,
-} from "./utils/request/PuppeteerSg";
+import { PuppeteerSgLive, PuppeteerSgDebugLive, type PuppeteerSg } from "./utils/request/PuppeteerSg";
 import { TitleResolverLive } from "./utils/request/TitleResolver";
 import type { BrowserLaunchFailed } from "./errors/DomainErrors";
 
 const ConfigLayer = ConfigLoaderLive;
 
-export const makeScrapersLayer = (
-  puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never>,
-) => {
-  const InfraLayer = Layer.mergeAll(
-    PdfGeneratorLive,
-    ConfigLayer,
-    DirectoryIoLive,
-    puppeteerLayer,
-    TitleResolverLive,
-  );
+export const makeScrapersLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never>) => {
+  const InfraLayer = Layer.mergeAll(PdfGeneratorLive, ConfigLayer, DirectoryIoLive, puppeteerLayer, TitleResolverLive);
 
   const ScribdLayer = Layer.provide(ScribdDownloaderLive, InfraLayer);
 
@@ -44,20 +32,11 @@ export const makeScrapersLayer = (
   );
 };
 
-export const buildDownloadEngineLayer = (
-  puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> = PuppeteerSgLive,
-) => {
+export const buildDownloadEngineLayer = (puppeteerLayer: Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> = PuppeteerSgLive) => {
   const ScrapersLayer = makeScrapersLayer(puppeteerLayer);
   const ConfigStoreLayer = Layer.provide(ConfigStoreLive, ConfigLayer);
 
-  const EngineDeps = Layer.mergeAll(
-    ScrapersLayer,
-    ConfigLayer,
-    ConfigStoreLayer,
-    JobStoreLive,
-    PdfCompressorLive,
-    PdfGeneratorLive,
-  );
+  const EngineDeps = Layer.mergeAll(ScrapersLayer, ConfigLayer, ConfigStoreLayer, JobStoreLive, PdfCompressorLive, PdfGeneratorLive);
 
   return Layer.provide(DownloadEngineLive, EngineDeps);
 };

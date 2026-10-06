@@ -15,13 +15,12 @@ const makeJob = (id: string, overrides: Partial<Job> = {}): Job => ({
 
 const mount = (jobs: Record<JobId, Job | undefined>): HTMLElement => {
   const container = document.createElement("div");
-  render(container, queue({ jobs }));
+  render(container, () => queue({ jobs }));
 
   return container.querySelector<HTMLElement>(".queue")!;
 };
 
-const items = (root: HTMLElement): HTMLElement[] =>
-  Array.from(root.querySelectorAll(".queue-item"));
+const items = (root: HTMLElement): HTMLElement[] => Array.from(root.querySelectorAll(".queue-item"));
 
 describe("queue()", () => {
   afterEach(() => {
@@ -66,11 +65,10 @@ describe("queue()", () => {
 
   it("update in place preserves DOM node identity (auto-keyed by template)", () => {
     const container = document.createElement("div");
-    render(container, queue({ jobs: { a: makeJob("a") } }));
+    render(container, () => queue({ jobs: { a: makeJob("a") } }));
     const firstItem = container.querySelector<HTMLElement>(".queue-item")!;
 
-    render(
-      container,
+    render(container, () =>
       queue({
         jobs: {
           a: makeJob("a", {

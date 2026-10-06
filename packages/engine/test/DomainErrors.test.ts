@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { Cause, Chunk, Effect, Exit } from "effect";
+import { Cause, Effect, Exit } from "effect";
 import { BrowserLaunchFailed, UnsupportedUrl } from "../src/errors/DomainErrors";
 
 describe("DomainErrors", () => {
@@ -22,7 +22,7 @@ describe("DomainErrors", () => {
     expect(Exit.isFailure(exit)).toBe(true);
 
     if (Exit.isFailure(exit)) {
-      const failures = Chunk.toReadonlyArray(Cause.failures(exit.cause));
+      const failures = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
 
       expect(failures.length).toBeGreaterThan(0);
       const first = failures[0]!;

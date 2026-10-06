@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, mock, test, type Mock } from "bun:test";
 import { Effect, Fiber, Layer, Match, Predicate, Schema } from "effect";
-import { HttpServer } from "@effect/platform";
+import { HttpServer } from "effect/http";
 import { EngineSnapshotSchema, JobEventSchema, type Job } from "@scribd-dl/shared";
 import { ConfigStore, type ConfigStoreService } from "../../src/service/ConfigStore";
 import { DownloadEngineLive } from "../../src/service/DownloadEngine";
@@ -75,12 +75,12 @@ const buildEngineLayer = (config: ConfigData = defaultConfig) =>
     ),
   );
 
-let serverFiber: Fiber.RuntimeFiber<unknown, unknown> | null = null;
+let serverFiber: Fiber.Fiber<unknown, unknown> | null = null;
 
 let baseUrl = "";
 
-const getServerPort = HttpServer.addressWith((address) => {
-  if (!Predicate.isTagged(address, "TcpAddress")) return Effect.die("Expected TcpAddress");
+const getServerPort = Effect.flatMap(HttpServer.HttpServer, ({ address }) => {
+  if (Predicate.isTagged(address, "UnixPathAddress")) return Effect.die("Expected an IP address");
 
   return Effect.succeed(address.port);
 });
@@ -93,7 +93,7 @@ beforeAll(async () => {
 
     const program = getServerPort.pipe(
       Effect.tap((port) => Effect.sync(() => resolve(port))),
-      Effect.zipRight(Effect.never),
+      Effect.andThen(Effect.never),
       Effect.provide(ServerLayer),
       Effect.scoped,
     );
@@ -114,14 +114,11 @@ afterAll(async () => {
 
 const j = <A>(body: A) => JSON.stringify(body);
 
-const readQueue = async (response: Response) =>
-  Schema.decodeUnknownSync(EngineSnapshotSchema)(await response.json());
+const readQueue = async (response: Response) => Schema.decodeUnknownSync(EngineSnapshotSchema)(await response.json());
 
-const readError = async (response: Response) =>
-  Schema.decodeUnknownSync(Schema.Struct({ error: Schema.String }))(await response.json());
+const readError = async (response: Response) => Schema.decodeUnknownSync(Schema.Struct({ error: Schema.String }))(await response.json());
 
-const readClear = async (response: Response) =>
-  Schema.decodeUnknownSync(Schema.Struct({ removed: Schema.Number }))(await response.json());
+const readClear = async (response: Response) => Schema.decodeUnknownSync(Schema.Struct({ removed: Schema.Number }))(await response.json());
 
 type DecodedJobEvent = typeof JobEventSchema.Type;
 
@@ -272,10 +269,7 @@ describe("HttpServer queue lifecycle (scribd routing)", () => {
   });
 });
 
-const collectFrames = (
-  url: string,
-  opts: { after?: () => Promise<void>; timeoutMs?: number; minFrames?: number },
-) =>
+const collectFrames = (url: string, opts: { after?: () => Promise<void>; timeoutMs?: number; minFrames?: number }) =>
   new Promise<DecodedJobEvent[]>((resolve, reject) => {
     const frames: DecodedJobEvent[] = [];
     const ws = new WebSocket(url);
@@ -298,7 +292,7 @@ const collectFrames = (
     };
 
     ws.onmessage = (e) => {
-      frames.push(Schema.decodeUnknownSync(Schema.parseJson(JobEventSchema))(String(e.data)));
+      frames.push(Schema.decodeUnknownSync(Schema.fromJsonString(JobEventSchema))(String(e.data)));
 
       if (opts.minFrames && frames.length >= opts.minFrames) {
         clearTimeout(timeout);
@@ -356,9 +350,8 @@ describe("WebSocket /events", () => {
       minFrames: 1,
     });
 
-    const change = frames.find(
-      (frame): frame is Extract<DecodedJobEvent, { _tag: "OutputFolderChanged" }> =>
-        Predicate.isTagged(frame, "OutputFolderChanged"),
+    const change = frames.find((frame): frame is Extract<DecodedJobEvent, { _tag: "OutputFolderChanged" }> =>
+      Predicate.isTagged(frame, "OutputFolderChanged"),
     );
 
     expect(change).toBeDefined();
@@ -420,10 +413,7 @@ describe("WebSocket /events", () => {
         Match.value(frame).pipe(
           Match.tags({
             JobAdded: (event) => ["JobAdded", event.job],
-            JobFailed: (event) => [
-              "JobFailed",
-              { id: event.id, reason: event.reason, retryable: event.retryable },
-            ],
+            JobFailed: (event) => ["JobFailed", { id: event.id, reason: event.reason, retryable: event.retryable }],
             SnapshotReplaced: (event) => ["SnapshotReplaced", event.snapshot],
           }),
           Match.orElse((event) => [event._tag]),
@@ -639,17 +629,14 @@ describe("HTTP request field defaults", () => {
     },
   );
 
-  test.each(["null", "42", "{}", '{"path":42}', "not JSON"])(
-    "POST /folder tolerates invalid body %s as an empty path",
-    async (body) => {
-      // #given
-      // #when
-      const response = await fetch(`${baseUrl}/folder`, { method: "POST", headers: ct, body });
-      // #then
-      expect(response.status).toBe(400);
-      expect(await response.json()).toEqual({ error: "InvalidPath" });
-    },
-  );
+  test.each(["null", "42", "{}", '{"path":42}', "not JSON"])("POST /folder tolerates invalid body %s as an empty path", async (body) => {
+    // #given
+    // #when
+    const response = await fetch(`${baseUrl}/folder`, { method: "POST", headers: ct, body });
+    // #then
+    expect(response.status).toBe(400);
+    expect(await response.json()).toEqual({ error: "InvalidPath" });
+  });
 
   test.each([
     ["null", "", "", null],
@@ -658,19 +645,16 @@ describe("HTTP request field defaults", () => {
     ['{"publicKey":false,"secretKey":"keep-secret"}', "", "keep-secret", false],
     ['{"publicKey":"keep-public"}', "keep-public", "", false],
     ['{"secretKey":"keep-secret"}', "", "keep-secret", false],
-  ])(
-    "POST /settings defaults each field independently for %s",
-    async (body, publicKey, secretKey, valid) => {
-      // #given
-      state.validateResult = true;
-      // #when
-      const response = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body });
-      // #then
-      expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ valid: false });
-      const stored = await fetch(`${baseUrl}/settings`);
-      expect(stored.status).toBe(200);
-      expect(await stored.json()).toEqual({ publicKey, secretKey, valid });
-    },
-  );
+  ])("POST /settings defaults each field independently for %s", async (body, publicKey, secretKey, valid) => {
+    // #given
+    state.validateResult = true;
+    // #when
+    const response = await fetch(`${baseUrl}/settings`, { method: "POST", headers: ct, body });
+    // #then
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ valid: false });
+    const stored = await fetch(`${baseUrl}/settings`);
+    expect(stored.status).toBe(200);
+    expect(await stored.json()).toEqual({ publicKey, secretKey, valid });
+  });
 });

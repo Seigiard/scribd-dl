@@ -8,12 +8,7 @@ import {
   SettingsResponseSchema,
 } from "./http";
 import type { EngineSnapshot, JobEvent } from "./jobs";
-import type {
-  EnqueueResponse,
-  SaveSettingsResponse,
-  SettingsRequest,
-  SettingsResponse,
-} from "./http";
+import type { EnqueueResponse, SaveSettingsResponse, SettingsRequest, SettingsResponse } from "./http";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -81,10 +76,7 @@ export const fetchSettings = async (baseUrl: string): Promise<SettingsResponse> 
   return Schema.decodeUnknownSync(SettingsResponseSchema)(await res.json());
 };
 
-export const saveSettings = async (
-  baseUrl: string,
-  req: SettingsRequest,
-): Promise<SaveSettingsResponse> => {
+export const saveSettings = async (baseUrl: string, req: SettingsRequest): Promise<SaveSettingsResponse> => {
   const res = await fetch(`${baseUrl}/settings`, {
     method: "POST",
     headers: JSON_HEADERS,
@@ -105,10 +97,7 @@ const clearByScope = async (baseUrl: string, scope: "completed" | "failed"): Pro
 };
 
 export const clearFinished = async (baseUrl: string): Promise<number> => {
-  const [completed, failed] = await Promise.all([
-    clearByScope(baseUrl, "completed"),
-    clearByScope(baseUrl, "failed"),
-  ]);
+  const [completed, failed] = await Promise.all([clearByScope(baseUrl, "completed"), clearByScope(baseUrl, "failed")]);
 
   return completed + failed;
 };
@@ -137,7 +126,7 @@ export const subscribeEvents = (baseUrl: string, handlers: EventsHandlers): Even
   ws.onopen = () => handlers.onOpen?.();
   ws.onmessage = (msg: MessageEvent<unknown>) => {
     try {
-      const event = Schema.decodeUnknownSync(Schema.parseJson(JobEventSchema))(msg.data);
+      const event = Schema.decodeUnknownSync(Schema.fromJsonString(JobEventSchema))(msg.data);
 
       handlers.onMessage(event);
     } catch (err) {

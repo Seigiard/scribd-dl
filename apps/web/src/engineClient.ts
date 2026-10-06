@@ -1,21 +1,8 @@
-import {
-  containsUrl,
-  JobEventSchema,
-  summarizeEnqueueFeedback,
-  type JobEvent,
-} from "@scribd-dl/shared";
+import { containsUrl, JobEventSchema, summarizeEnqueueFeedback, type JobEvent } from "@scribd-dl/shared";
 import * as defaultApi from "@/lib/api";
-import { Either, Match, Schema } from "effect";
+import { Result, Match, Schema } from "effect";
 import { getBackendUrl, toWsUrl } from "@/lib/backendUrl";
-import {
-  $connected,
-  $folder,
-  $jobs,
-  $settings,
-  applySnapshot,
-  dismissSticky,
-  showTransient,
-} from "@/store";
+import { $connected, $folder, $jobs, $settings, applySnapshot, dismissSticky, showTransient } from "@/store";
 
 let ws: WebSocket | null = null;
 
@@ -80,9 +67,9 @@ const openSocket = (): void => {
 
   next.onmessage = (msg) => {
     if (ws !== next) return;
-    const event = Schema.decodeUnknownEither(Schema.parseJson(JobEventSchema))(msg.data);
+    const event = Schema.decodeUnknownResult(Schema.fromJsonString(JobEventSchema))(msg.data);
 
-    if (Either.isRight(event)) handleWsEvent(event.right);
+    if (Result.isSuccess(event)) handleWsEvent(event.success);
     else void refresh();
   };
 
@@ -127,10 +114,7 @@ export const saveFolder = async (path: string): Promise<void> => {
   $folder.set(path);
 };
 
-export const saveSettingsCommand = async (
-  publicKey: string,
-  secretKey: string,
-): Promise<boolean> => {
+export const saveSettingsCommand = async (publicKey: string, secretKey: string): Promise<boolean> => {
   if (!baseUrl) throw new Error("Engine not connected");
   const { valid } = await api.saveSettings(baseUrl, { publicKey, secretKey });
   const cleared = publicKey === "" && secretKey === "";
@@ -163,15 +147,11 @@ export const commandClearFinished = async (): Promise<void> => {
 export const commandClearAll = async (): Promise<void> => {
   if (!baseUrl) return;
 
-  const total = Object.values($jobs.get()).filter(
-    (j): j is NonNullable<typeof j> => j !== undefined,
-  ).length;
+  const total = Object.values($jobs.get()).filter((j): j is NonNullable<typeof j> => j !== undefined).length;
 
   if (total === 0) return;
 
-  const confirmed = window.confirm(
-    `Remove all ${total} jobs and cancel any active downloads? Files on disk are kept.`,
-  );
+  const confirmed = window.confirm(`Remove all ${total} jobs and cancel any active downloads? Files on disk are kept.`);
 
   if (!confirmed) return;
 

@@ -36,11 +36,7 @@ const clearTimer = (): void => {
   }
 };
 
-export const showTransient = (
-  severity: TransientSeverity,
-  message: string,
-  opts?: { readonly sticky?: boolean },
-): void => {
+export const showTransient = (severity: TransientSeverity, message: string, opts?: { readonly sticky?: boolean }): void => {
   const result = applyTransient($transient.get(), { severity, message, sticky: opts?.sticky });
 
   if (result.kind === "ignored") return;
@@ -68,13 +64,7 @@ export const clearTransient = (): void => {
 const jobsShallowEqual = (a: Job, b: Job): boolean => {
   if (a === b) return true;
 
-  if (
-    a.id !== b.id ||
-    a.url !== b.url ||
-    a.domain !== b.domain ||
-    a.displayTitle !== b.displayTitle ||
-    a.status !== b.status
-  ) {
+  if (a.id !== b.id || a.url !== b.url || a.domain !== b.domain || a.displayTitle !== b.displayTitle || a.status !== b.status) {
     return false;
   }
 

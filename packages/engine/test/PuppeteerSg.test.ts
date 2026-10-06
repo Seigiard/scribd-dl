@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test, type Mock } from "bun:test";
-import { Cause, Chunk, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
+import { Cause, Deferred, Effect, Exit, Fiber, Option, Schema } from "effect";
 import type { LaunchOptions, Page } from "puppeteer";
 import * as fs from "node:fs/promises";
 import * as os from "node:os";
@@ -144,7 +144,7 @@ describe("PuppeteerSg", () => {
     expect(Exit.isFailure(exit)).toBe(true);
 
     if (Exit.isFailure(exit)) {
-      const failures = Chunk.toReadonlyArray(Cause.failures(exit.cause));
+      const failures = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
 
       const first = failures[0]!;
       expect(first._tag).toBe("PageLoadFailed");
@@ -153,45 +153,42 @@ describe("PuppeteerSg", () => {
     expect(state.browser.close).toHaveBeenCalledTimes(1);
   });
 
-  test.each(initializationStages)(
-    "getPage closes its page when %s fails and preserves that failure if close fails",
-    async (stage) => {
-      // #given
-      const original = new Error(`${stage} failed`);
-      state.page[stage].mockImplementation(async () => {
-        throw original;
-      });
-      state.page.close.mockImplementation(async () => {
-        throw new Error("close failed");
-      });
+  test.each(initializationStages)("getPage closes its page when %s fails and preserves that failure if close fails", async (stage) => {
+    // #given
+    const original = new Error(`${stage} failed`);
+    state.page[stage].mockImplementation(async () => {
+      throw original;
+    });
+    state.page.close.mockImplementation(async () => {
+      throw new Error("close failed");
+    });
 
-      // #when
-      const result = await Effect.runPromise(
-        Effect.gen(function* () {
-          const svc = yield* PuppeteerSg;
-          const exit = yield* Effect.exit(svc.getPage("about:blank"));
+    // #when
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const svc = yield* PuppeteerSg;
+        const exit = yield* Effect.exit(svc.getPage("about:blank"));
 
-          if (!Exit.isFailure(exit)) throw new Error("expected initialization failure");
-          const failure = Option.getOrThrow(Cause.failureOption(exit.cause));
+        if (!Exit.isFailure(exit)) throw new Error("expected initialization failure");
+        const failure = Option.getOrThrow(Cause.findErrorOption(exit.cause));
 
-          return {
-            tag: failure._tag,
-            url: failure.url,
-            sameCause: Object.is(failure.cause, original),
-            closeCalls: state.page.close.mock.calls.length,
-          };
-        }).pipe(Effect.provide(makeTestLayer()), Effect.scoped),
-      );
+        return {
+          tag: failure._tag,
+          url: failure.url,
+          sameCause: Object.is(failure.cause, original),
+          closeCalls: state.page.close.mock.calls.length,
+        };
+      }).pipe(Effect.provide(makeTestLayer()), Effect.scoped),
+    );
 
-      // #then
-      expect(result).toEqual({
-        tag: "PageLoadFailed",
-        url: "about:blank",
-        sameCause: true,
-        closeCalls: 1,
-      });
-    },
-  );
+    // #then
+    expect(result).toEqual({
+      tag: "PageLoadFailed",
+      url: "about:blank",
+      sameCause: true,
+      closeCalls: 1,
+    });
+  });
 
   test("getPage closes its page when initialization is interrupted", async () => {
     // #given
@@ -206,14 +203,15 @@ describe("PuppeteerSg", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const svc = yield* PuppeteerSg;
-        const fiber = yield* Effect.fork(svc.getPage("about:blank"));
+        const fiber = yield* Effect.forkChild(svc.getPage("about:blank"));
         yield* Deferred.await(entered);
-        const exit = yield* Fiber.interrupt(fiber);
+        yield* Fiber.interrupt(fiber);
+        const exit = yield* Fiber.await(fiber);
 
         if (!Exit.isFailure(exit)) throw new Error("expected interruption");
 
         return {
-          interrupted: Cause.isInterruptedOnly(exit.cause),
+          interrupted: Cause.hasInterruptsOnly(exit.cause),
           closeCalls: state.page.close.mock.calls.length,
         };
       }).pipe(Effect.provide(makeTestLayer()), Effect.scoped),
@@ -259,22 +257,15 @@ describe("PuppeteerSg", () => {
         Effect.gen(function* () {
           const svc = yield* PuppeteerSg;
 
-          const fiber = yield* Effect.fork(
-            Effect.scoped(
-              Effect.acquireRelease(svc.getPage("about:blank"), (page) =>
-                Effect.promise(() => page.close()),
-              ),
-            ),
+          const fiber = yield* Effect.forkChild(
+            Effect.scoped(Effect.acquireRelease(svc.getPage("about:blank"), (page) => Effect.promise(() => page.close()))),
           );
 
           yield* Effect.promise(() => entered.promise);
           const interruption = Effect.runPromise(Fiber.interrupt(fiber));
 
           const prompt = yield* Effect.promise(() =>
-            Promise.race([
-              interruption.then(() => true),
-              new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
-            ]),
+            Promise.race([interruption.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250))]),
           );
 
           const closeCallsAtCancellation = state.page.close.mock.calls.length;
@@ -290,67 +281,54 @@ describe("PuppeteerSg", () => {
     },
   );
 
-  test.each(["direct", "acquireRelease"])(
-    "late newPage is closed without blocking cancellation for the %s caller",
-    async (caller) => {
-      // #given
-      const entered = Promise.withResolvers<void>();
-      const allocation = Promise.withResolvers<Page>();
-      const closed = Promise.withResolvers<void>();
-      const page = await state.browser.newPage();
-      state.browser.newPage.mockImplementation(() => {
-        entered.resolve();
+  test.each(["direct", "acquireRelease"])("late newPage is closed without blocking cancellation for the %s caller", async (caller) => {
+    // #given
+    const entered = Promise.withResolvers<void>();
+    const allocation = Promise.withResolvers<Page>();
+    const closed = Promise.withResolvers<void>();
+    const page = await state.browser.newPage();
+    state.browser.newPage.mockImplementation(() => {
+      entered.resolve();
 
-        return allocation.promise;
-      });
-      state.page.close.mockImplementation(async () => {
-        closed.resolve();
-      });
+      return allocation.promise;
+    });
+    state.page.close.mockImplementation(async () => {
+      closed.resolve();
+    });
 
-      // #when
-      const result = await Effect.runPromise(
-        Effect.gen(function* () {
-          const svc = yield* PuppeteerSg;
-          const getPage = svc.getPage("about:blank");
+    // #when
+    const result = await Effect.runPromise(
+      Effect.gen(function* () {
+        const svc = yield* PuppeteerSg;
+        const getPage = svc.getPage("about:blank");
 
-          const acquire =
-            caller === "acquireRelease"
-              ? Effect.scoped(
-                  Effect.acquireRelease(getPage, (allocated) =>
-                    Effect.promise(() => allocated.close()),
-                  ),
-                )
-              : getPage;
+        const acquire =
+          caller === "acquireRelease"
+            ? Effect.scoped(Effect.acquireRelease(getPage, (allocated) => Effect.promise(() => allocated.close())))
+            : getPage;
 
-          const fiber = yield* Effect.fork(acquire);
-          yield* Effect.promise(() => entered.promise);
-          const interruption = Effect.runPromise(Fiber.interrupt(fiber));
+        const fiber = yield* Effect.forkChild(acquire);
+        yield* Effect.promise(() => entered.promise);
+        const interruption = Effect.runPromise(Fiber.interrupt(fiber));
 
-          const prompt = yield* Effect.promise(() =>
-            Promise.race([
-              interruption.then(() => true),
-              new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
-            ]),
-          );
+        const prompt = yield* Effect.promise(() =>
+          Promise.race([interruption.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250))]),
+        );
 
-          allocation.resolve(page);
-          yield* Effect.promise(() => interruption);
+        allocation.resolve(page);
+        yield* Effect.promise(() => interruption);
 
-          const latePageClosed = yield* Effect.promise(() =>
-            Promise.race([
-              closed.promise.then(() => true),
-              new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250)),
-            ]),
-          );
+        const latePageClosed = yield* Effect.promise(() =>
+          Promise.race([closed.promise.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 250))]),
+        );
 
-          return { prompt, latePageClosed, closeCalls: state.page.close.mock.calls.length };
-        }).pipe(Effect.provide(makeTestLayer()), Effect.scoped),
-      );
+        return { prompt, latePageClosed, closeCalls: state.page.close.mock.calls.length };
+      }).pipe(Effect.provide(makeTestLayer()), Effect.scoped),
+    );
 
-      // #then
-      expect(result).toEqual({ prompt: true, latePageClosed: true, closeCalls: 1 });
-    },
-  );
+    // #then
+    expect(result).toEqual({ prompt: true, latePageClosed: true, closeCalls: 1 });
+  });
 
   test("interrupt invokes browser cleanup", async () => {
     state.browser.newPage = mock(() => new Promise(() => {}));
@@ -381,11 +359,7 @@ describe("PuppeteerSg", () => {
     const program = Effect.scoped(Effect.void.pipe(Effect.provide(makeTestLayer())));
     await Effect.runPromise(program);
     const opts = state.lastLaunchOptions!;
-    expect(opts.args).toEqual([
-      "--no-sandbox",
-      "--disable-setuid-sandbox",
-      "--disable-dev-shm-usage",
-    ]);
+    expect(opts.args).toEqual(["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]);
   });
 
   describe("headful parameterization", () => {
@@ -402,9 +376,7 @@ describe("PuppeteerSg", () => {
 
     test("makePuppeteerSgLive({ headful: true }) uses headless: false", async () => {
       // #given
-      const program = Effect.scoped(
-        Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: true }, state.launch))),
-      );
+      const program = Effect.scoped(Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: true }, state.launch))));
 
       // #when
       await Effect.runPromise(program);
@@ -415,9 +387,7 @@ describe("PuppeteerSg", () => {
 
     test("makePuppeteerSgLive({ headful: false }) uses headless: true", async () => {
       // #given
-      const program = Effect.scoped(
-        Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: false }, state.launch))),
-      );
+      const program = Effect.scoped(Effect.void.pipe(Effect.provide(makePuppeteerSgLive({ headful: false }, state.launch))));
 
       // #when
       await Effect.runPromise(program);
@@ -491,9 +461,10 @@ describe("PuppeteerSg", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const svc = yield* PuppeteerSg;
-        const first = yield* Effect.fork(svc.generatePDF(page, pdfPath));
+        const first = yield* Effect.forkChild(svc.generatePDF(page, pdfPath));
         yield* Effect.promise(() => entered.promise);
-        const exit = yield* Fiber.interrupt(first);
+        yield* Fiber.interrupt(first);
+        const exit = yield* Fiber.await(first);
 
         if (!Exit.isFailure(exit)) throw new Error("expected interrupted rendering");
 
@@ -509,7 +480,7 @@ describe("PuppeteerSg", () => {
         yield* Effect.promise(() => rendered.promise);
         const contents = yield* Effect.promise(() => fs.readFile(pdfPath, "utf8"));
 
-        return { interrupted: Cause.isInterruptedOnly(exit.cause), contents };
+        return { interrupted: Cause.hasInterruptsOnly(exit.cause), contents };
       }).pipe(Effect.provide(makeTestLayer()), Effect.scoped),
     );
 
@@ -580,25 +551,23 @@ describe("PuppeteerSg", () => {
     const result = await Effect.runPromise(
       Effect.gen(function* () {
         const svc = yield* PuppeteerSg;
-        const fiber = yield* Effect.fork(svc.generatePDF(page, pdfPath));
+        const fiber = yield* Effect.forkChild(svc.generatePDF(page, pdfPath));
         yield* Effect.promise(() => entered.promise);
         const interruption = Effect.runPromise(Fiber.interrupt(fiber));
 
         const canceledBeforeCommit = yield* Effect.promise(() =>
-          Promise.race([
-            interruption.then(() => true),
-            new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
-          ]),
+          Promise.race([interruption.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100))]),
         );
 
         release.resolve();
-        const exit = yield* Effect.promise(() => interruption);
+        yield* Effect.promise(() => interruption);
+        const exit = yield* Fiber.await(fiber);
         yield* Effect.promise(() => finished.promise);
 
         if (!Exit.isFailure(exit)) throw new Error("expected interrupted PDF generation");
         const contents = yield* Effect.promise(() => fs.readFile(pdfPath, "utf8"));
 
-        return { canceledBeforeCommit, interrupted: Cause.isInterruptedOnly(exit.cause), contents };
+        return { canceledBeforeCommit, interrupted: Cause.hasInterruptsOnly(exit.cause), contents };
       }).pipe(Effect.provide(layer), Effect.scoped),
     );
 
@@ -626,7 +595,7 @@ describe("PuppeteerSg", () => {
         const exit = yield* Effect.exit(svc.generatePDF(page, pdfPath));
 
         if (!Exit.isFailure(exit)) throw new Error("expected PDF generation failure");
-        const failure = Option.getOrThrow(Cause.failureOption(exit.cause));
+        const failure = Option.getOrThrow(Cause.findErrorOption(exit.cause));
 
         return {
           tag: failure._tag,
@@ -661,11 +630,9 @@ describe("PuppeteerSg", () => {
         const exit = yield* Effect.exit(svc.generatePDF(page, pdfPath));
 
         if (!Exit.isFailure(exit)) throw new Error("expected PDF output write failure");
-        const failure = Option.getOrThrow(Cause.failureOption(exit.cause));
+        const failure = Option.getOrThrow(Cause.findErrorOption(exit.cause));
 
-        const errno = Schema.decodeUnknownSync(Schema.Struct({ code: Schema.String }))(
-          failure.cause,
-        );
+        const errno = Schema.decodeUnknownSync(Schema.Struct({ code: Schema.String }))(failure.cause);
 
         return { tag: failure._tag, path: failure.path, code: errno.code };
       }).pipe(Effect.provide(makeTestLayer()), Effect.scoped),

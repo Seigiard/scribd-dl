@@ -101,16 +101,13 @@ describe("JobStore", () => {
       const result = await Effect.runPromise(
         Effect.gen(function* () {
           const store = yield* JobStore;
-          const first = yield* Effect.fork(store.write([job("first", "Queued")]));
+          const first = yield* Effect.forkChild(store.write([job("first", "Queued")]));
           yield* Effect.promise(() => entered.promise);
-          const second = yield* Effect.fork(store.write([job("second", "Queued")]));
+          const second = yield* Effect.forkChild(store.write([job("second", "Queued")]));
           const interruption = Effect.runPromise(Fiber.interrupt(first));
 
           const canceledBeforeRelease = yield* Effect.promise(() =>
-            Promise.race([
-              interruption.then(() => true),
-              new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100)),
-            ]),
+            Promise.race([interruption.then(() => true), new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 100))]),
           );
 
           release.resolve();
@@ -141,11 +138,7 @@ describe("JobStore", () => {
   describe("read", () => {
     test("returns jobs in file order when all lines are valid", async () => {
       // #given
-      const jobs = [
-        job("a", "Queued"),
-        job("b", "Downloaded"),
-        job("c", "Failed", { failure: { reason: "x", retryable: true } }),
-      ];
+      const jobs = [job("a", "Queued"), job("b", "Downloaded"), job("c", "Failed", { failure: { reason: "x", retryable: true } })];
 
       const body = jobs.map((j) => JSON.stringify(j)).join("\n") + "\n";
       await fs.writeFile(path.join(tmpDir, "jobs.jsonl"), body);
@@ -212,10 +205,7 @@ describe("JobStore", () => {
     test("skips line missing required fields", async () => {
       // #given
       const warn = spyOn(console, "warn").mockImplementation(() => {});
-      await fs.writeFile(
-        path.join(tmpDir, "jobs.jsonl"),
-        `{"id":"x"}\n${JSON.stringify(job("a", "Queued"))}\n`,
-      );
+      await fs.writeFile(path.join(tmpDir, "jobs.jsonl"), `{"id":"x"}\n${JSON.stringify(job("a", "Queued"))}\n`);
 
       // #when
       const result = await runRead(tmpDir);
@@ -319,9 +309,7 @@ describe("JobStore", () => {
   describe("compression persistence (KTD4)", () => {
     test("a Downloaded job with a failed compression survives write then read", async () => {
       // #given
-      const jobs = [
-        job("a", "Downloaded", { compression: { status: "failed", reason: "network error" } }),
-      ];
+      const jobs = [job("a", "Downloaded", { compression: { status: "failed", reason: "network error" } })];
 
       // #when
       await runWrite(tmpDir, jobs);
@@ -345,9 +333,7 @@ describe("JobStore", () => {
 
     test("a failed compression on a non-Downloaded job is dropped", async () => {
       // #given — only terminal (Downloaded) failed compression is retained
-      const jobs = [
-        job("a", "Queued", { compression: { status: "failed", reason: "network error" } }),
-      ];
+      const jobs = [job("a", "Queued", { compression: { status: "failed", reason: "network error" } })];
 
       // #when
       await runWrite(tmpDir, jobs);

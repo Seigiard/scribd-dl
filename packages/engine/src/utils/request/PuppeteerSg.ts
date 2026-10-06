@@ -2,11 +2,7 @@ import { Context, Effect, Layer } from "effect";
 import * as fs from "node:fs/promises";
 import puppeteer from "puppeteer";
 import type { LaunchOptions, Page, PDFOptions } from "puppeteer";
-import {
-  BrowserLaunchFailed,
-  PageLoadFailed,
-  PdfGenerationFailed,
-} from "../../errors/DomainErrors";
+import { BrowserLaunchFailed, PageLoadFailed, PdfGenerationFailed } from "../../errors/DomainErrors";
 
 const PAGE_BUFFER_MS = 1000;
 
@@ -78,16 +74,12 @@ export interface PuppeteerPdfOptions {
 
 export interface PuppeteerSgService {
   readonly getPage: (url: string) => Effect.Effect<Page, PageLoadFailed, never>;
-  readonly generatePDF: (
-    page: Page,
-    path: string,
-    options?: PuppeteerPdfOptions,
-  ) => Effect.Effect<void, PdfGenerationFailed, never>;
+  readonly generatePDF: (page: Page, path: string, options?: PuppeteerPdfOptions) => Effect.Effect<void, PdfGenerationFailed, never>;
 }
 
-export class PuppeteerSg extends Context.Tag("PuppeteerSg")<PuppeteerSg, PuppeteerSgService>() {}
+export class PuppeteerSg extends Context.Service<PuppeteerSg, PuppeteerSgService>()("PuppeteerSg") {}
 
-export const PuppeteerSgTag: Context.Tag<PuppeteerSg, PuppeteerSgService> = PuppeteerSg;
+export const PuppeteerSgTag = PuppeteerSg;
 
 export interface PuppeteerSgOptions {
   readonly headful: boolean;
@@ -137,7 +129,7 @@ export const makePuppeteerSgLive = (
   launch: BrowserLauncher = (options) => puppeteer.launch(options),
   io: PuppeteerPdfIo = fs,
 ): Layer.Layer<PuppeteerSg, BrowserLaunchFailed, never> =>
-  Layer.scoped(
+  Layer.effect(
     PuppeteerSg,
     Effect.gen(function* () {
       const browser = yield* Effect.acquireRelease(
@@ -195,11 +187,7 @@ export const makePuppeteerSgLive = (
           }),
         );
 
-      const generatePDF = (
-        page: Page,
-        pdfPath: string,
-        options?: PuppeteerPdfOptions,
-      ): Effect.Effect<void, PdfGenerationFailed, never> =>
+      const generatePDF = (page: Page, pdfPath: string, options?: PuppeteerPdfOptions): Effect.Effect<void, PdfGenerationFailed, never> =>
         Effect.gen(function* () {
           const pdfOptions: PDFOptions = {
             printBackground: true,

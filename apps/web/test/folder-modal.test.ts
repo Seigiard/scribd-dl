@@ -18,7 +18,7 @@ type ModalProps = {
 const mountModal = (props: ModalProps): HTMLElement => {
   const container = document.createElement("div");
   document.body.appendChild(container);
-  render(container, folderModal({ draft: "", ...props }, saveFolderMock));
+  render(container, () => folderModal({ draft: "", ...props }, saveFolderMock));
 
   return container;
 };
@@ -79,7 +79,7 @@ describe("folderModal()", () => {
     expect(document.activeElement).toBe(cancelBtn);
 
     // #when — re-render due to $modalError change (modal still open)
-    render(root, folderModal({ mode: "folder", folder: null, error: "boom", draft: "/x" }));
+    render(root, () => folderModal({ mode: "folder", folder: null, error: "boom", draft: "/x" }));
     await flush();
 
     // #then — focus stays on Cancel; ref does not re-steal it
@@ -323,10 +323,7 @@ describe("folderModal()", () => {
     $draftFolder.set("/my-draft");
     const container = document.createElement("div");
     document.body.appendChild(container);
-    render(
-      container,
-      folderModal({ mode: "folder", folder: "/old", error: null, draft: $draftFolder.get() }),
-    );
+    render(container, () => folderModal({ mode: "folder", folder: "/old", error: null, draft: $draftFolder.get() }));
     const input = container.querySelector<HTMLInputElement>(".folder-modal-input")!;
     expect(input.value).toBe("/my-draft");
 
@@ -334,10 +331,7 @@ describe("folderModal()", () => {
     $folder.set("/external");
 
     // #then — draft survives the external change; next render keeps user input
-    render(
-      container,
-      folderModal({ mode: "folder", folder: "/external", error: null, draft: $draftFolder.get() }),
-    );
+    render(container, () => folderModal({ mode: "folder", folder: "/external", error: null, draft: $draftFolder.get() }));
     expect(input.value).toBe("/my-draft");
     expect($draftFolder.get()).toBe("/my-draft");
   });

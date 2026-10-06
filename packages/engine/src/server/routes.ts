@@ -1,17 +1,10 @@
-import { HttpRouter, HttpServerRequest, HttpServerResponse } from "@effect/platform";
-import { Effect, Schema, Stream } from "effect";
-import {
-  EnqueueRequestSchema,
-  FolderRequestSchema,
-  SettingsRequestSchema,
-  type ErrorResponse,
-  type JobId,
-} from "@scribd-dl/shared";
+import { HttpRouter, HttpServerRequest, HttpServerResponse } from "effect/http";
+import { Effect, Layer, Schema, Stream } from "effect";
+import { EnqueueRequestSchema, FolderRequestSchema, SettingsRequestSchema, type ErrorResponse, type JobId } from "@scribd-dl/shared";
 import type { NotRemovable, NotRetryable } from "../errors/DomainErrors";
 import { DownloadEngineTag } from "../service/DownloadEngine";
 
-const jsonError = (status: number, body: ErrorResponse) =>
-  HttpServerResponse.json(body, { status });
+const jsonError = (status: number, body: ErrorResponse) => HttpServerResponse.json(body, { status });
 
 const readJsonBody = Effect.gen(function* () {
   const req = yield* HttpServerRequest.HttpServerRequest;
@@ -19,7 +12,8 @@ const readJsonBody = Effect.gen(function* () {
   return yield* req.json;
 });
 
-const snapshotRoute = HttpRouter.get(
+const snapshotRoute = HttpRouter.add(
+  "GET",
   "/snapshot",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
@@ -29,15 +23,14 @@ const snapshotRoute = HttpRouter.get(
   }),
 );
 
-const enqueueRoute = HttpRouter.post(
+const enqueueRoute = HttpRouter.add(
+  "POST",
   "/enqueue",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
-    const body = yield* readJsonBody.pipe(Effect.catchAll(() => Effect.succeed({})));
+    const body = yield* readJsonBody.pipe(Effect.catch(() => Effect.succeed({})));
 
-    const { text } = yield* Schema.decodeUnknown(EnqueueRequestSchema)(body).pipe(
-      Effect.orElseSucceed(() => ({ text: "" })),
-    );
+    const { text } = yield* Schema.decodeUnknownEffect(EnqueueRequestSchema)(body).pipe(Effect.orElseSucceed(() => ({ text: "" })));
 
     const jobs = yield* engine.enqueue(text);
 
@@ -45,7 +38,8 @@ const enqueueRoute = HttpRouter.post(
   }),
 );
 
-const clearCompletedRoute = HttpRouter.del(
+const clearCompletedRoute = HttpRouter.add(
+  "DELETE",
   "/jobs/completed",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
@@ -55,7 +49,8 @@ const clearCompletedRoute = HttpRouter.del(
   }),
 );
 
-const clearFailedRoute = HttpRouter.del(
+const clearFailedRoute = HttpRouter.add(
+  "DELETE",
   "/jobs/failed",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
@@ -65,7 +60,8 @@ const clearFailedRoute = HttpRouter.del(
   }),
 );
 
-const clearAllRoute = HttpRouter.del(
+const clearAllRoute = HttpRouter.add(
+  "DELETE",
   "/jobs",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
@@ -75,7 +71,8 @@ const clearAllRoute = HttpRouter.del(
   }),
 );
 
-const removeRoute = HttpRouter.del(
+const removeRoute = HttpRouter.add(
+  "DELETE",
   "/jobs/:id",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
@@ -85,14 +82,13 @@ const removeRoute = HttpRouter.del(
     return yield* engine.remove(id).pipe(
       Effect.map(() => HttpServerResponse.empty({ status: 204 })),
       Effect.catchTag("JobNotFound", () => jsonError(404, { error: "JobNotFound" })),
-      Effect.catchTag("NotRemovable", (e: NotRemovable) =>
-        jsonError(409, { error: "NotRemovable", status: e.status }),
-      ),
+      Effect.catchTag("NotRemovable", (e: NotRemovable) => jsonError(409, { error: "NotRemovable", status: e.status })),
     );
   }),
 );
 
-const retryRoute = HttpRouter.post(
+const retryRoute = HttpRouter.add(
+  "POST",
   "/jobs/:id/retry",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
@@ -102,14 +98,13 @@ const retryRoute = HttpRouter.post(
     return yield* engine.retry(id).pipe(
       Effect.map(() => HttpServerResponse.empty({ status: 204 })),
       Effect.catchTag("JobNotFound", () => jsonError(404, { error: "JobNotFound" })),
-      Effect.catchTag("NotRetryable", (e: NotRetryable) =>
-        jsonError(409, { error: "NotRetryable", status: e.status }),
-      ),
+      Effect.catchTag("NotRetryable", (e: NotRetryable) => jsonError(409, { error: "NotRetryable", status: e.status })),
     );
   }),
 );
 
-const folderGetRoute = HttpRouter.get(
+const folderGetRoute = HttpRouter.add(
+  "GET",
   "/folder",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
@@ -119,15 +114,14 @@ const folderGetRoute = HttpRouter.get(
   }),
 );
 
-const folderPostRoute = HttpRouter.post(
+const folderPostRoute = HttpRouter.add(
+  "POST",
   "/folder",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
-    const body = yield* readJsonBody.pipe(Effect.catchAll(() => Effect.succeed({})));
+    const body = yield* readJsonBody.pipe(Effect.catch(() => Effect.succeed({})));
 
-    const { path } = yield* Schema.decodeUnknown(FolderRequestSchema)(body).pipe(
-      Effect.orElseSucceed(() => ({ path: "" })),
-    );
+    const { path } = yield* Schema.decodeUnknownEffect(FolderRequestSchema)(body).pipe(Effect.orElseSucceed(() => ({ path: "" })));
 
     if (path.trim() === "") {
       return yield* jsonError(400, { error: "InvalidPath" });
@@ -142,7 +136,8 @@ const folderPostRoute = HttpRouter.post(
 // GET /settings returns the iLovePDF keys — including the secret — in plaintext (KTD7).
 // It relies on the engine's loopback binding (127.0.0.1) plus the localhost/tauri CORS
 // gate in HttpServerLive; no stricter auth is applied (accepted local-tool tradeoff).
-const settingsGetRoute = HttpRouter.get(
+const settingsGetRoute = HttpRouter.add(
+  "GET",
   "/settings",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
@@ -152,17 +147,18 @@ const settingsGetRoute = HttpRouter.get(
   }),
 );
 
-const settingsPostRoute = HttpRouter.post(
+const settingsPostRoute = HttpRouter.add(
+  "POST",
   "/settings",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
-    const body = yield* readJsonBody.pipe(Effect.catchAll(() => Effect.succeed({})));
+    const body = yield* readJsonBody.pipe(Effect.catch(() => Effect.succeed({})));
 
-    const { publicKey } = yield* Schema.decodeUnknown(SettingsRequestSchema.pick("publicKey"))(
+    const { publicKey } = yield* Schema.decodeUnknownEffect(Schema.Struct({ publicKey: SettingsRequestSchema.fields.publicKey }))(
       body,
     ).pipe(Effect.orElseSucceed(() => ({ publicKey: "" })));
 
-    const { secretKey } = yield* Schema.decodeUnknown(SettingsRequestSchema.pick("secretKey"))(
+    const { secretKey } = yield* Schema.decodeUnknownEffect(Schema.Struct({ secretKey: SettingsRequestSchema.fields.secretKey }))(
       body,
     ).pipe(Effect.orElseSucceed(() => ({ secretKey: "" })));
 
@@ -172,21 +168,24 @@ const settingsPostRoute = HttpRouter.post(
   }),
 );
 
-const eventsRoute = HttpRouter.get(
+const eventsRoute = HttpRouter.add(
+  "GET",
   "/events",
   Effect.gen(function* () {
     const engine = yield* DownloadEngineTag;
-    const socket = yield* HttpServerRequest.upgrade;
-    const write = yield* socket.writer;
-    const pushEvents = Stream.runForEach(engine.events, (event) => write(JSON.stringify(event)));
+    const request = yield* HttpServerRequest.HttpServerRequest;
+    const socket = yield* request.upgrade;
+    const reader = yield* socket.reader;
+    const writer = yield* socket.writer;
+    const pushEvents = Stream.runForEach(engine.events, (event) => writer.write(JSON.stringify(event)));
     yield* Effect.forkScoped(pushEvents);
-    yield* socket.run(() => Effect.void);
+    yield* Effect.forever(reader.pull);
 
     return HttpServerResponse.empty();
   }),
 );
 
-export const router = HttpRouter.empty.pipe(
+export const router = Layer.mergeAll(
   snapshotRoute,
   enqueueRoute,
   clearCompletedRoute,

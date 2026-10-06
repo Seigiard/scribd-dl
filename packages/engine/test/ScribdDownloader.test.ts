@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, mock, spyOn, test, type Mock } from "bun:test";
-import { Cause, Chunk, Effect, Exit, Layer, Predicate } from "effect";
+import { Cause, Effect, Exit, Layer, Predicate } from "effect";
 import puppeteer, { type Page } from "puppeteer";
 import type { ScraperEvent } from "../src/service/Scraper";
 import { ScribdDownloader, ScribdDownloaderLive } from "../src/service/ScribdDownloader";
@@ -60,39 +60,37 @@ const resetState = () => {
   state.slideshowVisible = [];
   state.slideshowClickOutcomes = [];
   state.page = {
-    evaluate: mock(
-      async (fn: Parameters<Page["evaluate"]>[0], ...args: Parameters<Page["evaluate"]>[1][]) => {
-        if (state.processPageThrows) throw new Error("evaluate failed");
-        // Dispatch by inspecting the evaluated function source. Each ScribdDownloader
-        // page.evaluate site carries a unique marker substring; the mock returns the
-        // matching fixture so unit tests don't need a real browser.
-        const src = String(fn);
+    evaluate: mock(async (fn: Parameters<Page["evaluate"]>[0], ...args: Parameters<Page["evaluate"]>[1][]) => {
+      if (state.processPageThrows) throw new Error("evaluate failed");
+      // Dispatch by inspecting the evaluated function source. Each ScribdDownloader
+      // page.evaluate site carries a unique marker substring; the mock returns the
+      // matching fixture so unit tests don't need a real browser.
+      const src = String(fn);
 
-        if (src.includes("removeSelectorAll") || src.includes("removeMarginSelectorAll")) {
-          return state.processPageResult;
-        }
-
-        if (src.includes("next.click()")) {
-          return args.length === 0
-            ? { visible: state.slideshowVisible.shift() ?? null, outcome: null }
-            : { visible: null, outcome: state.slideshowClickOutcomes.shift() ?? "no-next" };
-        }
-
-        if (src.includes("naturalWidth")) {
-          return undefined;
-        }
-
-        if (src.includes("getBoundingClientRect")) {
-          return state.slideshowVisible.shift() ?? null;
-        }
-
-        if (src.includes("querySelector(selector)")) {
-          return state.isSlideshow;
-        }
-
+      if (src.includes("removeSelectorAll") || src.includes("removeMarginSelectorAll")) {
         return state.processPageResult;
-      },
-    ),
+      }
+
+      if (src.includes("next.click()")) {
+        return args.length === 0
+          ? { visible: state.slideshowVisible.shift() ?? null, outcome: null }
+          : { visible: null, outcome: state.slideshowClickOutcomes.shift() ?? "no-next" };
+      }
+
+      if (src.includes("naturalWidth")) {
+        return undefined;
+      }
+
+      if (src.includes("getBoundingClientRect")) {
+        return state.slideshowVisible.shift() ?? null;
+      }
+
+      if (src.includes("querySelector(selector)")) {
+        return state.isSlideshow;
+      }
+
+      return state.processPageResult;
+    }),
     close: mock(async () => {}),
     content: mock(async () => "<html><body>fake content</body></html>"),
   };
@@ -194,7 +192,7 @@ describe("ScribdDownloader", () => {
     expect(Exit.isFailure(exit)).toBe(true);
 
     if (Exit.isFailure(exit)) {
-      const failures = Chunk.toReadonlyArray(Cause.failures(exit.cause));
+      const failures = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
       expect(failures[0]!._tag).toBe("UnsupportedUrl");
     }
   });
@@ -327,11 +325,7 @@ describe("ScribdDownloader", () => {
 
     // #then
     expect(Exit.isSuccess(exit)).toBe(true);
-    expect(captured.map((e) => e._tag)).toEqual([
-      "TitleResolved",
-      "ScrapeProgress",
-      "RenderProgress",
-    ]);
+    expect(captured.map((e) => e._tag)).toEqual(["TitleResolved", "ScrapeProgress", "RenderProgress"]);
   });
 
   test("emits RenderProgress N times for N groups (multi-dim)", async () => {
@@ -458,9 +452,7 @@ describe("ScribdDownloader", () => {
   });
 
   describe("debug=true behavior", () => {
-    const withBunWriteSpy = async (
-      run: (writes: Array<{ path: string; data: string }>) => Promise<void>,
-    ) => {
+    const withBunWriteSpy = async (run: (writes: Array<{ path: string; data: string }>) => Promise<void>) => {
       const writes: Array<{ path: string; data: string }> = [];
 
       const writeSpy = spyOn(Bun, "write").mockImplementation(async (path, data) => {
@@ -689,7 +681,7 @@ describe("ScribdDownloader", () => {
       expect(Exit.isFailure(exit)).toBe(true);
 
       if (Exit.isFailure(exit)) {
-        const failures = Chunk.toReadonlyArray(Cause.failures(exit.cause));
+        const failures = exit.cause.reasons.filter(Cause.isFailReason).map((reason) => reason.error);
 
         const first = failures[0]!;
         expect(first._tag).toBe("PageProcessFailed");

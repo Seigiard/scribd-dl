@@ -2,7 +2,7 @@ import * as fs from "node:fs/promises";
 import * as fsSync from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
-import { Context, Effect, Layer, Option, Schema } from "effect";
+import { Context, Effect, Layer, Option, Schema, Semaphore } from "effect";
 import type { Job } from "@scribd-dl/shared";
 import { PersistenceFailed } from "../errors/DomainErrors";
 
@@ -11,9 +11,9 @@ export interface JobStoreService {
   readonly write: (jobs: ReadonlyArray<Job>) => Effect.Effect<void, PersistenceFailed, never>;
 }
 
-export class JobStore extends Context.Tag("JobStore")<JobStore, JobStoreService>() {}
+export class JobStore extends Context.Service<JobStore, JobStoreService>()("JobStore") {}
 
-export const JobStoreTag: Context.Tag<JobStore, JobStoreService> = JobStore;
+export const JobStoreTag = JobStore;
 
 const JOBS_FILENAME = "jobs.jsonl";
 
@@ -22,9 +22,9 @@ export const defaultBaseDir = (): string => path.join(os.homedir(), ".config", "
 const StoredJob = Schema.Struct({
   id: Schema.NonEmptyString,
   url: Schema.NonEmptyString,
-  domain: Schema.Literal("scribd", "unsupported"),
+  domain: Schema.Literals(["scribd", "unsupported"]),
   displayTitle: Schema.String,
-  status: Schema.Literal("Queued", "Downloading", "Downloaded", "Failed"),
+  status: Schema.Literals(["Queued", "Downloading", "Downloaded", "Failed"]),
   failure: Schema.optional(Schema.Unknown),
   compression: Schema.optional(Schema.Unknown),
 });
@@ -39,12 +39,11 @@ const StoredCompressionFailure = Schema.Struct({
 // Only a terminal `failed` compression on a `Downloaded` job survives to disk (KTD4):
 // a transient `compressing` flag is always dropped so a killed engine never resumes
 // with a stale in-flight marker.
-const isTerminalFailedCompression = (job: Job): boolean =>
-  job.status === "Downloaded" && job.compression?.status === "failed";
+const isTerminalFailedCompression = (job: Job): boolean => job.status === "Downloaded" && job.compression?.status === "failed";
 
 const parseJobLine = (raw: string): Job | null => {
   try {
-    const parsed = Schema.decodeUnknownSync(Schema.parseJson(StoredJob))(raw);
+    const parsed = Schema.decodeUnknownSync(Schema.fromJsonString(StoredJob))(raw);
     const { failure, compression, ...base } = parsed;
     const decodedFailure = Schema.decodeUnknownOption(StoredFailure)(failure);
     const decodedCompression = Schema.decodeUnknownOption(StoredCompressionFailure)(compression);
@@ -81,16 +80,13 @@ const normalize = (job: Job): Job => {
 
 export type JobStoreIo = Pick<typeof fs, "mkdir" | "writeFile" | "rename">;
 
-export const makeJobStore = (
-  baseDir: string,
-  io: JobStoreIo = fs,
-): Layer.Layer<JobStore, never, never> =>
-  Layer.scoped(
+export const makeJobStore = (baseDir: string, io: JobStoreIo = fs): Layer.Layer<JobStore, never, never> =>
+  Layer.effect(
     JobStore,
     Effect.gen(function* () {
       const filePath = path.join(baseDir, JOBS_FILENAME);
       const tmpPath = `${filePath}.tmp`;
-      const writeLock = yield* Effect.makeSemaphore(1);
+      const writeLock = yield* Semaphore.make(1);
 
       const read: Effect.Effect<ReadonlyArray<Job>, never, never> = Effect.sync(() => {
         let raw: string;
@@ -127,9 +123,7 @@ export const makeJobStore = (
         return out;
       });
 
-      const performWrite = (
-        jobs: ReadonlyArray<Job>,
-      ): Effect.Effect<void, PersistenceFailed, never> =>
+      const performWrite = (jobs: ReadonlyArray<Job>): Effect.Effect<void, PersistenceFailed, never> =>
         Effect.tryPromise({
           try: async () => {
             await io.mkdir(baseDir, { recursive: true });

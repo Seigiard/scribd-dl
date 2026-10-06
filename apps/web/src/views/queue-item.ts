@@ -1,4 +1,5 @@
-import { html, type Hole } from "uhtml";
+import { html } from "uhtml";
+
 import type { Job } from "@scribd-dl/shared";
 import { removeJobById, retryJobById } from "@/engineClient";
 import { STATUS_ICON, icon } from "./icons";
@@ -26,7 +27,7 @@ export interface QueueCommands {
 
 const defaultCommands: QueueCommands = { removeJobById, retryJobById };
 
-const actionButton = (job: Job, commands: QueueCommands): Hole | null => {
+const actionButton = (job: Job, commands: QueueCommands): ReturnType<typeof html> | null => {
   const action = pickAction(job);
 
   if (!action) return null;
@@ -47,7 +48,7 @@ const actionButton = (job: Job, commands: QueueCommands): Hole | null => {
   </button>`;
 };
 
-const progressLine = (job: Job): Hole | null => {
+const progressLine = (job: Job): ReturnType<typeof html> | null => {
   // Compression runs while status is still Downloading (KTD3); when it does, the
   // compressing indicator replaces the progress line so the row shows one state.
   if (job.status !== "Downloading" || !job.progress || job.compression) return null;
@@ -56,7 +57,7 @@ const progressLine = (job: Job): Hole | null => {
   return html`<div class="item-progress">${done} / ${total} (${stage})</div>`;
 };
 
-const compressionLine = (job: Job): Hole | null => {
+const compressionLine = (job: Job): ReturnType<typeof html> | null => {
   const c = job.compression;
 
   if (!c) return null;
@@ -65,25 +66,24 @@ const compressionLine = (job: Job): Hole | null => {
     return html`<div class="item-compressing">Compressing…</div>`;
   }
 
-  return html`<div class="item-compression-failed" title=${c.reason}>
-    ⚠ Compression failed, file kept — ${c.reason}
-  </div>`;
+  return html`<div class="item-compression-failed" title=${c.reason}>⚠ Compression failed, file kept — ${c.reason}</div>`;
 };
 
-const reasonLine = (job: Job): Hole | null => {
+const reasonLine = (job: Job): ReturnType<typeof html> | null => {
   if (job.status !== "Failed" || !job.failure) return null;
 
   return html`<div class="item-reason">Reason: ${job.failure.reason}</div>`;
 };
 
-export const queueItem = (job: Job, commands: QueueCommands = defaultCommands): Hole => {
+export const queueItem = (job: Job, commands: QueueCommands = defaultCommands): ReturnType<typeof html> => {
   return html`<div class="queue-item" data-status=${job.status}>
     <div class="item-head">
       ${icon(STATUS_ICON[job.status], "item-icon-status")}
       <span class="item-title">${job.displayTitle || EMPTY_TITLE}</span>
-      ${actionButton(job, commands)}
+      ${[actionButton(job, commands)].filter((node) => node !== null)}
     </div>
     <div class="item-url">${job.url}</div>
-    ${progressLine(job)} ${compressionLine(job)} ${reasonLine(job)}
+    ${[progressLine(job)].filter((node) => node !== null)} ${[compressionLine(job)].filter((node) => node !== null)}
+    ${[reasonLine(job)].filter((node) => node !== null)}
   </div>`;
 };

@@ -30,16 +30,12 @@ const runRemove = (target: string) =>
     ),
   );
 
-const isDirectoryIoFailed = (
-  exit: Exit.Exit<unknown, DirectoryIoFailed>,
-  op: "create" | "remove",
-  expectedPath: string,
-): boolean => {
+const isDirectoryIoFailed = (exit: Exit.Exit<unknown, DirectoryIoFailed>, op: "create" | "remove", expectedPath: string): boolean => {
   if (!Exit.isFailure(exit)) {
     return false;
   }
 
-  const failure = Cause.failureOption(exit.cause);
+  const failure = Cause.findErrorOption(exit.cause);
 
   if (Option.isNone(failure)) {
     return false;
@@ -140,10 +136,10 @@ describe("DirectoryIo", () => {
         // #when
         let cancellationCompleted = false;
 
-        const cancellation = Effect.runPromise(Fiber.interrupt(fiber)).then((exit) => {
+        const cancellation = Effect.runPromise(Fiber.interrupt(fiber)).then(() => {
           cancellationCompleted = true;
 
-          return exit;
+          return Effect.runPromise(Fiber.await(fiber));
         });
 
         await new Promise<void>((resolve) => setImmediate(resolve));
@@ -157,7 +153,7 @@ describe("DirectoryIo", () => {
 
         // #then
         expect(completedBeforeRelease).toBe(false);
-        expect(Exit.isInterrupted(exit)).toBe(true);
+        expect(Exit.hasInterrupts(exit)).toBe(true);
         expect(await fs.readdir(target)).toEqual(["fresh.txt"]);
         expect(await fs.readFile(path.join(target, "fresh.txt"), "utf8")).toBe("fresh");
       },

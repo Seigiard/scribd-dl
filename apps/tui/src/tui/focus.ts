@@ -12,10 +12,7 @@ export interface FocusableSummary {
   readonly hasAny: boolean;
 }
 
-export const computeFocusable = (
-  snap: EngineSnapshot,
-  transient: TransientState | null,
-): FocusableSummary => {
+export const computeFocusable = (snap: EngineSnapshot, transient: TransientState | null): FocusableSummary => {
   const slots: FocusableSlot[] = [{ kind: "change" }];
   const removeSlots: FocusableSlot[] = [];
   const retrySlots: FocusableSlot[] = [];
@@ -28,8 +25,7 @@ export const computeFocusable = (
 
     if (j.status === "Queued") removeSlots.push({ kind: "remove", id: j.id });
 
-    if (j.status === "Failed" && j.failure?.retryable === true)
-      retrySlots.push({ kind: "retry", id: j.id });
+    if (j.status === "Failed" && j.failure?.retryable === true) retrySlots.push({ kind: "retry", id: j.id });
   }
 
   const clearVisible = transient === null;

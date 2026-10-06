@@ -17,7 +17,7 @@ describe("header()", () => {
     const container = document.createElement("div");
 
     // #when
-    render(container, header({ folder: null }));
+    render(container, () => header({ folder: null }));
 
     // #then
     expect(container.textContent).toContain("Download folder:");
@@ -29,7 +29,7 @@ describe("header()", () => {
     const container = document.createElement("div");
 
     // #when
-    render(container, header({ folder: "/Users/foo" }));
+    render(container, () => header({ folder: "/Users/foo" }));
 
     // #then
     expect(container.textContent).toContain("/Users/foo");
@@ -38,7 +38,7 @@ describe("header()", () => {
   it("clicking Change sets $modal to 'folder'", () => {
     // #given
     const container = document.createElement("div");
-    render(container, header({ folder: null }));
+    render(container, () => header({ folder: null }));
     const button = container.querySelector("button")!;
 
     // #when

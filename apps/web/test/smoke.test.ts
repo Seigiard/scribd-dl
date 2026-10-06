@@ -9,10 +9,7 @@ describe("SPA smoke", () => {
   beforeEach(async () => {
     resetStores();
 
-    const html = await readFile(
-      resolve(dirname(fileURLToPath(import.meta.url)), "../index.html"),
-      "utf8",
-    );
+    const html = await readFile(resolve(dirname(fileURLToPath(import.meta.url)), "../index.html"), "utf8");
 
     const scaffold = new DOMParser().parseFromString(html, "text/html");
     document.body.replaceChildren(...Array.from(scaffold.body.childNodes));

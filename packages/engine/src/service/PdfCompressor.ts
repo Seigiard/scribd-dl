@@ -32,19 +32,13 @@ export type ApiFactory = (publicKey: string, secretKey: string) => ILovePDFApiLi
 export type FileFactory = (absolutePath: string) => ILovePDFFile;
 
 export interface PdfCompressorService {
-  readonly compress: (
-    pdfPath: string,
-    keys: CompressionKeys,
-  ) => Effect.Effect<void, CompressionFailed, never>;
+  readonly compress: (pdfPath: string, keys: CompressionKeys) => Effect.Effect<void, CompressionFailed, never>;
   readonly validate: (keys: CompressionKeys) => Effect.Effect<boolean, never, never>;
 }
 
-export class PdfCompressor extends Context.Tag("PdfCompressor")<
-  PdfCompressor,
-  PdfCompressorService
->() {}
+export class PdfCompressor extends Context.Service<PdfCompressor, PdfCompressorService>()("PdfCompressor") {}
 
-export const PdfCompressorTag: Context.Tag<PdfCompressor, PdfCompressorService> = PdfCompressor;
+export const PdfCompressorTag = PdfCompressor;
 
 class InvalidResponseError extends Error {
   constructor() {
@@ -60,11 +54,10 @@ class QuotaExhaustedError extends Error {
   }
 }
 
-const isPdfBytes = (bytes: Uint8Array): boolean =>
-  bytes.length >= PDF_MAGIC.length && PDF_MAGIC.every((b, i) => bytes[i] === b);
+const isPdfBytes = (bytes: Uint8Array): boolean => bytes.length >= PDF_MAGIC.length && PDF_MAGIC.every((b, i) => bytes[i] === b);
 
 const ProviderFailure = Schema.Struct({
-  message: Schema.optionalWith(Schema.String, { default: () => "" }),
+  message: Schema.String.pipe(Schema.withDecodingDefaultKey(Effect.succeed(""))),
   response: Schema.optional(Schema.Struct({ status: Schema.Number })),
 });
 
@@ -74,8 +67,7 @@ const ProviderFailure = Schema.Struct({
 const classifyFailure = (cause: Error, status: number | undefined) => {
   const scrubbed = { message: cause.message, status };
 
-  if (cause instanceof InvalidResponseError)
-    return { reason: "invalid response from compressor", cause: scrubbed };
+  if (cause instanceof InvalidResponseError) return { reason: "invalid response from compressor", cause: scrubbed };
 
   if (cause instanceof QuotaExhaustedError) return { reason: "quota exceeded", cause: scrubbed };
 
@@ -86,8 +78,7 @@ const classifyFailure = (cause: Error, status: number | undefined) => {
   if (status === undefined) {
     // No HTTP response: either a network error, or a local JWT-signing throw from a
     // malformed secret key (KTD5) — the latter is a credentials problem, not network.
-    if (/jwt|sign|token/i.test(scrubbed.message))
-      return { reason: "invalid credentials", cause: scrubbed };
+    if (/jwt|sign|token/i.test(scrubbed.message)) return { reason: "invalid credentials", cause: scrubbed };
 
     return { reason: "network error", cause: scrubbed };
   }
@@ -111,9 +102,7 @@ export const makePdfCompressor = (
         });
 
       return Effect.gen(function* () {
-        const task = yield* attempt(async () =>
-          makeApi(keys.publicKey, keys.secretKey).newTask("compress"),
-        );
+        const task = yield* attempt(async () => makeApi(keys.publicKey, keys.secretKey).newTask("compress"));
 
         yield* attempt(() => task.start());
 
@@ -146,10 +135,7 @@ export const makePdfCompressor = (
           const decoded = Schema.decodeUnknownOption(ProviderFailure)(cause);
           const status = Option.isSome(decoded) ? decoded.value.response?.status : undefined;
 
-          const error =
-            cause instanceof Error
-              ? cause
-              : new Error(Option.isSome(decoded) ? decoded.value.message : "");
+          const error = cause instanceof Error ? cause : new Error(Option.isSome(decoded) ? decoded.value.message : "");
 
           const { reason, cause: scrubbed } = classifyFailure(error, status);
 
@@ -163,7 +149,7 @@ export const makePdfCompressor = (
         await api.newTask("compress").start();
       }).pipe(
         Effect.as(true),
-        Effect.catchAll(() => Effect.succeed(false)),
+        Effect.catch(() => Effect.succeed(false)),
       ),
   });
 
@@ -195,7 +181,4 @@ const liveApiFactory: ApiFactory = (publicKey, secretKey) => {
 
 const liveFileFactory: FileFactory = (absolutePath) => new ILovePDFFile(absolutePath);
 
-export const PdfCompressorLive: Layer.Layer<PdfCompressor, never, never> = makePdfCompressor(
-  liveApiFactory,
-  liveFileFactory,
-);
+export const PdfCompressorLive: Layer.Layer<PdfCompressor, never, never> = makePdfCompressor(liveApiFactory, liveFileFactory);

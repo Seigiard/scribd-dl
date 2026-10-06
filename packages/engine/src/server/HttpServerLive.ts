@@ -1,4 +1,4 @@
-import { HttpMiddleware, HttpServer } from "@effect/platform";
+import { HttpMiddleware, HttpRouter } from "effect/http";
 import { BunHttpServer } from "@effect/platform-bun";
 import { Layer } from "effect";
 import { router } from "./routes";
@@ -24,7 +24,6 @@ const corsMiddleware = HttpMiddleware.cors({
   credentials: false,
 });
 
-const RouterLive = HttpServer.serve(router, corsMiddleware);
+const RouterLive = HttpRouter.serve(router, { middleware: corsMiddleware });
 
-export const HttpServerLive = (port: number) =>
-  RouterLive.pipe(Layer.provideMerge(BunHttpServer.layer({ port, hostname: "127.0.0.1" })));
+export const HttpServerLive = (port: number) => RouterLive.pipe(Layer.provideMerge(BunHttpServer.layer({ port, hostname: "127.0.0.1" })));

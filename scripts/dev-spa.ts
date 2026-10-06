@@ -13,8 +13,7 @@ const ENGINE_PORT = process.env.SCRIBD_DL_ENGINE_PORT ?? "4747";
 
 const procs: ReturnType<typeof spawn>[] = [];
 
-const tag = (label: string, color: string) => (line: string) =>
-  process.stdout.write(`\x1b[${color}m[${label}]\x1b[0m ${line}\n`);
+const tag = (label: string, color: string) => (line: string) => process.stdout.write(`\x1b[${color}m[${label}]\x1b[0m ${line}\n`);
 
 const launch = (label: string, color: string, command: string, args: string[], cwd: string) => {
   const tagger = tag(label, color);
@@ -76,6 +75,4 @@ launch("engine", "36", "bun", ["packages/engine/engine.ts", "--port", ENGINE_POR
 
 launch("vite", "35", "bun", ["run", "dev"], resolve(ROOT, "apps/web"));
 
-process.stdout.write(
-  `\x1b[2mdev:spa — engine on http://127.0.0.1:${ENGINE_PORT}, Vite on http://127.0.0.1:5173\x1b[0m\n`,
-);
+process.stdout.write(`\x1b[2mdev:spa — engine on http://127.0.0.1:${ENGINE_PORT}, Vite on http://127.0.0.1:5173\x1b[0m\n`);

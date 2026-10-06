@@ -1,5 +1,5 @@
-import { Args, Command } from "@effect/cli";
-import { BunContext, BunRuntime } from "@effect/platform-bun";
+import { Argument, Command } from "effect/cli";
+import { BunServices, BunRuntime } from "@effect/platform-bun";
 import { Data, Effect, Match, Predicate } from "effect";
 import { ScrapersDebugLive } from "./src/composition";
 import { findScraperForUrl, ScrapersTag, type OnEvent } from "./src/service/Scraper";
@@ -7,9 +7,7 @@ import { DEFAULT_CONFIG } from "./src/utils/io/ConfigLoader";
 
 const DEBUG_OUTPUT_FOLDER = DEFAULT_CONFIG.directory.output;
 
-const urlArg = Args.text({ name: "url" }).pipe(
-  Args.withDescription("Scraper URL to debug (e.g. Scribd document URL)."),
-);
+const urlArg = Argument.String("url").pipe(Argument.withDescription("Scraper URL to debug (e.g. Scribd document URL)."));
 
 const logEvent: OnEvent = (event) =>
   Effect.sync(() => {
@@ -32,9 +30,7 @@ const program = (url: string) =>
       return yield* Effect.fail(new NoScraperForUrl({ url }));
     }
 
-    console.log(
-      `[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms`,
-    );
+    console.log(`[debug] scraper=${scraper.id} url=${url} folder=${DEBUG_OUTPUT_FOLDER} rendertime=${DEFAULT_CONFIG.scribd.rendertime}ms`);
     yield* scraper.execute(url, DEBUG_OUTPUT_FOLDER, logEvent, true);
     console.log(`[debug] done. Artifacts in ${DEBUG_OUTPUT_FOLDER}/`);
   }).pipe(
@@ -52,10 +48,9 @@ const command = Command.make("scribd-dl-debug", { url: urlArg }, ({ url }) =>
 ).pipe(Command.withDescription("Run a scraper in debug mode (headful browser, keep artifacts)."));
 
 const cli = Command.run(command, {
-  name: "Scribd Downloader Debug Runner",
   version: "1.0.0",
 });
 
 if (import.meta.main) {
-  BunRuntime.runMain(cli(process.argv).pipe(Effect.provide(BunContext.layer)));
+  BunRuntime.runMain(cli.pipe(Effect.provide(BunServices.layer)));
 }

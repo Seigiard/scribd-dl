@@ -17,8 +17,7 @@ const retryJobMock = vi.fn(async () => {});
 
 const setFolderMock = vi.fn(async () => {});
 
-const { __testing, attachPasteHandler, detachPasteHandler, handlePastedText } =
-  await import("@/engineClient");
+const { __testing, attachPasteHandler, detachPasteHandler, handlePastedText } = await import("@/engineClient");
 
 const { $transient, resetStores } = await import("@/store");
 
@@ -62,10 +61,7 @@ describe("paste handler", () => {
       ],
     });
     await handlePastedText("look at this https://scribd.com/doc/123");
-    expect(enqueueTextMock).toHaveBeenCalledWith(
-      FAKE_URL,
-      "look at this https://scribd.com/doc/123",
-    );
+    expect(enqueueTextMock).toHaveBeenCalledWith(FAKE_URL, "look at this https://scribd.com/doc/123");
     expect($transient.get()).toBeNull();
   });
 

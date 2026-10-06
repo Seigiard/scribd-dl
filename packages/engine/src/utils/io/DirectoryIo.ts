@@ -7,9 +7,9 @@ export interface DirectoryIoService {
   readonly remove: (path: string) => Effect.Effect<void, DirectoryIoFailed, never>;
 }
 
-export class DirectoryIo extends Context.Tag("DirectoryIo")<DirectoryIo, DirectoryIoService>() {}
+export class DirectoryIo extends Context.Service<DirectoryIo, DirectoryIoService>()("DirectoryIo") {}
 
-export const DirectoryIoTag: Context.Tag<DirectoryIo, DirectoryIoService> = DirectoryIo;
+export const DirectoryIoTag = DirectoryIo;
 
 interface DirectoryOperations {
   readonly mkdir: (path: string) => Promise<string | undefined>;
@@ -37,7 +37,4 @@ export const makeDirectoryIo = (
     }).pipe(Effect.uninterruptible),
 });
 
-export const DirectoryIoLive: Layer.Layer<DirectoryIo, never, never> = Layer.succeed(
-  DirectoryIo,
-  makeDirectoryIo(),
-);
+export const DirectoryIoLive: Layer.Layer<DirectoryIo, never, never> = Layer.succeed(DirectoryIo, makeDirectoryIo());

@@ -104,11 +104,7 @@ afterAll(() => server.stop(true));
 const Probe = ({ baseUrl }: { baseUrl: string }) => {
   const { snapshot, folder } = useEngineState(baseUrl, "/initial");
 
-  return React.createElement(
-    Text,
-    null,
-    `count=${snapshot.jobs.length} folder=${folder ?? "null"}`,
-  );
+  return React.createElement(Text, null, `count=${snapshot.jobs.length} folder=${folder ?? "null"}`);
 };
 
 describe("useEngineState (HTTP/WS client)", () => {
@@ -144,10 +140,7 @@ describe("useEngineState (HTTP/WS client)", () => {
 
   test("each WS message triggers a snapshot refetch", async () => {
     // #given
-    installFetchStub(
-      { jobs: [] },
-      { jobs: [{ id: "a", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" }] },
-    );
+    installFetchStub({ jobs: [] }, { jobs: [{ id: "a", url: "u", domain: "scribd", displayTitle: "t", status: "Queued" }] });
     const ui = mount(React.createElement(Probe, { baseUrl: BASE }));
     await waitForConnection();
     const callsBefore = snapshotCalls;
@@ -158,10 +151,7 @@ describe("useEngineState (HTTP/WS client)", () => {
     });
 
     sendEvent(event);
-    await waitFor(
-      "refetched queue frame",
-      () => snapshotCalls === callsBefore + 1 && ui.lastFrame() === "count=1 folder=/initial",
-    );
+    await waitFor("refetched queue frame", () => snapshotCalls === callsBefore + 1 && ui.lastFrame() === "count=1 folder=/initial");
 
     // #then
     expect(snapshotCalls).toBe(callsBefore + 1);

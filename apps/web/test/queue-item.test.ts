@@ -21,8 +21,7 @@ const makeJob = (status: JobStatus, overrides: Partial<Job> = {}): Job => ({
 
 const mountJob = (job: Job): HTMLElement => {
   const container = document.createElement("div");
-  render(
-    container,
+  render(container, () =>
     queueItem(job, {
       removeJobById: removeJobByIdMock,
       retryJobById: retryJobByIdMock,
@@ -54,9 +53,7 @@ describe("queueItem()", () => {
   });
 
   it("Downloading with progress: shows progress text, no action", () => {
-    const el = mountJob(
-      makeJob("Downloading", { progress: { done: 5, total: 10, stage: "render" } }),
-    );
+    const el = mountJob(makeJob("Downloading", { progress: { done: 5, total: 10, stage: "render" } }));
 
     expect(el.querySelector(".item-progress")?.textContent).toBe("5 / 10 (render)");
     expect(el.querySelector("button")).toBeNull();
@@ -77,9 +74,7 @@ describe("queueItem()", () => {
   });
 
   it("Failed + non-retryable: shows reason and Remove action", () => {
-    const el = mountJob(
-      makeJob("Failed", { failure: { reason: "Unsupported domain", retryable: false } }),
-    );
+    const el = mountJob(makeJob("Failed", { failure: { reason: "Unsupported domain", retryable: false } }));
 
     expect(el.querySelector(".item-reason")?.textContent).toBe("Reason: Unsupported domain");
     expect(el.querySelector('button[data-action="remove"]')).not.toBeNull();
@@ -121,9 +116,7 @@ describe("queueItem()", () => {
 
   it("failed compression: shows a visible subordinate warning with the reason, distinct from Failed styling", () => {
     // #given
-    const el = mountJob(
-      makeJob("Downloaded", { compression: { status: "failed", reason: "quota exceeded" } }),
-    );
+    const el = mountJob(makeJob("Downloaded", { compression: { status: "failed", reason: "quota exceeded" } }));
 
     // #then — inline visible text (not tooltip-only) plus a supplementary title
     const marker = el.querySelector<HTMLElement>(".item-compression-failed")!;

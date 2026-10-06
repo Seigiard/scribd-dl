@@ -1,4 +1,5 @@
-import { html, type Hole } from "uhtml";
+import { html } from "uhtml";
+
 import type { JobStatus } from "@scribd-dl/shared";
 
 export const STATUS_ICON: Record<JobStatus, string> = {
@@ -8,7 +9,7 @@ export const STATUS_ICON: Record<JobStatus, string> = {
   Failed: "#icon-failed",
 };
 
-export const icon = (href: string, extraClass = ""): Hole => {
+export const icon = (href: string, extraClass = ""): ReturnType<typeof html> => {
   const cls = extraClass ? `item-icon ${extraClass}` : "item-icon";
 
   return html`<svg class=${cls} aria-hidden="true"><use href=${href} /></svg>`;

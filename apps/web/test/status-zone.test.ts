@@ -20,8 +20,7 @@ const job = (id: string, status: Job["status"]): Job => ({
 
 const renderTo = (props: Parameters<typeof statusZone>[0]): HTMLDivElement => {
   const container = document.createElement("div");
-  render(
-    container,
+  render(container, () =>
     statusZone(props, {
       commandClearFinished: clearFinishedMock,
       commandClearAll: clearAllMock,

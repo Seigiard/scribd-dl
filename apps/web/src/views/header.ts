@@ -1,4 +1,5 @@
-import { html, type Hole } from "uhtml";
+import { html } from "uhtml";
+
 import { $modal } from "@/store";
 
 export type HeaderProps = {
@@ -13,17 +14,10 @@ const openSettings = (): void => {
   $modal.set("settings");
 };
 
-export const header = ({ folder }: HeaderProps): Hole => {
+export const header = ({ folder }: HeaderProps): ReturnType<typeof html> => {
   return html`<div class="folder-row">
     <span>Download folder: <span>${folder ?? "—"}</span></span>
     <button type="button" class="btn btn-default btn-ghost" @click=${openModal}>Change</button>
-    <button
-      type="button"
-      class="btn btn-default btn-ghost"
-      data-action="settings"
-      @click=${openSettings}
-    >
-      Settings
-    </button>
+    <button type="button" class="btn btn-default btn-ghost" data-action="settings" @click=${openSettings}>Settings</button>
   </div>`;
 };

@@ -19,9 +19,7 @@ export interface JobProgress {
   readonly stage: ProgressStage;
 }
 
-export type JobCompression =
-  | { readonly status: "compressing" }
-  | { readonly status: "failed"; readonly reason: string };
+export type JobCompression = { readonly status: "compressing" } | { readonly status: "failed"; readonly reason: string };
 
 export interface Job {
   readonly id: JobId;
@@ -66,27 +64,22 @@ export type JobEvent =
 export const JobSchema = Schema.Struct({
   id: Schema.String,
   url: Schema.String,
-  domain: Schema.Literal("scribd", "unsupported"),
+  domain: Schema.Literals(["scribd", "unsupported"]),
   displayTitle: Schema.String,
-  status: Schema.Literal("Queued", "Downloading", "Downloaded", "Failed"),
-  failure: Schema.optionalWith(
-    Schema.Struct({ reason: Schema.String, retryable: Schema.Boolean }),
-    { exact: true },
-  ),
-  progress: Schema.optionalWith(
+  status: Schema.Literals(["Queued", "Downloading", "Downloaded", "Failed"]),
+  failure: Schema.optionalKey(Schema.Struct({ reason: Schema.String, retryable: Schema.Boolean })),
+  progress: Schema.optionalKey(
     Schema.Struct({
       done: Schema.Number,
       total: Schema.Number,
-      stage: Schema.Literal("scrape", "render"),
+      stage: Schema.Literals(["scrape", "render"]),
     }),
-    { exact: true },
   ),
-  compression: Schema.optionalWith(
-    Schema.Union(
+  compression: Schema.optionalKey(
+    Schema.Union([
       Schema.Struct({ status: Schema.Literal("compressing") }),
       Schema.Struct({ status: Schema.Literal("failed"), reason: Schema.String }),
-    ),
-    { exact: true },
+    ]),
   ),
 }) satisfies Schema.Schema<Job>;
 
@@ -94,7 +87,7 @@ export const EngineSnapshotSchema = Schema.Struct({
   jobs: Schema.Array(JobSchema),
 }) satisfies Schema.Schema<EngineSnapshot>;
 
-export const JobEventSchema = Schema.Union(
+export const JobEventSchema = Schema.Union([
   Schema.TaggedStruct("JobAdded", { job: JobSchema }),
   Schema.TaggedStruct("JobStarted", { id: Schema.String }),
   Schema.TaggedStruct("JobCompleted", { id: Schema.String }),
@@ -110,12 +103,12 @@ export const JobEventSchema = Schema.Union(
     id: Schema.String,
     done: Schema.Number,
     total: Schema.Number,
-    stage: Schema.Literal("scrape", "render"),
+    stage: Schema.Literals(["scrape", "render"]),
   }),
   Schema.TaggedStruct("JobCompressing", { id: Schema.String }),
   Schema.TaggedStruct("JobCompressionFailed", { id: Schema.String, reason: Schema.String }),
   Schema.TaggedStruct("OutputFolderChanged", { path: Schema.String }),
   Schema.TaggedStruct("SnapshotReplaced", { snapshot: EngineSnapshotSchema }),
-) satisfies Schema.Schema<JobEvent>;
+]) satisfies Schema.Schema<JobEvent>;
 
 export const JobEvents = Data.taggedEnum<JobEvent>();

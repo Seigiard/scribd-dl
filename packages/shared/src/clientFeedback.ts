@@ -42,10 +42,7 @@ const URL_PREFLIGHT_REGEX = /https?:\/\/\S+/;
 
 export const containsUrl = (text: string): boolean => URL_PREFLIGHT_REGEX.test(text);
 
-export const applyTransient = (
-  current: TransientState | null,
-  incoming: IncomingTransient,
-): TransientApplyResult => {
+export const applyTransient = (current: TransientState | null, incoming: IncomingTransient): TransientApplyResult => {
   const sticky = incoming.sticky === true;
 
   if (current !== null) {

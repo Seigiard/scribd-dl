@@ -1,4 +1,5 @@
-import { html, type Hole } from "uhtml";
+import { html } from "uhtml";
+
 import type { Job, JobId } from "@scribd-dl/shared";
 import type { TransientState } from "@/store";
 import { commandClearAll, commandClearFinished } from "@/engineClient";
@@ -10,8 +11,7 @@ export type StatusZoneProps = {
   jobs: Record<JobId, Job | undefined>;
 };
 
-const isTerminal = (status: Job["status"]): boolean =>
-  status === "Downloaded" || status === "Failed";
+const isTerminal = (status: Job["status"]): boolean => status === "Downloaded" || status === "Failed";
 
 export interface StatusCommands {
   readonly commandClearAll: typeof commandClearAll;
@@ -21,7 +21,7 @@ export interface StatusCommands {
 export const statusZone = (
   { transient, jobs }: StatusZoneProps,
   commands: StatusCommands = { commandClearAll, commandClearFinished },
-): Hole => {
+): ReturnType<typeof html> => {
   const present = Object.values(jobs).filter((j): j is Job => j !== undefined);
   const total = present.length;
   const terminalCount = present.filter((j) => isTerminal(j.status)).length;
@@ -29,27 +29,15 @@ export const statusZone = (
   const messageText = transient?.message ?? DEFAULT_HINT;
   const zoneCls = transient ? "status-zone status-zone-active" : "status-zone";
 
-  const messageCls = transient
-    ? `status-zone-text status-zone-${transient.severity}`
-    : "status-zone-text";
+  const messageCls = transient ? `status-zone-text status-zone-${transient.severity}` : "status-zone-text";
 
   return html`<div class=${zoneCls}>
     <div class=${messageCls}>${messageText}</div>
     <div class="status-zone-actions">
-      <button
-        type="button"
-        class="btn btn-default"
-        ?disabled=${terminalCount === 0}
-        @click=${() => void commands.commandClearFinished()}
-      >
+      <button type="button" class="btn btn-default" ?disabled=${terminalCount === 0} @click=${() => void commands.commandClearFinished()}>
         Clear Finished
       </button>
-      <button
-        type="button"
-        class="btn btn-danger"
-        ?disabled=${total === 0}
-        @click=${() => void commands.commandClearAll()}
-      >
+      <button type="button" class="btn btn-danger" ?disabled=${total === 0} @click=${() => void commands.commandClearAll()}>
         Clear All
       </button>
     </div>

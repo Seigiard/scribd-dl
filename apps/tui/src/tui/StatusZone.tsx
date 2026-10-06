@@ -30,8 +30,7 @@ export const StatusZone = ({
     const color = severityColor(transient.severity);
     const bold = transient.severity !== "info";
 
-    const textProps =
-      color === undefined ? { bold, dimColor: transient.severity === "info" } : { bold, color };
+    const textProps = color === undefined ? { bold, dimColor: transient.severity === "info" } : { bold, color };
 
     return (
       <Box>

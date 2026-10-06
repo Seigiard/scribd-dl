@@ -7,9 +7,7 @@ const flush = (ms = 30) => new Promise<void>((r) => setTimeout(r, ms));
 describe("ChangeFolderPopup", () => {
   test("pre-fills value with initial folder", async () => {
     // #given
-    const ui = render(
-      <ChangeFolderPopup initial="/tmp/old" onSave={() => {}} onCancel={() => {}} />,
-    );
+    const ui = render(<ChangeFolderPopup initial="/tmp/old" onSave={() => {}} onCancel={() => {}} />);
 
     // #when
     await flush();

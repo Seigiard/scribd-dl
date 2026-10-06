@@ -9,13 +9,7 @@ import {
   UnsupportedUrl,
 } from "../errors/DomainErrors";
 
-export type ScraperError =
-  | UnsupportedUrl
-  | PageLoadFailed
-  | PageProcessFailed
-  | PdfGenerationFailed
-  | PdfMergeFailed
-  | DirectoryIoFailed;
+export type ScraperError = UnsupportedUrl | PageLoadFailed | PageProcessFailed | PdfGenerationFailed | PdfMergeFailed | DirectoryIoFailed;
 
 export type ScraperEvent =
   | { readonly _tag: "TitleResolved"; readonly title: string }
@@ -32,19 +26,12 @@ export interface Scraper {
   readonly id: ScraperId;
   readonly canHandle: (url: string) => boolean;
   readonly deriveDisplayTitle: (url: string) => string;
-  readonly execute: (
-    url: string,
-    folder: string,
-    onEvent: OnEvent,
-    debug?: boolean,
-  ) => Effect.Effect<void, ScraperError, never>;
+  readonly execute: (url: string, folder: string, onEvent: OnEvent, debug?: boolean) => Effect.Effect<void, ScraperError, never>;
 }
 
-export const findScraperForUrl = (
-  scrapers: ReadonlyArray<Scraper>,
-  url: string,
-): Scraper | undefined => scrapers.find((scraper) => scraper.canHandle(url));
+export const findScraperForUrl = (scrapers: ReadonlyArray<Scraper>, url: string): Scraper | undefined =>
+  scrapers.find((scraper) => scraper.canHandle(url));
 
-export class Scrapers extends Context.Tag("Scrapers")<Scrapers, ReadonlyArray<Scraper>>() {}
+export class Scrapers extends Context.Service<Scrapers, ReadonlyArray<Scraper>>()("Scrapers") {}
 
-export const ScrapersTag: Context.Tag<Scrapers, ReadonlyArray<Scraper>> = Scrapers;
+export const ScrapersTag = Scrapers;

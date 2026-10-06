@@ -1,6 +1,6 @@
-import { Command, Options } from "@effect/cli";
-import { BunContext, BunRuntime } from "@effect/platform-bun";
-import { Effect, Either } from "effect";
+import { Command, Flag } from "effect/cli";
+import { BunServices, BunRuntime } from "@effect/platform-bun";
+import { Effect, Result } from "effect";
 import { fetchFolder, fetchSnapshot } from "@scribd-dl/shared";
 import { runEmbeddedEngine } from "@scribd-dl/engine/embedded";
 import { render } from "ink";
@@ -11,9 +11,9 @@ const DEFAULT_ENGINE_URL = "http://localhost:4747";
 
 const EMBEDDED_ENGINE_PORT = 4747;
 
-const engineUrlOpt = Options.text("engine-url").pipe(
-  Options.withDefault(DEFAULT_ENGINE_URL),
-  Options.withDescription("Base URL of the scribd-dl engine HTTP/WS sidecar."),
+const engineUrlOpt = Flag.String("engine-url").pipe(
+  Flag.withDefault(DEFAULT_ENGINE_URL),
+  Flag.withDescription("Base URL of the scribd-dl engine HTTP/WS sidecar."),
 );
 
 const healthCheck = (baseUrl: string) =>
@@ -44,19 +44,15 @@ const runUi = (baseUrl: string, initialFolder: string) =>
 
 const ensureEngine = (engineUrl: string) =>
   Effect.gen(function* () {
-    const reachable = yield* Effect.either(healthCheck(engineUrl));
+    const reachable = yield* Effect.result(healthCheck(engineUrl));
 
-    if (Either.isRight(reachable)) return engineUrl;
-    process.stderr.write(
-      `scribd-dl-tui: no external engine at ${engineUrl}, starting embedded engine on :${EMBEDDED_ENGINE_PORT}\n`,
-    );
+    if (Result.isSuccess(reachable)) return engineUrl;
+    process.stderr.write(`scribd-dl-tui: no external engine at ${engineUrl}, starting embedded engine on :${EMBEDDED_ENGINE_PORT}\n`);
 
     const embeddedUrl = yield* runEmbeddedEngine(EMBEDDED_ENGINE_PORT).pipe(
       Effect.tapError((e) =>
         Effect.sync(() => {
-          process.stderr.write(
-            `scribd-dl-tui: embedded engine failed to start: ${e instanceof Error ? e.message : String(e)}\n`,
-          );
+          process.stderr.write(`scribd-dl-tui: embedded engine failed to start: ${e instanceof Error ? e.message : String(e)}\n`);
           process.exit(1);
         }),
       ),
@@ -72,15 +68,14 @@ const program = (engineUrl: string) =>
     yield* runUi(activeUrl, folder);
   });
 
-const command = Command.make("scribd-dl-tui", { engineUrl: engineUrlOpt }, ({ engineUrl }) =>
-  program(engineUrl),
-).pipe(Command.withDescription("Interactive TUI client for the scribd-dl engine sidecar."));
+const command = Command.make("scribd-dl-tui", { engineUrl: engineUrlOpt }, ({ engineUrl }) => Effect.scoped(program(engineUrl))).pipe(
+  Command.withDescription("Interactive TUI client for the scribd-dl engine sidecar."),
+);
 
 const cli = Command.run(command, {
-  name: "Scribd Downloader TUI",
   version: "1.0.0",
 });
 
 if (import.meta.main) {
-  BunRuntime.runMain(cli(process.argv).pipe(Effect.provide(BunContext.layer)));
+  BunRuntime.runMain(cli.pipe(Effect.provide(BunServices.layer)));
 }

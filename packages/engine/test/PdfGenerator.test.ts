@@ -40,20 +40,17 @@ const runSetTitle = (pdfPath: string, title: string) =>
     ),
   );
 
-const failureTag = (
-  exit: Exit.Exit<unknown, PdfMergeFailed | PdfMetadataFailed>,
-): string | undefined => {
+const failureTag = (exit: Exit.Exit<unknown, PdfMergeFailed | PdfMetadataFailed>): string | undefined => {
   if (!Exit.isFailure(exit)) {
     return undefined;
   }
 
-  const failure = Cause.failureOption(exit.cause);
+  const failure = Cause.findErrorOption(exit.cause);
 
   return Option.isSome(failure) ? failure.value._tag : undefined;
 };
 
-const isPdfMergeFailure = (exit: Exit.Exit<unknown, PdfMergeFailed>): boolean =>
-  failureTag(exit) === "PdfMergeFailed";
+const isPdfMergeFailure = (exit: Exit.Exit<unknown, PdfMergeFailed>): boolean => failureTag(exit) === "PdfMergeFailed";
 
 describe("PdfGenerator file transaction cancellation", () => {
   for (const operation of ["merge", "setTitle"] as const) {
@@ -84,12 +81,8 @@ describe("PdfGenerator file transaction cancellation", () => {
 
       const running = Effect.runPromiseExit(
         Effect.provide(
-          Effect.flatMap(
-            PdfGenerator,
-            (svc): Effect.Effect<void, PdfMergeFailed | PdfMetadataFailed> =>
-              operation === "merge"
-                ? svc.merge([input], output)
-                : svc.setTitle(output, "Old title"),
+          Effect.flatMap(PdfGenerator, (svc): Effect.Effect<void, PdfMergeFailed | PdfMetadataFailed> =>
+            operation === "merge" ? svc.merge([input], output) : svc.setTitle(output, "Old title"),
           ),
           layer,
         ),
@@ -113,7 +106,7 @@ describe("PdfGenerator file transaction cancellation", () => {
 
         // #then
         expect(canceledBeforeWriteFinished).toBe(false);
-        expect(Exit.isInterrupted(exit)).toBe(true);
+        expect(Exit.hasInterrupts(exit)).toBe(true);
         const doc = await PDFDocument.load(await fs.readFile(output));
         expect(doc.getTitle()).toBe("New job title");
       } finally {

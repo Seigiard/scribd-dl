@@ -9,12 +9,9 @@ export interface TitleResolverService {
   readonly resolve: (originalUrl: string, id: string) => Effect.Effect<string, never, never>;
 }
 
-export class TitleResolver extends Context.Tag("TitleResolver")<
-  TitleResolver,
-  TitleResolverService
->() {}
+export class TitleResolver extends Context.Service<TitleResolver, TitleResolverService>()("TitleResolver") {}
 
-export const TitleResolverTag: Context.Tag<TitleResolver, TitleResolverService> = TitleResolver;
+export const TitleResolverTag = TitleResolver;
 
 const decodeEntities = (s: string): string =>
   s
@@ -111,9 +108,7 @@ const liveFetcher: Fetcher = {
           throw new Error(`HTTP ${response.status}`);
         }
 
-        const { title } = Schema.decodeUnknownSync(Schema.Struct({ title: Schema.String }))(
-          await response.json(),
-        );
+        const { title } = Schema.decodeUnknownSync(Schema.Struct({ title: Schema.String }))(await response.json());
 
         return title;
       },
@@ -126,22 +121,15 @@ const usableTitle = (raw: string, stripSuffix: boolean): string | null => {
   const separator = stripSuffix ? decoded.indexOf(" | ") : -1;
   const title = separator === -1 ? decoded : decoded.slice(0, separator).trim();
 
-  return title !== "" &&
-    title.toLowerCase() !== "client challenge" &&
-    title.toLowerCase() !== "scribd"
-    ? title
-    : null;
+  return title !== "" && title.toLowerCase() !== "client challenge" && title.toLowerCase() !== "scribd" ? title : null;
 };
 
 const makeResolver = (fetcher: Fetcher): TitleResolverService => ({
   resolve: (originalUrl, id) =>
     Effect.gen(function* () {
-      const fallback = <A>(effect: Effect.Effect<A, Error, never>) =>
-        effect.pipe(Effect.catchAll(() => Effect.succeed<A | null>(null)));
+      const fallback = <A>(effect: Effect.Effect<A, Error, never>) => effect.pipe(Effect.catch(() => Effect.succeed<A | null>(null)));
 
-      const metadataUrl = scribdRegex.EMBED.test(originalUrl)
-        ? `https://www.scribd.com/document/${id}`
-        : originalUrl;
+      const metadataUrl = scribdRegex.EMBED.test(originalUrl) ? `https://www.scribd.com/document/${id}` : originalUrl;
 
       const pageTitle = yield* fallback(fetcher.fetchPageTitle(metadataUrl));
 
@@ -163,11 +151,7 @@ const makeResolver = (fetcher: Fetcher): TitleResolverService => ({
     }),
 });
 
-export const TitleResolverLive: Layer.Layer<TitleResolver, never, never> = Layer.succeed(
-  TitleResolver,
-  makeResolver(liveFetcher),
-);
+export const TitleResolverLive: Layer.Layer<TitleResolver, never, never> = Layer.succeed(TitleResolver, makeResolver(liveFetcher));
 
-export const makeTitleResolverLayer = (
-  fetcher: Fetcher,
-): Layer.Layer<TitleResolver, never, never> => Layer.succeed(TitleResolver, makeResolver(fetcher));
+export const makeTitleResolverLayer = (fetcher: Fetcher): Layer.Layer<TitleResolver, never, never> =>
+  Layer.succeed(TitleResolver, makeResolver(fetcher));

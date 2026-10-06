@@ -1,5 +1,6 @@
 import { atom } from "nanostores";
-import { html, type Hole } from "uhtml";
+import { html } from "uhtml";
+
 import { saveSettingsCommand } from "@/engineClient";
 import { $modal, $settings, type ModalMode } from "@/store";
 
@@ -25,11 +26,9 @@ export type SettingsModalProps = {
   error: string | null;
 };
 
-const validityFromFlag = (valid: boolean | null): SettingsValidity =>
-  valid === null ? "unverified" : valid ? "valid" : "invalid";
+const validityFromFlag = (valid: boolean | null): SettingsValidity => (valid === null ? "unverified" : valid ? "valid" : "invalid");
 
-const oneFilled = (pub: string, sec: string): boolean =>
-  (pub.trim() === "") !== (sec.trim() === "");
+const oneFilled = (pub: string, sec: string): boolean => (pub.trim() === "") !== (sec.trim() === "");
 
 const close = (): void => {
   $modal.set("none");
@@ -124,13 +123,13 @@ const VALIDITY_LABEL: Record<SettingsValidity, string> = {
   invalid: "Keys invalid",
 };
 
-const validityLine = (validity: SettingsValidity): Hole =>
+const validityLine = (validity: SettingsValidity): ReturnType<typeof html> =>
   html`<div class="settings-validity" data-validity=${validity}>${VALIDITY_LABEL[validity]}</div>`;
 
 export const settingsModal = (
   { mode, publicKey, secretKey, validity, error }: SettingsModalProps,
   save: typeof saveSettingsCommand = saveSettingsCommand,
-): Hole => {
+): ReturnType<typeof html> => {
   if (mode !== "settings") return html``;
   const saveDisabled = validity === "validating" || oneFilled(publicKey, secretKey);
 
@@ -138,9 +137,7 @@ export const settingsModal = (
     <article class="terminal-card">
       <header>iLovePDF compression keys</header>
       <div class="p-1">
-        <p class="settings-note">
-          Downloads are uploaded to iLovePDF for compression when both keys are valid.
-        </p>
+        <p class="settings-note">Downloads are uploaded to iLovePDF for compression when both keys are valid.</p>
         <div class="form-group">
           <label>Public key</label>
           <input
@@ -155,28 +152,14 @@ export const settingsModal = (
         </div>
         <div class="form-group">
           <label>Secret key</label>
-          <input
-            class="settings-input"
-            type="text"
-            autocomplete="off"
-            spellcheck="false"
-            .value=${secretKey}
-            @input=${onSecretInput}
-          />
+          <input class="settings-input" type="text" autocomplete="off" spellcheck="false" .value=${secretKey} @input=${onSecretInput} />
         </div>
         ${validityLine(validity)}
         <div class="modal-actions">
           <button type="button" class="btn btn-default" @click=${close}>Close</button>
-          <button
-            type="button"
-            class="btn btn-primary"
-            ?disabled=${saveDisabled}
-            @click=${() => void trySave(save)}
-          >
-            Save
-          </button>
+          <button type="button" class="btn btn-primary" ?disabled=${saveDisabled} @click=${() => void trySave(save)}>Save</button>
         </div>
-        ${error ? html`<div class="terminal-alert terminal-alert-error">${error}</div>` : null}
+        ${error ? [html`<div class="terminal-alert terminal-alert-error">${error}</div>`] : []}
       </div>
     </article>
   </div>`;
