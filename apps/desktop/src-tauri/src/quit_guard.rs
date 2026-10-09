@@ -27,9 +27,7 @@ fn snapshot_has_active(snapshot: &Snapshot) -> bool {
 }
 
 pub async fn has_active_jobs(backend_url: &str) -> Result<bool, reqwest::Error> {
-    let client = reqwest::Client::builder()
-        .timeout(FETCH_TIMEOUT)
-        .build()?;
+    let client = reqwest::Client::builder().timeout(FETCH_TIMEOUT).build()?;
     let snapshot: Snapshot = client
         .get(format!("{backend_url}/snapshot"))
         .send()
@@ -120,17 +118,14 @@ mod tests {
 
     #[test]
     fn mixed_with_one_active_returns_true() {
-        let snap = parse(
-            r#"{"jobs":[{"status":"Downloaded"},{"status":"Queued"},{"status":"Failed"}]}"#,
-        );
+        let snap =
+            parse(r#"{"jobs":[{"status":"Downloaded"},{"status":"Queued"},{"status":"Failed"}]}"#);
         assert!(snapshot_has_active(&snap));
     }
 
     #[test]
     fn ignores_unknown_extra_fields() {
-        let snap = parse(
-            r#"{"jobs":[{"status":"Downloading","id":"x","extra":42}],"foo":"bar"}"#,
-        );
+        let snap = parse(r#"{"jobs":[{"status":"Downloading","id":"x","extra":42}],"foo":"bar"}"#);
         assert!(snapshot_has_active(&snap));
     }
 }

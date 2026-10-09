@@ -1,0 +1,23 @@
+glob_matcher: doublestar
+
+pre-commit:
+  piped: true
+  jobs:
+    - name: format
+      exclude:
+        - "tools/oxlint/anti-slop/**"
+        - "output/**"
+        - "**/dist/**"
+      run: bunx --no-install oxfmt --write --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    - name: lint
+      glob: "**/*.{ts,tsx,js,jsx,mjs,cjs}"
+      exclude:
+        - "tools/oxlint/anti-slop/**"
+        - "output/**"
+        - "**/dist/**"
+      run: bunx --no-install oxlint --fix --no-error-on-unmatched-pattern {staged_files}
+      stage_fixed: true
+    - name: rust-format
+      glob: "apps/desktop/src-tauri/**/*.rs"
+      run: cargo fmt --manifest-path apps/desktop/src-tauri/Cargo.toml -- --check

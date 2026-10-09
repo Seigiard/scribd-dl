@@ -8,6 +8,12 @@ Runtime is **Bun 1.4.2** (ESM-only, `"type": "module"`). Source is TypeScript; B
 
 Repository is a **Bun workspaces monorepo** — one root `bun.lock`, one hoisted `node_modules/`. Workspaces are wired in the root `package.json` as `["packages/*", "apps/*"]`.
 
+`bun install` installs Lefthook (`lefthook.yml`) in Git checkouts. Before commit,
+it formats and lints staged code across workspaces and re-stages fixes. Staged
+desktop Rust changes also run `cargo fmt --check`; Rust contributors need
+rustfmt installed. Vendored lint rules and generated output are excluded.
+Installs without `.git` skip hook setup.
+
 ```bash
 bun install               # install deps for all workspaces (single root bun.lock)
 bun run engine            # launch HTTP/WS sidecar (default port 4747) — only entry point
@@ -58,7 +64,7 @@ The downloader runs on **Effect 4** with **Layer-based dependency injection** in
 - `ScribdDownloader` (`packages/engine/src/service/ScribdDownloader.ts`) — Effect-based scraping + PDF generation, consumed by `DownloadEngine`'s worker as the executor of one job.
 - `PuppeteerSg` (`packages/engine/src/utils/request/PuppeteerSg.ts`) — `Layer.effect` over `Effect.acquireRelease(puppeteer.launch, browser.close)`. Effect 4 layers provide the acquisition scope. **Scope guarantees browser cleanup** on success, error, and interrupt.
 - `PdfGenerator` (`packages/engine/src/utils/io/PdfGenerator.ts`) — Effect wrapper over `pdf-lib` (`merge` only; image-flow `generate` was removed with Slideshare).
-- `ConfigLoader` (`packages/engine/src/utils/io/ConfigLoader.ts`) — `Context.Service` exposing the *static defaults* (`DEFAULT_CONFIG`: `rendertime`, `filename`, default `outputFolder`). `makeConfigLoader(data)` returns a `Layer.succeed`. Persistent overrides live in `ConfigStore`; `ConfigLoader` is the floor.
+- `ConfigLoader` (`packages/engine/src/utils/io/ConfigLoader.ts`) — `Context.Service` exposing the _static defaults_ (`DEFAULT_CONFIG`: `rendertime`, `filename`, default `outputFolder`). `makeConfigLoader(data)` returns a `Layer.succeed`. Persistent overrides live in `ConfigStore`; `ConfigLoader` is the floor.
 - `DirectoryIo` (`packages/engine/src/utils/io/DirectoryIo.ts`) — `fs.promises.mkdir/rm` wrapped in tagged errors (`DirectoryIoFailed`).
 
 Domain errors live in `packages/engine/src/errors/DomainErrors.ts` as `Data.TaggedError` classes. Each `*Live` Layer fails into one of them; consumers see typed error channels.
