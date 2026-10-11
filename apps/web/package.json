@@ -14,7 +14,7 @@
     "@scribd-dl/shared": "workspace:*",
     "nanostores": "^1.5.4",
     "terminal.css": "^0.7.5",
-    "uhtml": "^5.0.9"
+    "uhtml": "5.0.9"
   },
   "devDependencies": {
     "@testing-library/dom": "^10.4.2",

@@ -1,0 +1,37 @@
+diff --git a/package.json b/package.json
+index 381149e82c95c0114ae566617e755fec49f74c70..a9507cbf3b559b93b154537a19b85eace5c1d383 100644
+--- a/package.json
++++ b/package.json
+@@ -24,7 +24,7 @@
+   "types": "./types/dom/index.d.ts",
+   "exports": {
+     ".": {
+-      "import": "./dist/prod/dom.js",
++      "import": "./src/dom/index.js",
+       "types": "./types/dom/index.d.ts",
+       "description": "uhtml default browsers' export"
+     },
+diff --git a/src/debug.js b/src/debug.js
+index 8bc7a17ecc7fcc47040088266259d09781ded122..33136544dba2632d4264645378e8108c7ec82513 100644
+--- a/src/debug.js
++++ b/src/debug.js
+@@ -1 +1 @@
+-export default true;
++export default false;
+diff --git a/src/dom/index.js b/src/dom/index.js
+index 99cdfab7db0e9cf16402d45f03ec39269497b149..b3333bdab5357418ade7338dd3e2c39fd6ccb58f 100644
+--- a/src/dom/index.js
++++ b/src/dom/index.js
+@@ -104,7 +104,11 @@ export const render = (where, what) => {
+       const d = hole.valueOf(false);
+       where.replaceChildren(d);
+     }
+-    else known[1].update(hole);
++    else {
++      known[1].update(hole);
++      // Keep the initialized hole for the next render.
++      hole = known[1];
++    }
+     rendered.set(where, [scope, hole]);
+   }
+   else {

@@ -82,4 +82,21 @@ describe("queue()", () => {
     expect(updated).toBe(firstItem);
     expect(updated.dataset.status).toBe("Downloading");
   });
+
+  it("prepends a pasted job to an already rendered saved queue", () => {
+    // #given
+    const container = document.createElement("div");
+    const saved = makeJob("saved", { status: "Downloaded" });
+    render(container, () => queue({ jobs: {} }));
+    render(container, () => queue({ jobs: { saved } }));
+
+    // #when
+    render(container, () => queue({ jobs: { pasted: makeJob("pasted"), saved } }));
+
+    // #then
+    expect(Array.from(container.querySelectorAll(".item-url"), (node) => node.textContent)).toEqual([
+      "https://scribd.com/doc/pasted",
+      "https://scribd.com/doc/saved",
+    ]);
+  });
 });
