@@ -19,7 +19,7 @@ interface CompressTaskLike {
   readonly remainingFiles?: number | undefined;
   start(): Promise<void>;
   addFile(file: ILovePDFFile): Promise<void>;
-  process(params: { compression_level: "low" }): Promise<void>;
+  process(params: { compression_level: "recommended" }): Promise<void>;
   download(): Promise<Uint8Array>;
 }
 
@@ -115,7 +115,7 @@ export const makePdfCompressor = (
         });
 
         yield* attempt(() => task.addFile(makeFile(absPath)));
-        yield* attempt(() => task.process({ compression_level: "low" }));
+        yield* attempt(() => task.process({ compression_level: "recommended" }));
         const bytes = yield* attempt(() => task.download());
 
         if (!isPdfBytes(bytes)) return yield* Effect.fail(new InvalidResponseError());
